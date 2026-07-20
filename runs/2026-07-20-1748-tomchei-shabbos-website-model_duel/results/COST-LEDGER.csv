@@ -7,7 +7,8 @@
 2026-07-20T19:40:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P3,fix,gpt-5.6-sol-medium,0d5776c0-3fc9-42e8-9347-9af87eb443b4,,,,,,,B1 A1-A8 m7 fixed S1-S5 pass
 2026-07-20T19:52:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,build,gpt-5.6-sol-medium,2ce3c9d1-0bce-43cb-b7f9-4193b7833db7,,,,,,,S1-S3 CI build pass
 2026-07-20T20:30:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,review_security,glm-5.2-high,844faee6-72a5-4a47-b03d-2a32d12b81d2,,,,,,,9 findings (0 high 2 med)
-2026-07-20T20:35:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,review_aggregate,glm-5.2-high,bd2e5b61-be94-41d6-b40e-296c78798979,,,,,,,pending
+2026-07-20T20:35:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,review_aggregate,glm-5.2-high,bd2e5b61-be94-41d6-b40e-296c78798979,,,,,,,3 blocker 9 major 31 total
+2026-07-20T20:40:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,fix,gpt-5.6-sol-medium,fe77560b-f0cd-4917-b5da-9f56a49bb42e,,,,,,,pending
 2026-07-20T20:30:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,review_quality,glm-5.2-high,8656511e-6c3e-41a9-9f9b-8414a296d9b5,,,,,,,11 findings (3 high)
 2026-07-20T20:30:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,review_rules,glm-5.2-high,ae1c1d06-fbbe-44e2-88c2-49479b31051a,,,,,,,11 findings
 2026-07-20T20:30:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,review_clean_code,glm-5.2-high,d5d48ef1-86c7-4c1e-9753-24d3f0ac48f5,,,,,,,9 findings
