@@ -2,6 +2,8 @@
 
 Reusable Cursor harness for **multi-model agent experiments**. Open this repo, say **"start testing"**, answer the kickoff questions, and the orchestrator bootstraps an isolated run under `runs/{run_id}/`.
 
+**Why this exists:** [`PHILOSOPHY.md`](PHILOSOPHY.md) — what we measure, what v1 taught us, and how to read the dual headlines.
+
 Each run stays forever — start as many as you want; they don’t overwrite each other.
 
 ## What it measures (protocol)
