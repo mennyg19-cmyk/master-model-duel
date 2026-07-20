@@ -9,9 +9,13 @@ test("manager gets every permission by default", () => {
   }
 });
 
-test("staff baseline is orders.view + customers.manage", () => {
+test("staff baseline is orders/customers/payments day-to-day, no refunds", () => {
   const permissions = resolvePermissions("STAFF", []);
-  assert.deepEqual([...permissions], ["orders.view", "customers.manage"]);
+  assert.deepEqual(
+    [...permissions],
+    ["orders.view", "customers.manage", "payments.record", "orders.manage"]
+  );
+  assert.ok(!permissions.has("payments.refund"), "refunds stay manager-only");
 });
 
 test("driver baseline is empty", () => {
@@ -36,5 +40,8 @@ test("unknown override permissions are ignored", () => {
   const permissions = resolvePermissions("STAFF", [
     { permission: "not.a.real.permission", effect: "GRANT" },
   ]);
-  assert.deepEqual([...permissions], ["orders.view", "customers.manage"]);
+  assert.deepEqual(
+    [...permissions],
+    ["orders.view", "customers.manage", "payments.record", "orders.manage"]
+  );
 });

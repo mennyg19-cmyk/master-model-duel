@@ -29,6 +29,14 @@ die immediately on account revocation.
 `.env`. Staff/customer records link to Clerk identities via `clerkUserId`. No Clerk keys
 were available in this environment, so dev mode is the tested path.
 
+## Payments
+
+Stripe hosted checkout with immediate capture. Without `STRIPE_SECRET_KEY` the gateway runs
+in mock mode: `/dev/stripe-checkout` stands in for Stripe's page and posts signed events
+through the real `/api/webhooks/stripe` route, so signatures, idempotency, amount-safety
+auto-refunds, and refund sync run the same code as production. Set `STRIPE_SECRET_KEY` and
+`STRIPE_WEBHOOK_SECRET` in `.env` to go live; the mock page then 404s.
+
 ## Patterns (one per concern)
 
 - Data access: Prisma via `lib/db.ts` singleton.

@@ -84,6 +84,9 @@ model CustomerAddress {
   state         String
   zip           String
   normalizedKey String
+  // Greeting memory (UR-013, G-020): the last greeting sent to this recipient,
+  // prefilled as the override suggestion next season.
+  lastGreeting  String?
   latitude      Float?
   longitude     Float?
   geocodedAt    DateTime?
@@ -251,14 +254,27 @@ model AddOnRestriction {
   @@id([addOnId, productId])
 }
 
+// How a method's delivery fee is computed at checkout (P5). BULK_DELIVERY =
+// one fee per distinct destination (staff schedules the drop later);
+// PER_PACKAGE_DELIVERY = fee per recipient with a hard ZIP block (G-014) and a
+// required Purim-week day choice (UR-009); SHIPPING = placeholder rate until
+// the live Shippo engine lands in P8 (R-032); PICKUP = free.
+enum FulfillmentKind {
+  BULK_DELIVERY
+  PER_PACKAGE_DELIVERY
+  SHIPPING
+  PICKUP
+}
+
 // Fulfillment methods are data-driven rows, not an enum (R-153, R-154), so
 // managers can add methods without a code change.
 model FulfillmentMethod {
-  id         String      @id @default(cuid())
-  code       String      @unique
+  id         String          @id @default(cuid())
+  code       String          @unique
   name       String
-  isActive   Boolean     @default(true)
-  sortOrder  Int         @default(0)
+  kind       FulfillmentKind @default(PICKUP)
+  isActive   Boolean         @default(true)
+  sortOrder  Int             @default(0)
   orderLines OrderLine[]
   packages   Package[]
 }
@@ -288,7 +304,21 @@ model Order {
   status         OrderStatus           @default(DRAFT)
   draftReference String                @unique
   orderNumber    Int?
+  // totalCents = itemsCents + feesCents + donationCents. feeBreakdown is the
+  // per-destination fee list shown at checkout, kept as a paid snapshot so a
+  // later staff method change can't retroactively change what was owed (G-028).
   totalCents     Int                   @default(0)
+  itemsCents     Int                   @default(0)
+  feesCents      Int                   @default(0)
+  donationCents  Int                   @default(0)
+  feeBreakdown   Json?
+  // Order-default greeting (UR-013); per-recipient overrides live on lines.
+  greetingDefault String               @default("")
+  // Purim-week delivery day chosen for per-package delivery (UR-009, G-015).
+  deliveryDay    String?
+  // The builder draft this order was created from, so an abandoned Stripe
+  // session's replacement order can find and discard its predecessor.
+  sourceDraftId  String?
   paymentStatus  OrderPaymentStatus    @default(UNPAID)
   finalizedAt    DateTime?
   discardedAt    DateTime?
@@ -297,7 +327,10 @@ model Order {
   lines          OrderLine[]
   payments       Payment[]
   paymentIntents StripePaymentIntent[]
+  checkoutSessions StripeCheckoutSession[]
   shippingQuotes ShippingQuote[]
+
+  @@index([sourceDraftId, status])
 
   @@unique([seasonId, orderNumber])
 }
@@ -410,16 +443,24 @@ enum PaymentState {
   VOIDED
 }
 
+// Refunds are negative-amount POSTED rows (method STRIPE) keyed by
+// stripeRefundId, so recalcPaymentStatus needs no special casing and the
+// refund-sync webhook (R-168) is idempotent on the unique key.
 model Payment {
-  id          String        @id @default(cuid())
-  orderId     String
-  order       Order         @relation(fields: [orderId], references: [id])
-  method      PaymentMethod
-  state       PaymentState  @default(POSTED)
-  amountCents Int
-  note        String?
-  receivedAt  DateTime      @default(now())
-  voidedAt    DateTime?
+  id                    String        @id @default(cuid())
+  orderId               String
+  order                 Order         @relation(fields: [orderId], references: [id])
+  method                PaymentMethod
+  state                 PaymentState  @default(POSTED)
+  amountCents           Int
+  note                  String?
+  stripePaymentIntentId String?
+  stripeRefundId        String?       @unique
+  receivedAt            DateTime      @default(now())
+  voidedAt              DateTime?
+  voidedByStaffId       String?
+
+  @@index([orderId])
 }
 
 model StripePaymentIntent {
@@ -431,6 +472,29 @@ model StripePaymentIntent {
   amountCents    Int
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+// One row per hosted Checkout Session we open (R-166). The unique
+// stripeSessionId lets the webhook find its order without trusting metadata.
+model StripeCheckoutSession {
+  id              String   @id @default(cuid())
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id])
+  stripeSessionId String   @unique
+  status          String   @default("open")
+  amountCents     Int
+  paymentIntentId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Webhook idempotency ledger (R-125, R-167): an event id is processed exactly
+// once; replays hit the unique constraint and are acknowledged without effect.
+model StripeWebhookEvent {
+  id            String   @id @default(cuid())
+  stripeEventId String   @unique
+  type          String
+  processedAt   DateTime @default(now())
 }
 
 // Shipping quotes expire (R-155): a quote holds carrier options that are only

@@ -20,6 +20,12 @@ const SETTING_SCHEMAS = {
   "shipping.rules": z
     .object({ bulkFeePerDestinationCents: z.number().int().min(0), perPackageFeeCents: z.number().int().min(0) })
     .default({ bulkFeePerDestinationCents: 500, perPackageFeeCents: 1200 }),
+  // Purim-week day choices for per-package delivery (UR-009, G-015), set by a
+  // manager each season. Checkout requires picking one when any line uses
+  // per-package delivery.
+  "delivery.purim_day_choices": z
+    .array(z.string().min(1))
+    .default(["Sunday before Purim", "Erev Purim (morning)", "Purim day"]),
   "email.from_address": z.string().default("purim@tomcheishabbos.example.org"),
   "email.reply_to": z.string().default("office@tomcheishabbos.example.org"),
 } as const;

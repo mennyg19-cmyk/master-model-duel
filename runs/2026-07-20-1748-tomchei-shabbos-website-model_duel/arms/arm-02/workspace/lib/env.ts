@@ -18,6 +18,13 @@ const envSchema = z
       .string()
       .optional()
       .transform((value) => value === "true" || value === "1"),
+    // Stripe (P5). With no secret key the gateway runs in mock mode: a local
+    // hosted-checkout stand-in that signs and posts events through the REAL
+    // webhook route, so the money path is identical either way.
+    STRIPE_SECRET_KEY: z.string().optional(),
+    STRIPE_WEBHOOK_SECRET: z.string().default("whsec_dev_mock_secret"),
+    // Absolute base URL for Stripe redirect/webhook URLs.
+    APP_URL: z.string().default("http://127.0.0.1:3102"),
   })
   .refine(
     (vars) => vars.AUTH_MODE !== "clerk" || (vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && vars.CLERK_SECRET_KEY),

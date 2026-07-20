@@ -85,13 +85,28 @@ async function seedDomainCore(customerId: string) {
 
   const delivery = await db.fulfillmentMethod.upsert({
     where: { code: "local_delivery" },
-    update: {},
-    create: { code: "local_delivery", name: "Local Delivery", sortOrder: 1 },
+    update: { kind: "BULK_DELIVERY" },
+    create: { code: "local_delivery", name: "Local Delivery", kind: "BULK_DELIVERY", sortOrder: 1 },
+  });
+  await db.fulfillmentMethod.upsert({
+    where: { code: "per_package_delivery" },
+    update: { kind: "PER_PACKAGE_DELIVERY" },
+    create: {
+      code: "per_package_delivery",
+      name: "Purim-Day Delivery",
+      kind: "PER_PACKAGE_DELIVERY",
+      sortOrder: 2,
+    },
   });
   await db.fulfillmentMethod.upsert({
     where: { code: "pickup" },
-    update: {},
-    create: { code: "pickup", name: "Pickup", sortOrder: 2 },
+    update: { kind: "PICKUP" },
+    create: { code: "pickup", name: "Pickup", kind: "PICKUP", sortOrder: 3 },
+  });
+  await db.fulfillmentMethod.upsert({
+    where: { code: "shipping" },
+    update: { kind: "SHIPPING" },
+    create: { code: "shipping", name: "Shipping", kind: "SHIPPING", sortOrder: 4 },
   });
 
   const classicBasket = await db.product.upsert({
