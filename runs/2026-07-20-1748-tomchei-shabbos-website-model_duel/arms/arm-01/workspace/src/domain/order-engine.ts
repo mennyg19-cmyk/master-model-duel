@@ -1,4 +1,5 @@
 import { OrderStatus, Prisma, PrismaClient } from "@prisma/client";
+import { materializeOrderPackages } from "@/domain/package-operations";
 
 const ALLOWED_ORDER_TRANSITIONS: Readonly<Record<OrderStatus, readonly OrderStatus[]>> = {
   DRAFT: [OrderStatus.FINALIZED, OrderStatus.CANCELLED],
@@ -62,7 +63,11 @@ async function claimOrderNumber(prisma: PrismaClient, orderId: string) {
 export async function finalizeOrder(prisma: PrismaClient, orderId: string) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      return await claimOrderNumber(prisma, orderId);
+      const orderNumber = await claimOrderNumber(prisma, orderId);
+      await prisma.$transaction((transaction) =>
+        materializeOrderPackages(transaction, orderId),
+      );
+      return orderNumber;
     } catch (error) {
       const canRetry =
         error instanceof Prisma.PrismaClientKnownRequestError &&

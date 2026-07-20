@@ -13,6 +13,8 @@ signed payment webhooks, offline staff payments, and final order commitment.
 P6 adds the permission-aware operations dashboard, Today queue, bounded order
 and customer directories, order money actions, shared-builder POS, staged CSV
 imports, audit views, and live settings.
+P7 materializes finalized orders into physical packages, adds the staff
+fulfillment board, and persists idempotent nightly and targeted reprint PDFs.
 
 ## Local development
 
@@ -29,6 +31,7 @@ them, non-production builds use the local identity adapter for smoke testing.
 - `npm run ci`
 - `npm run build`
 - `npm run smoke:concurrency`
+- `npm run smoke:p7`
 
 The project uses one pattern per concern: server components for reads, route
 handlers for mutations, Prisma for persistence, Tailwind tokens for styling,
@@ -106,3 +109,14 @@ and native `node:test` through `tsx` for unit tests.
   commits until duplicates and invalid rows are corrected.
 - `/admin/settings` persists Orders, Shipping, Email, and Developer values.
 - `npm run smoke:p6` verifies S1-S4, including 1,000 orders and 5,000 packages.
+
+## P7 package fulfillment
+
+- `/admin/fulfillment` provides channel production summaries, package split and
+  regroup controls, audited per-package and bulk status actions, and print jobs.
+- Finalization materializes packages with the P2 recipient/address/method/greeting
+  key. Regrouped source packages remain stored with their package audit history.
+- Nightly batches are idempotent by date. Each fulfillment-method filing group
+  receives slips, labels, and greeting-card PDFs; each order receives a packing slip.
+- Filing-group and order reprints create isolated artifacts. PDF generation never
+  changes `NEW`, `PRINTED`, `PACKED`, `SENT`, or `PICKED_UP` package stages.

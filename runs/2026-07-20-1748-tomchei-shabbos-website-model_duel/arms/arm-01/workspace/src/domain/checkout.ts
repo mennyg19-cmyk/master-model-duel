@@ -5,6 +5,7 @@ import {
   Prisma,
   type PrismaClient,
 } from "@prisma/client";
+import { materializeOrderPackages } from "@/domain/package-operations";
 
 export const fulfillmentFees = {
   BULK_DELIVERY: 1200,
@@ -293,6 +294,7 @@ export async function commitStripePayment(
           version: { increment: 1 },
         },
       });
+      await materializeOrderPackages(transaction, order.id);
       await transaction.payment.upsert({
         where: {
           method_reference: {
@@ -387,6 +389,7 @@ export async function finalizePosOrder(
       version: { increment: 1 },
     },
   });
+  await materializeOrderPackages(transaction, order.id);
 }
 
 export async function recalculatePaymentStatus(

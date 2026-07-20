@@ -68,6 +68,9 @@ export default async function AdminLayout({
             <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/orders">
               Orders
             </Link>
+            <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/fulfillment">
+              Fulfillment
+            </Link>
             {hasPermission(staffSession.effective, "payments:manage") && (
               <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/pos">
                 POS
