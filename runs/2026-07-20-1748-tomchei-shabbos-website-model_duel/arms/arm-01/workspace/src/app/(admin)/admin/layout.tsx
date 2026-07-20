@@ -3,6 +3,7 @@ import { StopImpersonationButton } from "@/components/stop-impersonation-button"
 import { getCurrentStaffUser } from "@/lib/auth";
 import { brand } from "@/lib/brand";
 import { hasPermission } from "@/lib/permissions";
+import { getAdminSettings } from "@/lib/store-settings";
 
 export default async function AdminLayout({
   children,
@@ -24,6 +25,7 @@ export default async function AdminLayout({
     );
   }
 
+  const adminSettings = await getAdminSettings();
   const isImpersonating =
     staffSession.actor.id !== staffSession.effective.id;
   return (
@@ -40,17 +42,43 @@ export default async function AdminLayout({
           <Link href="/" className="font-bold">
             {brand.name} <span className="text-[var(--brand-light)]">Admin</span>
           </Link>
-          <div className="text-right text-sm">
-            <p className="font-semibold">{staffSession.effective.displayName}</p>
-            <p className="text-white/60">{staffSession.effective.role}</p>
+          <div className="flex items-center gap-5 text-right text-sm">
+            <Link className="font-semibold text-[var(--brand-light)] hover:text-white" href="/">
+              Visit store ↗
+            </Link>
+            <div>
+              <p className="font-semibold">{staffSession.effective.displayName}</p>
+              <p className="text-white/60">{staffSession.effective.role}</p>
+            </div>
           </div>
         </div>
       </header>
+      <div className="border-b border-amber-200 bg-amber-50 px-5 py-2 text-center text-sm font-semibold text-amber-950">
+        {adminSettings.operationsAlert}
+      </div>
       <div className="mx-auto grid max-w-7xl md:grid-cols-[220px_1fr]">
         <aside className="border-r border-[var(--border)] bg-white p-5">
           <nav className="flex gap-2 overflow-x-auto md:flex-col">
             <Link className="rounded-xl bg-[var(--brand-soft)] px-4 py-3 font-semibold text-[var(--brand-dark)]" href="/admin">
               Overview
+            </Link>
+            <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/today">
+              Today
+            </Link>
+            <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/orders">
+              Orders
+            </Link>
+            <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/pos">
+              POS
+            </Link>
+            <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/customers">
+              Customers
+            </Link>
+            <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/imports">
+              Imports
+            </Link>
+            <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/audit">
+              Audit
             </Link>
             {hasPermission(staffSession.effective, "settings:manage") && (
               <>

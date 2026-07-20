@@ -403,9 +403,12 @@ export async function recalculatePaymentStatus(
       (sum, payment) => sum + Math.max(0, payment.amountCents - payment.refundedCents),
       0,
     );
+  const postedPayments = order.payments.filter((payment) => payment.status === "POSTED");
   const isRefunded =
-    order.paymentIntents.length > 0 &&
-    order.paymentIntents.every((intent) => intent.status === PaymentIntentStatus.REFUNDED);
+    (order.paymentIntents.length > 0 &&
+      order.paymentIntents.every((intent) => intent.status === PaymentIntentStatus.REFUNDED)) ||
+    (postedPayments.length > 0 &&
+      postedPayments.every((payment) => payment.refundedCents >= payment.amountCents));
   const cachedPaymentStatus = isRefunded
     ? CachedPaymentStatus.REFUNDED
     : postedCents >= order.totalCents

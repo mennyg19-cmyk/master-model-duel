@@ -1,6 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
 import { formatDraftReference } from "@/domain/order-engine";
+import { requirePermission } from "@/lib/auth";
 import {
   createGuestDraftAccess,
   getAuthenticatedCustomer,
@@ -49,9 +50,22 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     displayName?: string;
     email?: string;
+    posCustomerId?: string;
   };
   let customerId = account?.customerId ?? null;
   let guestAccess: ReturnType<typeof createGuestDraftAccess> | null = null;
+
+  if (body.posCustomerId) {
+    await requirePermission("admin:view");
+    const posCustomer = await db.customer.findUnique({
+      where: { id: body.posCustomerId },
+      select: { id: true },
+    });
+    if (!posCustomer) {
+      return NextResponse.json({ error: "POS customer was not found." }, { status: 404 });
+    }
+    customerId = posCustomer.id;
+  }
 
   if (!customerId) {
     const existingToken = getDraftAccessToken(request);

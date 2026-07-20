@@ -161,6 +161,25 @@ model AuditLog {
   @@index([actorStaffId, occurredAt])
 }
 
+model ImportBatch {
+  id             String    @id @default(cuid())
+  entityType     String
+  status         String    @default("STAGED")
+  sourceName     String
+  rows           Json
+  errors         Json
+  validRowCount  Int
+  invalidRowCount Int
+  duplicateCount Int
+  stagedByStaffId String
+  committedByStaffId String?
+  committedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([entityType, createdAt])
+  @@index([status, createdAt])
+}
+
 model ImpersonationSession {
   id            String    @id @default(cuid())
   actorStaffId  String
@@ -358,6 +377,8 @@ model Order {
   @@unique([seasonId, orderNumber])
   @@index([customerId, createdAt])
   @@index([seasonId, status])
+  @@index([status, createdAt])
+  @@index([cachedPaymentStatus, createdAt])
 }
 
 model OrderLine {

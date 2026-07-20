@@ -2,17 +2,20 @@
 
 import type { SeasonStatus } from "@prisma/client";
 import { useState } from "react";
+import type { AdminSettings } from "@/lib/store-settings";
 
 type SettingsTab = "Orders" | "Shipping" | "Email" | "Developer";
 
 export function SettingsHub({
   season,
   initialDeliveryZips,
+  initialAdminSettings,
   packageTypes,
   pickupLocations,
 }: {
   season: { id: string; name: string; status: SeasonStatus } | null;
   initialDeliveryZips: string[];
+  initialAdminSettings: AdminSettings;
   packageTypes: { id: string; name: string }[];
   pickupLocations: { id: string; name: string; isActive: boolean }[];
 }) {
@@ -20,11 +23,13 @@ export function SettingsHub({
   const [storeStatus, setStoreStatus] = useState<SeasonStatus>(season?.status ?? "CLOSED");
   const [deliveryZips, setDeliveryZips] = useState(initialDeliveryZips.join(", "));
   const [message, setMessage] = useState("");
+  const [adminSettings, setAdminSettings] = useState(initialAdminSettings);
   const tabs: SettingsTab[] = ["Orders", "Shipping", "Email", "Developer"];
 
   async function saveSettings(changes: {
     storeStatus?: SeasonStatus;
     deliveryZips?: string[];
+    adminSettings?: AdminSettings;
   }) {
     const response = await fetch("/api/admin/settings", {
       method: "PATCH",
@@ -98,6 +103,15 @@ export function SettingsHub({
                 {pickupLocations.length === 0 && <p className="text-sm text-[var(--muted)]">No pickup locations yet.</p>}
               </div>
             </section>
+            <section className="grid gap-4 sm:grid-cols-2">
+              <label className="font-bold">Follow-up after days
+                <input className="mt-2 w-full rounded-xl border border-[var(--border)] px-3 py-2" max="30" min="0" onChange={(event) => setAdminSettings({ ...adminSettings, followUpDays: Number(event.target.value) })} type="number" value={adminSettings.followUpDays} />
+              </label>
+              <label className="font-bold">Operations alert
+                <input className="mt-2 w-full rounded-xl border border-[var(--border)] px-3 py-2" onChange={(event) => setAdminSettings({ ...adminSettings, operationsAlert: event.target.value })} value={adminSettings.operationsAlert} />
+              </label>
+              <button className="rounded-xl bg-[var(--ink)] px-5 py-3 font-bold text-white sm:col-span-2" onClick={() => saveSettings({ adminSettings })} type="button">Save order operations</button>
+            </section>
           </div>
         )}
         {activeTab === "Shipping" && (
@@ -139,17 +153,21 @@ export function SettingsHub({
           </div>
         )}
         {activeTab === "Email" && (
-          <div>
+          <div className="space-y-4">
             <h2 className="text-xl font-bold">Email defaults</h2>
-            <p className="mt-2 max-w-xl text-[var(--muted)]">
-              Newsletter preferences are active. Campaign templates, sender setup,
-              and transactional overrides arrive with the notification platform.
-            </p>
+            <label className="block max-w-xl font-bold">Sender name
+              <input className="mt-2 w-full rounded-xl border border-[var(--border)] px-3 py-2" onChange={(event) => setAdminSettings({ ...adminSettings, emailSenderName: event.target.value })} value={adminSettings.emailSenderName} />
+            </label>
+            <button className="rounded-xl bg-[var(--ink)] px-5 py-3 font-bold text-white" onClick={() => saveSettings({ adminSettings })} type="button">Save email defaults</button>
           </div>
         )}
         {activeTab === "Developer" && (
-          <div>
+          <div className="space-y-5">
             <h2 className="text-xl font-bold">Provider status</h2>
+            <label className="block max-w-xl font-bold">Webhook label
+              <input className="mt-2 w-full rounded-xl border border-[var(--border)] px-3 py-2" onChange={(event) => setAdminSettings({ ...adminSettings, developerWebhookLabel: event.target.value })} value={adminSettings.developerWebhookLabel} />
+            </label>
+            <button className="rounded-xl bg-[var(--ink)] px-5 py-3 font-bold text-white" onClick={() => saveSettings({ adminSettings })} type="button">Save developer config</button>
             <dl className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl bg-[var(--surface)] p-5">
                 <dt className="text-sm text-[var(--muted)]">Media</dt>

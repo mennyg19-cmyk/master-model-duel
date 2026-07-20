@@ -10,6 +10,9 @@ P4 adds the cart-first order builder, saved-recipient workflow, protected
 authenticated and guest drafts, and customer account pages.
 P5 adds recipient-level fulfillment, greeting capture, hosted Stripe Checkout,
 signed payment webhooks, offline staff payments, and final order commitment.
+P6 adds the permission-aware operations dashboard, Today queue, bounded order
+and customer directories, order money actions, shared-builder POS, staged CSV
+imports, audit views, and live settings.
 
 ## Local development
 
@@ -91,3 +94,15 @@ and native `node:test` through `tsx` for unit tests.
   entries. Public checkout accepts Stripe only.
 - Live Shippo rates remain deferred to P8; P5 stores deterministic placeholder
   rate snapshots so later fulfillment changes do not alter the paid total.
+
+## P6 admin operations
+
+- `/admin`, `/admin/today`, and `/admin/orders` provide bounded operational
+  queues, KPIs, filters, pagination, bulk repeat, detail, refund, and audit.
+- `/admin/pos` reuses the cart-first builder with customer find-or-create and
+  staff-attributed cash/check payment.
+- `/admin/customers` provides a bounded directory, address book, and order
+  history. `/admin/imports` stages customer/product CSVs and blocks atomic
+  commits until duplicates and invalid rows are corrected.
+- `/admin/settings` persists Orders, Shipping, Email, and Developer values.
+- `npm run smoke:p6` verifies S1-S4, including 1,000 orders and 5,000 packages.

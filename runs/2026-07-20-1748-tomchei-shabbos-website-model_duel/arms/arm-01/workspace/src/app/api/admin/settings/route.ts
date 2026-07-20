@@ -2,7 +2,11 @@ import { SeasonStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { saveDeliveryZips } from "@/lib/store-settings";
+import {
+  type AdminSettings,
+  saveAdminSettings,
+  saveDeliveryZips,
+} from "@/lib/store-settings";
 
 export async function PATCH(request: Request) {
   try {
@@ -11,6 +15,7 @@ export async function PATCH(request: Request) {
       seasonId?: string;
       storeStatus?: SeasonStatus;
       deliveryZips?: string[];
+      adminSettings?: AdminSettings;
     };
     if (
       body.storeStatus !== undefined &&
@@ -20,6 +25,17 @@ export async function PATCH(request: Request) {
     }
     if (body.deliveryZips !== undefined && !Array.isArray(body.deliveryZips)) {
       return NextResponse.json({ error: "Delivery ZIPs must be a list." }, { status: 400 });
+    }
+    if (
+      body.adminSettings !== undefined &&
+      (!Number.isInteger(body.adminSettings.followUpDays) ||
+        body.adminSettings.followUpDays < 0 ||
+        body.adminSettings.followUpDays > 30 ||
+        !body.adminSettings.emailSenderName?.trim() ||
+        !body.adminSettings.operationsAlert?.trim() ||
+        !body.adminSettings.developerWebhookLabel?.trim())
+    ) {
+      return NextResponse.json({ error: "Admin settings are invalid." }, { status: 400 });
     }
 
     if (body.storeStatus !== undefined) {
@@ -34,6 +50,9 @@ export async function PATCH(request: Request) {
     if (body.deliveryZips !== undefined) {
       await saveDeliveryZips(body.deliveryZips);
     }
+    if (body.adminSettings !== undefined) {
+      await saveAdminSettings(body.adminSettings);
+    }
     await db.auditLog.create({
       data: {
         actorStaffId: staffSession.actor.id,
@@ -43,6 +62,7 @@ export async function PATCH(request: Request) {
         metadata: {
           storeStatus: body.storeStatus,
           deliveryZipCount: body.deliveryZips?.length,
+          adminSettingsChanged: body.adminSettings !== undefined,
         },
       },
     });

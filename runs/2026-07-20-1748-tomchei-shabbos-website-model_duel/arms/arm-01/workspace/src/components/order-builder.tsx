@@ -84,6 +84,8 @@ export function OrderBuilder({
   storageOwnerKey,
   initialDraftId = null,
   mode = "storefront",
+  draftRequestBody = {},
+  checkoutBasePath = "/checkout",
 }: {
   products: BuilderProduct[];
   initialAddresses: BuilderAddress[];
@@ -91,6 +93,8 @@ export function OrderBuilder({
   storageOwnerKey: string;
   initialDraftId?: string | null;
   mode?: "storefront" | "pos";
+  draftRequestBody?: Record<string, string>;
+  checkoutBasePath?: string;
 }) {
   const [lines, setLines] = useState<BuilderLine[]>([]);
   const [addresses, setAddresses] = useState(initialAddresses);
@@ -166,7 +170,7 @@ export function OrderBuilder({
       draftCreationRef.current = fetch("/api/order/drafts", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify(draftRequestBody),
       })
         .then(async (response) => {
           const payload = await response.json();
@@ -222,7 +226,7 @@ export function OrderBuilder({
       return;
     }
     const savedDraftId = await saveDraft(lines);
-    if (savedDraftId) window.location.assign(`/checkout/${savedDraftId}`);
+    if (savedDraftId) window.location.assign(`${checkoutBasePath}/${savedDraftId}`);
   }
 
   useEffect(() => {

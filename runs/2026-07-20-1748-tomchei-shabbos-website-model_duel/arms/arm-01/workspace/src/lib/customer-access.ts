@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
-import { getAuthenticatedClerkUserId } from "@/lib/auth";
+import { getAuthenticatedClerkUserId, getCurrentStaffUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { hasPermission } from "@/lib/permissions";
 
 export const GUEST_DRAFT_ACCESS_DAYS = 30;
 
@@ -35,6 +36,10 @@ export async function getAuthenticatedCustomer() {
 }
 
 export async function findAccessibleDraft(request: Request, draftId: string) {
+  const staffSession = await getCurrentStaffUser();
+  if (staffSession && hasPermission(staffSession.effective, "admin:view")) {
+    return db.order.findFirst({ where: { id: draftId, status: "DRAFT" } });
+  }
   const account = await getAuthenticatedCustomer();
   if (account?.customerId) {
     return db.order.findFirst({
