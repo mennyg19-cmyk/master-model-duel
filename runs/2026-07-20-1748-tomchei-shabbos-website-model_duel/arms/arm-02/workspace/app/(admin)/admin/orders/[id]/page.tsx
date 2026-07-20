@@ -7,6 +7,7 @@ import { Card, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/admin/order-badges";
 import { OrderMoneyActions } from "@/components/admin/order-money-actions";
+import { FulfillmentActions } from "@/components/admin/fulfillment-actions";
 
 const AUDIT_LIMIT = 50;
 
@@ -79,6 +80,18 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
         <span className="text-sm text-muted">
           {order.season.name} · placed {order.createdAt.toISOString().slice(0, 16).replace("T", " ")}
         </span>
+        {order.status === "FINALIZED" && (
+          <a
+            href={`/api/admin/orders/${order.id}/packing-slip`}
+            target="_blank"
+            className="text-sm text-brand hover:underline"
+          >
+            Packing slip (PDF)
+          </a>
+        )}
+        {order.status === "FINALIZED" && permissions.has("fulfillment.manage") && (
+          <FulfillmentActions mode="order" orderId={order.id} />
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

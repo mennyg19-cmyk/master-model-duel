@@ -37,6 +37,15 @@ through the real `/api/webhooks/stripe` route, so signatures, idempotency, amoun
 auto-refunds, and refund sync run the same code as production. Set `STRIPE_SECRET_KEY` and
 `STRIPE_WEBHOOK_SECRET` in `.env` to go live; the mock page then 404s.
 
+## Fulfillment & printing
+
+Finalized orders explode into packages (grouped by recipient/address/method/greeting).
+Staff work them on `/admin/packages` (split, regroup, stage advance) and `/admin/fulfillment`
+(per-channel counts, bulk stage moves, print production). The nightly print batch is
+idempotent per day and writes one PDF per filing group (= fulfillment method code) for
+slips, labels, and greeting cards, plus a packing slip per order. PDFs come from the
+dependency-free writer in `lib/pdf.ts`; printing never changes a package's stage.
+
 ## Patterns (one per concern)
 
 - Data access: Prisma via `lib/db.ts` singleton.

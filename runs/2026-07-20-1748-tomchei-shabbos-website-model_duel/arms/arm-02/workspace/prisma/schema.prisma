@@ -425,6 +425,8 @@ model Package {
   @@index([seasonId, groupingKey])
   // Dashboard stage counts at 5k+ package scale (G-024).
   @@index([seasonId, stage])
+  // Fulfillment channel dashboard + channel bulk actions (R-072).
+  @@index([seasonId, fulfillmentMethodId, stage])
 }
 
 model PackageAudit {
@@ -437,6 +439,49 @@ model PackageAudit {
   createdAt    DateTime @default(now())
 
   @@index([packageId, createdAt])
+}
+
+enum PrintBatchKind {
+  NIGHTLY
+  REPRINT_GROUP
+  REPRINT_ORDER
+}
+
+enum PrintArtifactKind {
+  PACKAGE_SLIPS
+  LABELS
+  GREETING_CARDS
+  PACKING_SLIP
+}
+
+// One print run (UR-005). runKey makes the nightly run idempotent per calendar
+// day: a second trigger the same day finds the existing row and returns it
+// instead of regenerating artifacts. Reprints get unique timestamped keys.
+model PrintBatch {
+  id               String          @id @default(cuid())
+  kind             PrintBatchKind
+  runKey           String          @unique
+  createdByStaffId String?
+  createdAt        DateTime        @default(now())
+  artifacts        PrintArtifact[]
+}
+
+// One downloadable PDF (UR-005, UR-013, R-056). filingGroup is the fulfillment
+// method code — the physical stack the org files printed paper under. payload
+// is the data snapshot taken at batch time; the PDF is rendered from it on
+// download, so downloading never touches Package rows (print ≠ shipped).
+model PrintArtifact {
+  id           String            @id @default(cuid())
+  printBatchId String
+  printBatch   PrintBatch        @relation(fields: [printBatchId], references: [id], onDelete: Cascade)
+  filingGroup  String
+  kind         PrintArtifactKind
+  orderId      String?
+  payload      Json
+  createdAt    DateTime          @default(now())
+
+  @@unique([printBatchId, filingGroup, kind, orderId])
+  @@index([orderId, createdAt])
 }
 
 enum PaymentMethod {

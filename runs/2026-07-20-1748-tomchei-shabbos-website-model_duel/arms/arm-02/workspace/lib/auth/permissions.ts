@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   "payments.record": "Post and void cash/check payments on orders (audited)",
   "payments.refund": "Issue Stripe refunds (audited)",
   "orders.manage": "Finalize and discard orders on behalf of customers",
+  "fulfillment.manage": "Work the package board: split, regroup, statuses, print batches",
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -20,7 +21,7 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
 
 const ROLE_DEFAULTS: Record<StaffRole, Permission[]> = {
   MANAGER: ALL_PERMISSIONS,
-  STAFF: ["orders.view", "customers.manage", "payments.record", "orders.manage"],
+  STAFF: ["orders.view", "customers.manage", "payments.record", "orders.manage", "fulfillment.manage"],
   DRIVER: [],
 };
 

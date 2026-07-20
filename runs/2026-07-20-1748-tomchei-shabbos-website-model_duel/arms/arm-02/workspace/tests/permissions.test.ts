@@ -13,7 +13,7 @@ test("staff baseline is orders/customers/payments day-to-day, no refunds", () =>
   const permissions = resolvePermissions("STAFF", []);
   assert.deepEqual(
     [...permissions],
-    ["orders.view", "customers.manage", "payments.record", "orders.manage"]
+    ["orders.view", "customers.manage", "payments.record", "orders.manage", "fulfillment.manage"]
   );
   assert.ok(!permissions.has("payments.refund"), "refunds stay manager-only");
 });
@@ -42,6 +42,6 @@ test("unknown override permissions are ignored", () => {
   ]);
   assert.deepEqual(
     [...permissions],
-    ["orders.view", "customers.manage", "payments.record", "orders.manage"]
+    ["orders.view", "customers.manage", "payments.record", "orders.manage", "fulfillment.manage"]
   );
 });

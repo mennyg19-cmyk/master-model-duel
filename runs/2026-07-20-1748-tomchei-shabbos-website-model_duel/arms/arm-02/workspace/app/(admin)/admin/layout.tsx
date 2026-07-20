@@ -11,6 +11,8 @@ const NAV_ITEMS: { href: string; label: string; permission: Permission | null }[
   { href: "/admin", label: "Dashboard", permission: null },
   { href: "/admin/orders", label: "Orders", permission: "orders.view" },
   { href: "/admin/pos", label: "Point of sale", permission: "orders.manage" },
+  { href: "/admin/packages", label: "Packages", permission: "fulfillment.manage" },
+  { href: "/admin/fulfillment", label: "Fulfillment", permission: "fulfillment.manage" },
   { href: "/admin/customers", label: "Customers", permission: "customers.manage" },
   { href: "/admin/import", label: "Import", permission: "customers.manage" },
   { href: "/admin/catalog", label: "Catalog", permission: "catalog.manage" },
