@@ -22,6 +22,6 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 ## In flight
 
 - arm-01 P11: [arm-01 Test4 P11 build](60bdaeaa-d624-4ad4-9f01-fee8d641081f)
-- arm-02 P7: [arm-02 Test4 P7 build](pending)
+- arm-02 P7: [arm-02 Test4 P7 build](6ae88602-99cc-4ff7-a5c8-938bd1d0c701)
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)
