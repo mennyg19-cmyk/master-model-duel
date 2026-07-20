@@ -3,14 +3,17 @@
 **Status:** LOCKED methodology (runs created via **"start testing"**)  
 **Harness:** Master Model Duel (`runs/{run_id}/` = one isolated archive)
 **Orchestrator:** third-party chat agent in this repo (does not build any arm)  
-**Contestants:** chosen at kickoff (`N ≥ 2`)  
+**Run mode:** `model_duel` (N models, one rule pack) or `rules_duel` (one model, N packs) — see `protocol/RULES-DUEL.md`  
+**Contestants / packs:** chosen at kickoff (`N ≥ 2` arms)  
 **Reviewer:** chosen at kickoff — **must be a different model family** than every contestant (`catalog/MODEL-FAMILIES.json`)  
-**Rules:** chosen at kickoff (ablation) — same pack copied into every arm  
+**Rules:** `model_duel` = same pack on every arm; `rules_duel` = pack is the variable  
 **Greenfield:** absolute — no prior apps, no prior run trees, no web harvest of the target product  
 **Scorecard mode:** **Option D** — one internal /100 **plus two published headlines**
 
 Kickoff interview: `kickoff/QUESTIONS.md`. Bootstrap: `scripts/bootstrap-run.ps1`.  
-**Late join** (add a model to an existing run): `protocol/LATE-JOIN.md` + `scripts/late-join-arm.ps1`.
+**Late join:** `protocol/LATE-JOIN.md` + `scripts/late-join-arm.ps1` (new model *or* new pack, depending on mode).  
+**Single test:** `protocol/RUN-SINGLE-TEST.md` + **"run test N"** (tests need not run as one batch).  
+**Grill inventory (Test 1b):** `protocol/GRILL-INVENTORY.md` — dual inventories (codebase + grill), reviewer turn grades + user-facing diff.
 
 ---
 
@@ -18,16 +21,27 @@ Kickoff interview: `kickoff/QUESTIONS.md`. Bootstrap: `scripts/bootstrap-run.ps1
 
 ```yaml
 run_id:            # e.g. 2026-07-20-myapp
-contestants:       # list of { arm_id, model, family, web_port, db_port }
-reviewer_model:    # any slug whose family ∉ contestant families
-reviewer_family:   # filled by bootstrap validation
-rules_selected:    # rule IDs from catalog/RULE-CATALOG.md
+run_mode:          # model_duel | rules_duel
+# model_duel:
+contestants:       # list of { arm_id, model, web_port, db_port }
+rules_selected:    # shared rule IDs
+# rules_duel:
+contestant_model:  # one slug for every arm
+rule_packs:        # list of { pack_id, label, rules[] } — bootstrap expands arms
+reviewer_model:    # family ∉ contestant families
 source_codebase:   # absolute path — Test 1 read-only only
+inventory_mode:    # single | focused
+inventory_jobs:    # if focused — from catalog/SPECIALIST-ROLES.md
+include_grill_inventory: true   # Test 1b; false skips grill track
+grill_sees_codebase_inventory: false
+grill_seed:        # short fuzzy product intent (same for all arms)
+self_review_mode:  # single | focused
+self_review_jobs:  # if focused
 scorecard: option-d
 greenfield: true
 ```
 
-Generate arms under `runs/{run_id}/arms/{arm_id}/`. Do not hardcode A/B-only logic. Never write into another `runs/` folder.
+Generate arms under `runs/{run_id}/arms/{arm_id}/`. Do not hardcode A/B-only logic. Never write into another `runs/` folder. In `rules_duel`, report headlines by **pack**, not by pretending packs are different models.
 
 ---
 
@@ -49,8 +63,8 @@ Calling “mediocre builder + strong detect wins” a *con* assumed the claim wa
 
 | Test | Weight | Measures |
 |---|---:|---|
-| 1 — Inventory | 15 | Codebase understanding → feature inventory |
-| 2 — Plan | 15 | Greenfield build plan from frozen inventory |
+| 1 — Inventory | 15 | **1a** codebase (7) + **1b** grill turns/inventory (8) when grill on; else 15 on 1a — see `GRILL-INVENTORY.md` |
+| 2 — Plan | 15 | Greenfield build plan from **user-resolved** inventory (after dual-inventory review) |
 | 3 — Build (no feedback) | 20 | Execute merged plan, phase-gated, no fix loop |
 | 4 — Build (one review pass) | 20 | Same merged plan; one specialist aggregate → one fix → continue |
 | 5 — Solo self-review → fix → residual | 15 | Closed loop on own finished tree; reviewer residual grade |
@@ -64,8 +78,9 @@ Calling “mediocre builder + strong detect wins” a *con* assumed the claim wa
 |---|---|
 | With external reviewer | weighted Tests **1+2+3+4+6** (re-normalize those weights to 100) |
 | Solo commit | weighted Tests **1+2+5** (+ report Test 3 residual as context; re-normalize) |
+| Best interviewer (optional) | Test **1b** only — turn quality × grill inventory × efficiency |
 
-If the two headlines disagree on the winner, **say so** — that is a primary result.
+If the two main headlines disagree on the winner, **say so** — that is a primary result.
 
 ---
 
@@ -73,9 +88,20 @@ If the two headlines disagree on the winner, **say so** — that is a primary re
 
 ### Test 1 — Inventory
 
-1. Each contestant (fresh context) reads the **source codebase only** (read-only mount) and writes a full feature inventory.  
-2. Fresh **reconciler** (reviewer model, no contestant context) merges all inventories → `shared/RECONCILED-INVENTORY.md`.  
-3. Fresh **grader** (reviewer model, no contestant context) scores each contestant inventory vs the reconciled inventory.
+**Spawn shape** (kickoff `inventory_mode`, or asked at **run test 1**):
+
+| Mode | Per arm |
+|---|---|
+| `single` | One fresh contestant agent → full feature inventory |
+| `focused` | One fresh contestant agent **per job** in `inventory_jobs` (same model) → partial inventories → one merge agent (same model) → arm inventory |
+
+Job definitions: `catalog/SPECIALIST-ROLES.md`. Every specialist and the merge must require evidence paths; no invented IDs. Ledger one row per spawn.
+
+Then:
+
+1. Each arm produces one final inventory (from single or focused+merge).  
+2. Fresh **reconciler** (reviewer model, no contestant context) merges all arm inventories → `shared/RECONCILED-INVENTORY.md`.  
+3. Fresh **grader** (reviewer model) scores each arm inventory vs the reconciled inventory.
 
 **Reconciler rules (mandatory):**
 
@@ -89,11 +115,23 @@ If the two headlines disagree on the winner, **say so** — that is a primary re
 - **Precision** — junk / hallucinated IDs penalized.  
 Verbosity without evidence does not win.
 
-After Test 1: freeze `RECONCILED-INVENTORY.md`. Builders never see the source codebase again.
+After Test 1a: freeze `RECONCILED-INVENTORY.md` (codebase).  
+
+### Test 1b — Grill inventory (dual inventory)
+
+When `include_grill_inventory: true` (default for full suite): run **`protocol/GRILL-INVENTORY.md`** in full.
+
+1. Same seed for every arm; contestants grill the user under `grill-protocol` (different questions are expected).  
+2. Each arm writes `GRILL-TRANSCRIPT.md` + `GRILL-INVENTORY.md`.  
+3. Reviewer grades **each turn** (needed vs fluff, explain-down, options real vs hallucinated, uptake, faithful capture) — **quality of turns**, not turn count. Efficiency: same inventory quality with fewer necessary turns scores higher.  
+4. Reviewer diffs codebase inventory vs grill inventory → `shared/INVENTORY-COMPARISON.md` for the **user**.  
+5. User resolves → `shared/USER-RESOLVED-INVENTORY.md` (default input to Test 2).
+
+Builders still never see the source codebase after 1a; grill agents should not see peer transcripts.
 
 ### Test 2 — Plan (greenfield)
 
-1. Each contestant gets **only** the reconciled inventory (+ always-on rules) and writes an exhaustive phased build plan. **No reference apps.**  
+1. Each contestant gets **only** the frozen **user-resolved** inventory when 1b ran (else reconciled codebase inventory) (+ always-on rules) and writes an exhaustive phased build plan. **No reference apps.**  
 2. Reviewer plan-reviewer checks each plan for inventory coverage + phase sanity.  
 3. Fresh reviewer **chooser** merges plans into **one** `shared/MERGED-BUILD-PLAN.md`, citing which arm each major choice came from. **No silent invention** beyond the union of plans. Chooser taste is **not** contestant points.
 
@@ -120,15 +158,21 @@ Tests 3 and 4 may run as separate full rebuilds (recommended: two workspaces per
 
 Answers: *If I commit to one model for everything, which should I use?*
 
-1. Freeze each arm’s finished tree (from Test 4 primary build, or declare kickoff which finished tree — default **Test 4 final**; if Test 4 DNF, use Test 3 final and note it).  
-2. Fresh contestant agent reviews **own tree only** (optionally same specialist split run as that model, then self-aggregate — or one deep self-review; lock at kickoff).  
-3. Fresh contestant fix agent gets **only** aggregate self-findings + tree → **one** fix pass.  
-4. **Reviewer specialist panel + aggregator** grades the **post-fix** tree (residual). Same rubric as Tests 3–4.
+1. Freeze each arm’s finished tree (from Test 4 primary build, or declare which finished tree — default **Test 4 final**; if Test 4 DNF, use Test 3 final and note it).  
+2. **Self-review spawn shape** (kickoff `self_review_mode`, or asked at **run test 5**):
 
-**Score:** residual quality + self-finding fix rate + regressions + solo TCO (build of that tree’s lineage + self-review + self-fix; residual reviewer cost listed separately as audit).
+| Mode | Per arm |
+|---|---|
+| `single` | One fresh contestant agent reviews own tree → findings |
+| `focused` | Fresh contestant agents per `self_review_jobs` (security, quality, rules, clean-code, …) → self-aggregate (same model) → findings |
+
+   Jobs: `catalog/SPECIALIST-ROLES.md`. Fresh context; no build transcript.  
+3. Fresh contestant fix agent gets **only** aggregate self-findings + tree → **one** fix pass.  
+4. **Reviewer specialist panel + aggregator** grades the **post-fix** tree (residual). Same rubric as Tests 3–4. Residual uses `reviewer_model`, not contestant specialists.
+
+**Score:** residual quality + self-finding fix rate + regressions + solo TCO (build of that tree’s lineage + self-review spawns + self-fix; residual reviewer cost listed separately as audit).
 
 No cross-model review (no 5b).
-
 ### Test 6 — Detect + vague fix
 
 - Clone **headline winner** (declare which headline; default: with-external-reviewer winner) to all arms as identical trees.  
@@ -183,6 +227,8 @@ Same reviewer model for all arms. Fresh context every spawn. Labels `arm-{id}` o
 
 10. Reconciler: union only, evidence paths, no invented IDs, UNIQUE-TO tags.  
 11. Inventory grade = recall + precision (junk IDs hurt).  
+11b. Grill track: different questions across models are expected; grade turn **quality** + inventory fidelity; efficiency = same quality / fewer necessary turns (`GRILL-INVENTORY.md`).  
+11c. After dual inventory, user must see `INVENTORY-COMPARISON.md` before Test 2; default plan input is `USER-RESOLVED-INVENTORY.md`.  
 12. Chooser merge cites source arm per decision; no silent invention past plan union.  
 13. Test 2 scores own plans; merge is not contestant credit.  
 14. Tests 3–4 build from **merged plan only**.
@@ -203,9 +249,9 @@ Same reviewer model for all arms. Fresh context every spawn. Labels `arm-{id}` o
 
 ### Test 5 freshness
 
-23. New agent IDs for self-review and for fix (no build transcript).  
-24. Residual reviewer panel does not see self-review chat — only post-fix tree.
-25. Same specialist+aggregator recipe as Tests 3–4 for residual.
+23. New agent IDs for self-review (each focused job + merge if any) and for fix (no build transcript).  
+24. Residual reviewer panel does not see self-review chat — only post-fix tree.  
+25. Same specialist+aggregator recipe as Tests 3–4 for residual (**reviewer_model**, not contestant self-specialists).
 
 ### Prompts / deviations
 
@@ -256,9 +302,10 @@ At kickoff, expand:
 
 - `N` inventory agents → 1 reconciler → 1 inventory grader  
 - `N` plan agents → 1 plan reviewer (or N) → 1 chooser → orchestrator phase cut  
+- Test 1: `N` inventory (or `N × jobs + N` merges if focused) + reconciler + grader  
 - For Test 3: `N × phases` build + `N × phases × (4 specialists + 1 agg)`  
 - For Test 4: same + `N × phases` fix agents  
-- Test 5: `N` self-review (+ optional self-specialists) + `N` fix + `N × (4+1)` residual  
+- Test 5: `N` self-review (or `N × jobs + N` self-agg if focused) + `N` fix + `N × (4+1)` residual  
 - Test 6: `N` detect + `N` fix on cloned winner  
 
 Cost ledger row per spawn. Snapshots per gate. All paths under `runs/{run_id}/`.
@@ -278,4 +325,5 @@ Cost ledger row per spawn. Snapshots per gate. All paths under `runs/{run_id}/`.
 
 1. User says **"start testing"** in this repo.  
 2. Orchestrator runs `kickoff/QUESTIONS.md` → writes `KICKOFF.yaml` → `scripts/bootstrap-run.ps1`.  
-3. Begin Test 1; continue until Tests 1–6 complete or arms DNF per stop-condition rules.
+3. Either run the full suite, or stop and use **"run test N"** / aliases per `protocol/RUN-SINGLE-TEST.md` (ask for missing inventories/plans when needed).  
+4. **"continue testing"** / **"run remaining"** advances unfinished tests.

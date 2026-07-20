@@ -1,6 +1,6 @@
 # Rule catalog (ablation packs)
 
-At kickoff the user picks which rule files land in **every** contestant arm’s `.cursor/rules/`. Same set for all arms in a run (fair ablation). Different runs can pick different packs.
+At kickoff the orchestrator **reads this table and scans `catalog/rules/*.mdc`**, then asks which IDs to include. That is the only source of selectable rules — not a memorized shortlist.
 
 | ID | File | Default | What it does |
 |---|---|---|---|
@@ -17,9 +17,21 @@ At kickoff the user picks which rule files land in **every** contestant arm’s 
 | `autonomous-mode` | `autonomous-mode.mdc` | optional | DECISION-LOG when unattended |
 | `prose-deslop` | `prose-deslop.mdc` | optional | Long-form prose pass |
 | `interface-kit` | `interface-kit.mdc` | optional | UI craft |
-| `grill-protocol` | `grill-protocol.mdc` | **off** | Planning interview — not for builders |
+| `grill-protocol` | `grill-protocol.mdc` | **off for builders**; **on for Test 1b grill agents** | Planning interview — auto-attached for grill inventory even if off in the shared pack |
 | `plan-review` | `plan-review.mdc` | **off** | Senior plan review — reviewer-side |
 
 **Never copy into contestant arms:** `rebuild-protocol`, `redesign-protocol`, `review-protocol`, `subagents` — those are harness/orchestrator concerns. Contestants get the duel prompts instead.
 
-Source copies live in `catalog/rules/`. Bootstrap copies only the selected IDs into each arm.
+Source copies live in `catalog/rules/`. Bootstrap copies only the selected IDs into each arm (`catalog/rules/{id}.mdc` → `arms/.../.cursor/rules/`).
+
+---
+
+## Add your own rules
+
+Anything you drop in the catalog becomes selectable on the **next** kickoff.
+
+1. Add `catalog/rules/{id}.mdc` (Cursor rule file; `id` = filename without `.mdc`).  
+2. Add a row to the table above (ID, file, default on/off/optional, one-line what it does).  
+3. Say **start testing** (or **add pack** / late-join rules). The orchestrator must list **every** catalog ID when asking what to include — your rule will appear with the stock ones.
+
+Do **not** paste one-off rules only into an arm folder. Arms are regenerated from the catalog at bootstrap; uncatalogued files won’t be offered and won’t survive a clean arm create.

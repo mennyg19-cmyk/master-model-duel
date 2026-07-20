@@ -10,22 +10,26 @@ Triggered when the user says **"start testing"**, **"new duel"**, **"new agent t
 
 ## You are the orchestrator
 
-You do **not** build contestant code. You interview, validate, bootstrap, then run `protocol/EXPERIMENT-PLAN.md` to completion.
+You do **not** build contestant code. You interview, validate, bootstrap, then either run the full suite or wait for **"run test N"** (`protocol/RUN-SINGLE-TEST.md`).
 
 ## Procedure
 
-1. Read `kickoff/QUESTIONS.md`, `catalog/RULE-CATALOG.md`, `catalog/MODEL-FAMILIES.json`, `protocol/EXPERIMENT-PLAN.md`.
-2. Ask kickoff questions **in order** (one group at a time). Prefer recommended defaults when offering choices.
-3. **Reviewer family check:** load families for every contestant slug and the reviewer slug. If reviewer’s family ∈ contestant families → **stop and re-ask**. Never soft-override.
-4. After confirm: write `runs/{run_id}/KICKOFF.yaml` (use schema in `kickoff/KICKOFF.schema.yaml`), then run:
+1. Read `kickoff/QUESTIONS.md`, `catalog/RULE-CATALOG.md`, **scan `catalog/rules/*.mdc`**, `catalog/SPECIALIST-ROLES.md`, `catalog/MODEL-FAMILIES.json`, `protocol/EXPERIMENT-PLAN.md`. If `run_mode` will be `rules_duel`, also read `protocol/RULES-DUEL.md`.
+2. Ask kickoff questions **in order** starting with **Q0 run mode** (one group at a time). Include **Q5 / Q5b** (inventory spawn + grill track) and **Q6 self-review spawn**. Prefer recommended defaults when offering choices.
+3. **Rules question (Q4 / packs):** always offer the **full live catalog** (table ∪ files on disk). Do not use a memorized subset. User-added `.mdc` files in `catalog/rules/` must appear in the ask. If they want a brand-new rule, point them to add it under `catalog/` first (see `RULE-CATALOG.md` → Add your own rules), then refresh the list.
+4. **Reviewer family check:** load families for every contestant slug and the reviewer slug. If reviewer’s family ∈ contestant families → **stop and re-ask**. Never soft-override. (`rules_duel` still has one contestant family.)
+5. After confirm: write `runs/{run_id}/KICKOFF.yaml` (include `inventory_mode` / `self_review_mode` + jobs). For `rules_duel`, include `contestant_model` + `rule_packs`. Then run:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-run.ps1 -KickoffYaml "runs/{run_id}/KICKOFF.yaml"
 ```
 
-5. Open `runs/{run_id}/README.md` and begin **Test 1**. Keep all artifacts under that run folder. Never write into another run’s directory.
-6. Cost ledger: append every spawn to `runs/{run_id}/results/COST-LEDGER.csv` per experiment plan.
-7. Mapping (slug ↔ arm_id) → `runs/{run_id}/.scratch/mapping.md` (gitignored). Reveal only in that run’s FINAL-REPORT.
+6. Ask: **full suite now**, or **stop** so the user can **run test N** separately?  
+   - Full suite → begin Test 1 per `EXPERIMENT-PLAN.md` (honor focused inventory if set).  
+   - Stop → tell them the commands (`run test 1` … `run test 6`, `continue testing`).  
+7. Keep all artifacts under that run folder. Never write into another run’s directory.  
+8. Cost ledger: append every spawn to `runs/{run_id}/results/COST-LEDGER.csv`.  
+9. Mapping (slug ↔ arm_id) → `runs/{run_id}/.scratch/mapping.md` (gitignored). Reveal only in that run’s FINAL-REPORT.
 
 ## Multi-run
 
@@ -33,15 +37,11 @@ Each `runs/{run_id}/` is a full archive. New "start testing" → new `run_id`. O
 
 ## Late join
 
-Triggered by **"add model"**, **"late join"**, **"add contestant"**.
+Triggered by **"add model"**, **"late join"**, **"add contestant"**, **"add pack"**.
 
-1. Read `protocol/LATE-JOIN.md` in full.  
-2. Confirm `run_id`. Shared freezes (reconciled inventory, merged plan, rules, reviewer) **do not change**.  
-3. Ask for model slug + ports; validate family vs reviewer.  
-4. Run:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/late-join-arm.ps1 -RunId "{run_id}" -ArmId "arm-0N" -Model "{slug}" -WebPort {port} -DbPort {port}
-```
-
+1. Read `protocol/LATE-JOIN.md` in full. Check `run_mode` in the run’s `KICKOFF.yaml`.  
+2. Confirm `run_id`. Shared freezes (reconciled inventory, merged plan, reviewer; plus shared rules *or* contestant model) **do not change**.  
+3. **model_duel:** ask model slug + ports; validate family vs reviewer.  
+   **rules_duel:** ask new `pack_id` + rule list from the **full catalog** + ports; model stays `contestant_model`.  
+4. Run `scripts/late-join-arm.ps1` (see LATE-JOIN for args per mode).  
 5. Run the late arm through tests per LATE-JOIN: grade vs freezes; award **bonus** for novel true inventory IDs / plan extras; builds use the **old merged plan**.

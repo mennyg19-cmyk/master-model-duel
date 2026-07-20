@@ -35,12 +35,14 @@ Think of an agent’s job as a pipeline. We score each stage separately so a mod
 
 | Test | Skill under the microscope |
 |---|---|
-| **1 — Inventory** | Understanding. Read a real codebase; produce a feature inventory. Graded for recall and precision (spam lists lose). |
-| **2 — Plan** | Translation. Turn a frozen inventory into an exhaustive phased build plan. No old apps. |
+| **1 — Inventory** | Understanding. **1a** read the old codebase; **1b** grill you for what you want. Reviewer diffs both and grades grill *turn quality* (not turn count). |
+| **2 — Plan** | Translation. Turn your **resolved** inventory into an exhaustive phased build plan. No old apps. |
 | **3 — Build (no feedback)** | Execution. Same merged plan for every arm; phase gates; smoke evidence. Can it ship without a coach? |
 | **4 — Build (one review pass)** | Coachability. Same plan as Test 3; after each phase, one aggregated review → one fix → continue. Does feedback help *this* model? |
-| **5 — Solo self-review → fix → residual** | Closed loop. Build (or take a finished tree), review yourself with fresh context, fix once, then face an external residual grade. Answers: “If I only hire one model, which?” |
+| **5 — Solo self-review → fix → residual** | Closed loop. Self-critique as one agent or focused same-model specialists, fix once, then external residual. Answers: “If I only hire one model, which?” |
 | **6 — Detect + vague fix** | Debug under uncertainty. Identical bugged tree; find seeded bugs; then fix from symptoms only. |
+
+You can run these **one at a time** (`run test N`) or as a full batch after kickoff — see `protocol/RUN-SINGLE-TEST.md`.
 
 **Dual headlines (Option D)** exist because Test 4 and Test 5 answer different product decisions:
 
@@ -60,7 +62,28 @@ If those winners disagree, that disagreement is the result. Don’t squash it in
 
 Agents don’t run naked in Cursor. They run under rule packs: ponytail, clean-code, canaries, testing discipline, and so on. People argue endlessly about whether those rules help or just burn tokens.
 
-Kickoff lets you **choose the pack** and apply the **same pack** to every contestant in a run. Next run, drop `clean-code` or `context-canary` and compare. That is an ablation study on *your* workflow, not a generic LMSYS clone.
+The harness treats rules as a **catalog you own**:
+
+- Stock packs ship in `catalog/rules/`.  
+- **Your** house rules go there too — add `{id}.mdc` + a `RULE-CATALOG.md` row.  
+- Every kickoff **re-reads the catalog** and asks which IDs to include. A rule you added yesterday shows up in today’s checklist without changing the protocol.
+
+Two experiment modes:
+
+1. **`model_duel`** — same pack on every arm; change packs *between* runs to compare models fairly.  
+2. **`rules_duel`** — same model on every arm; different packs *inside* one run to see whether dropping `clean-code` (or your custom `my-shop-standards`) helps *that* model on *this* app (see `protocol/RULES-DUEL.md`).
+
+Either way it’s an ablation on *your* workflow, not a generic LMSYS clone.
+
+## Dual inventory — code vs your head
+
+Old apps lie about what you still want. The suite can freeze two inventories: what the model **read**, and what it **got from grilling you**. Different models will ask different questions under the same grill rule — that is the experiment. The reviewer scores whether each question was needed, clear to a non-jargon human, and whether recommended options were real or hallucinated; efficiency rewards the same product truth with fewer *necessary* turns. You see the diff before planning so Test 2 builds *your* product, not only the legacy one.
+
+Details: `protocol/GRILL-INVENTORY.md`.
+
+## Focused multi-agent (same model)
+
+Kickoff also asks whether Test 1 inventory and Test 5 self-review should use **one** agent or **focused specialists** — multiple spawns of the *same* contestant model, each on a job (security, data, UI, … / quality, rules, …), then merge. That measures whether splitting attention helps *that* model, without smuggling in a different family. Job catalog: `catalog/SPECIALIST-ROLES.md`.
 
 ## Why the reviewer cannot share a contestant family
 
@@ -86,9 +109,9 @@ So you can pick “best craft,” “best with a reviewer,” or “best solo fo
 
 ## How this should feel when you use it
 
-You open Master Model Duel, say **start testing**, pick a real repo and a set of models, pick a reviewer outside their families, pick which rules to enforce, and walk away while an autonomous batch burns through inventory → plan → builds → self-critique → detect/fix. When it finishes, you have numbers, dollars, and trees — enough to decide what to set as your default agent without trusting a demo reel.
+You open Master Model Duel, say **start testing**, pick **models vs rules**, spawn shapes for inventory/self-review, catalog rules (including your own), then either burn the full suite or **run test N** as you go — the orchestrator asks for a feature inventory or merged plan when a later test needs one. When enough tests finish, you have numbers, dollars, and trees — enough to decide default model *and* whether your rule pack (and multi-agent split) is earning its keep.
 
-That is the whole philosophy: **treat model choice like an engineering decision**, with a protocol you can defend to other programmers.
+That is the whole philosophy: **treat agent setup like an engineering decision**, with a protocol you can defend to other programmers.
 
 ## Where to go next
 
@@ -96,6 +119,10 @@ That is the whole philosophy: **treat model choice like an engineering decision*
 |---|---|
 | [`README.md`](README.md) | How to run |
 | [`protocol/EXPERIMENT-PLAN.md`](protocol/EXPERIMENT-PLAN.md) | Locked methodology |
-| [`protocol/LATE-JOIN.md`](protocol/LATE-JOIN.md) | Adding a model mid-run |
-| [`catalog/RULE-CATALOG.md`](catalog/RULE-CATALOG.md) | Ablation packs |
+| [`protocol/GRILL-INVENTORY.md`](protocol/GRILL-INVENTORY.md) | Dual inventory + grill turn grades |
+| [`protocol/RUN-SINGLE-TEST.md`](protocol/RUN-SINGLE-TEST.md) | Run test 1–6 separately |
+| [`catalog/SPECIALIST-ROLES.md`](catalog/SPECIALIST-ROLES.md) | Focused inventory / self-review jobs |
+| [`protocol/LATE-JOIN.md`](protocol/LATE-JOIN.md) | Adding a model or pack mid-run |
+| [`protocol/RULES-DUEL.md`](protocol/RULES-DUEL.md) | Same model, different Cursor rules |
+| [`catalog/RULE-CATALOG.md`](catalog/RULE-CATALOG.md) | Selectable rules + how to add your own |
 | [v1 MenEZmanim write-up](https://github.com/mennyg19-cmyk/model-duel-menezmanim) | First duel results + scars that shaped this |

@@ -1,0 +1,23 @@
+---
+description: Run one duel test (1-6) without the full batch
+globs:
+alwaysApply: false
+---
+
+# Run test N
+
+Triggered when the user says **"run test 1"** … **"run test 6"**, **"run test 1a"**, **"run test 1b"**, **"run grill"**, or aliases in `protocol/RUN-SINGLE-TEST.md`, or **"continue testing"** / **"run next test"** / **"run remaining"**.
+
+## You are the orchestrator
+
+You do **not** build contestant product code. You validate prerequisites, ask missing inputs, spawn contestants/reviewers per the experiment plan, then stop after the requested test(s).
+
+## Procedure
+
+1. Read `protocol/RUN-SINGLE-TEST.md` and the matching Test section in `protocol/EXPERIMENT-PLAN.md`. For grill / dual inventory, also read `protocol/GRILL-INVENTORY.md`.  
+2. Confirm `run_id`. No run → tell user to **start testing** first.  
+3. Check prerequisites; **ask** for feature inventory / grill seed / merged plan / finished trees when missing.  
+4. For Test 1 / 1a / 1b / 5: ask mode questions if unset. Persist into `KICKOFF.yaml` or log overrides in `results/DEVIATIONS.md`.  
+5. After Test 1b: run reviewer turn grades + inventory comparison; **present diffs to the user** and wait for `USER-RESOLVED-INVENTORY.md` before starting Test 2.  
+6. Execute only the requested test (or next unfinished / remaining).  
+7. Cost ledger + artifacts under `runs/{run_id}/`. Announce next suggested command.

@@ -1,8 +1,15 @@
-# Late join — add a model to an existing run
+# Late join — add an arm to an existing run
 
 **Principle:** Anything that is a **shared live-duel freeze** stays frozen so earlier arms stay comparable. The late arm still runs every test it can, graded against those freezes, and can earn **bonus** when it beats them. It never rewrites the shared brief.
 
-Triggered by: **"add model"**, **"late join"**, **"add contestant to run …"**.
+Triggered by: **"add model"**, **"late join"**, **"add contestant"**, **"add pack"** (rules duel).
+
+Depends on `run_mode` in `KICKOFF.yaml`:
+
+| Mode | Late join adds |
+|---|---|
+| `model_duel` | A **new model**, same shared `rules_selected` |
+| `rules_duel` | A **new rule pack**, same `contestant_model` (do not late-join a different model) |
 
 ---
 
@@ -10,7 +17,8 @@ Triggered by: **"add model"**, **"late join"**, **"add contestant to run …"**.
 
 | Artifact | Path (typical) | Why frozen |
 |---|---|---|
-| Kickoff rules pack | `KICKOFF.yaml` → `rules_selected` | Same ablation for all arms |
+| Shared rules (`model_duel`) | `KICKOFF.yaml` → `rules_selected` | Same ablation for all arms |
+| Contestant model (`rules_duel`) | `KICKOFF.yaml` → `contestant_model` | Packs are the variable |
 | Reviewer model/family | `KICKOFF.yaml` | Same panel for everyone |
 | Source codebase pointer | `SOURCE.md` | Same product |
 | **Reconciled inventory** | `shared/RECONCILED-INVENTORY.md` | Live-duel ground truth for plan/build |
@@ -23,10 +31,21 @@ Do **not** re-run reconciler or chooser just because someone joined late.
 
 ## Must match the run
 
+### `model_duel`
+
 - Same `rules_selected` copied into the new arm’s `.cursor/rules/`
-- Same reviewer model (family check: new contestant family must still not equal reviewer family)
+- New contestant model; family must still not equal reviewer family
+
+### `rules_duel`
+
+- Same `contestant_model` (hard fail if a different slug is requested)
+- New `pack_id` + rule list (must differ from existing packs)
+- Reviewer family check still applies (same family as before)
+
+### Both modes
+
 - New `arm_id`, ports, cost-ledger rows
-- Log in `results/DEVIATIONS.md`: `late_join`, timestamp, after which test freeze, model slug (mapping stays in `.scratch` until reveal)
+- Log in `results/DEVIATIONS.md`: `late_join`, timestamp, join point, model + pack (mapping stays in `.scratch` until reveal)
 
 ---
 
@@ -86,10 +105,21 @@ Headline winners for the run stay based on **base** scores unless the user expli
 
 Orchestrator:
 
-1. Confirm `run_id` and that freezes exist (reconciled inventory and/or merged plan as needed for the join point).  
-2. Validate reviewer family still OK with the new contestant.  
-3. Append contestant to `KICKOFF.yaml` under `late_joins:` (keep original `contestants:` intact for history).  
-4. Create `arms/{new_arm_id}/` with the same rule pack and template files (reuse `scripts/bootstrap-run.ps1` logic or a thin `scripts/late-join-arm.ps1`).  
+1. Confirm `run_id`, `run_mode`, and that freezes exist (reconciled inventory and/or merged plan as needed for the join point).  
+2. Validate reviewer family still OK.  
+3. Append under `late_joins:` (keep original contestants/packs intact for history).  
+4. Run `scripts/late-join-arm.ps1`:
+
+**model_duel:**
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/late-join-arm.ps1 -RunId "{run_id}" -ArmId "arm-0N" -Model "{slug}" -WebPort {port} -DbPort {port}
+```
+
+**rules_duel:**
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/late-join-arm.ps1 -RunId "{run_id}" -ArmId "arm-0N" -PackId "{pack}" -WebPort {port} -DbPort {port} -Rules ponytail,workflow,vocabulary
+```
+
 5. Start the late arm at the correct test for the join point (usually Test 1 if inventory freeze exists; if joining after plan freeze, still run Test 1+2 for scores, then build from merged plan).
 
 ### Recommended join points
@@ -106,5 +136,6 @@ Orchestrator:
 
 - Re-reconciling inventory “to include” the late arm  
 - Re-running the chooser merge  
-- Giving the late arm a different rules pack or reviewer  
+- `model_duel`: giving the late arm a **different** rules pack or reviewer  
+- `rules_duel`: late-joining a **different model** (start a `model_duel` instead)  
 - Quietly changing earlier arms’ scores
