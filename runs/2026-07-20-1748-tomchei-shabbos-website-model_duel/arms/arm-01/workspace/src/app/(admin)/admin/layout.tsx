@@ -2,6 +2,7 @@ import Link from "next/link";
 import { StopImpersonationButton } from "@/components/stop-impersonation-button";
 import { getCurrentStaffUser } from "@/lib/auth";
 import { brand } from "@/lib/brand";
+import { db } from "@/lib/db";
 import { hasPermission } from "@/lib/permissions";
 import { getAdminSettings } from "@/lib/store-settings";
 
@@ -25,7 +26,16 @@ export default async function AdminLayout({
     );
   }
 
-  const adminSettings = await getAdminSettings();
+  const [adminSettings, environmentModeSetting] = await Promise.all([
+    getAdminSettings(),
+    db.appSetting.findUnique({ where: { key: "environment-mode" } }),
+  ]);
+  const environmentMode =
+    typeof environmentModeSetting?.value === "string"
+      ? environmentModeSetting.value
+      : process.env.NODE_ENV === "production"
+        ? "LIVE"
+        : "TEST";
   const isImpersonating =
     staffSession.actor.id !== staffSession.effective.id;
   return (
@@ -35,6 +45,11 @@ export default async function AdminLayout({
           Impersonating {staffSession.effective.displayName}. Actions remain
           attributed to {staffSession.actor.displayName}.
           <StopImpersonationButton />
+        </div>
+      )}
+      {environmentMode === "TEST" && (
+        <div className="bg-red-700 px-4 py-2 text-center text-sm font-black tracking-wide text-white">
+          TEST MODE · Providers may be captured and test-console resets may delete fixtures.
         </div>
       )}
       <header className="border-b border-white/10 bg-[var(--ink)] text-white">
@@ -88,9 +103,14 @@ export default async function AdminLayout({
               </Link>
             )}
             {hasPermission(staffSession.effective, "audit:view") && (
-              <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/audit">
-                Audit
-              </Link>
+              <>
+                <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/reports">
+                  Reports & launch
+                </Link>
+                <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/audit">
+                  Audit
+                </Link>
+              </>
             )}
             {hasPermission(staffSession.effective, "settings:manage") && (
               <>

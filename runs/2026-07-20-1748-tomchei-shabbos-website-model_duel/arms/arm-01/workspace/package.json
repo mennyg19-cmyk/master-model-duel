@@ -22,6 +22,7 @@
     "smoke:p9": "tsx scripts/p9-smoke.ts",
     "smoke:p10": "tsx scripts/p10-smoke.ts",
     "smoke:p11": "tsx scripts/p11-smoke.ts",
+    "smoke:p12": "tsx scripts/p12-smoke.ts",
     "ci": "npm run lint && npm run typecheck && npm test && npm run db:guard"
   },
   "dependencies": {

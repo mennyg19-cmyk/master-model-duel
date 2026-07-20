@@ -230,6 +230,78 @@ model ImportBatch {
   @@index([status, createdAt])
 }
 
+model LegacyImportBatch {
+  id                 String    @id @default(cuid())
+  checkpointKey      String    @unique
+  sourceName         String
+  status             String    @default("STAGED")
+  dryRun             Boolean   @default(true)
+  payload            Json
+  mappings           Json
+  issues             Json
+  sourceCounts       Json
+  sourceTotals       Json
+  importedCounts     Json?
+  importedTotals     Json?
+  stagedByStaffId    String
+  committedByStaffId String?
+  committedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model ExportRun {
+  id             String   @id @default(cuid())
+  dataset        String
+  filters        Json
+  rowCount       Int
+  requestedById  String
+  completedAt    DateTime @default(now())
+
+  @@index([dataset, completedAt])
+  @@index([requestedById, completedAt])
+}
+
+model ReconciliationRun {
+  id            String   @id @default(cuid())
+  runKey        String   @unique
+  status        String
+  matchedCount  Int      @default(0)
+  findingCount  Int      @default(0)
+  findings      Json
+  initiatedById String?
+  startedAt     DateTime @default(now())
+  finishedAt    DateTime?
+
+  @@index([status, startedAt])
+}
+
+model ReconciliationFinding {
+  id               String   @id @default(cuid())
+  identityKey      String   @unique
+  findingType      String
+  providerObjectId String
+  orderId          String?
+  amountCents      Int?
+  details          Json
+  firstSeenAt      DateTime @default(now())
+  lastSeenAt       DateTime @updatedAt
+  resolvedAt       DateTime?
+
+  @@index([findingType, resolvedAt])
+}
+
+model HelpTourProgress {
+  id          String   @id @default(cuid())
+  staffUserId String
+  tourKey     String
+  completedAt DateTime @default(now())
+
+  @@unique([staffUserId, tourKey])
+}
+
 model ImpersonationSession {
   id            String    @id @default(cuid())
   actorStaffId  String
@@ -271,6 +343,7 @@ model Season {
 
 model Product {
   id                   String                @id @default(cuid())
+  legacySourceId       String?               @unique
   seasonId             String
   season               Season                @relation(fields: [seasonId], references: [id])
   sku                  String
@@ -446,6 +519,7 @@ model ProductAllowedAddOn {
 
 model Customer {
   id              String            @id @default(cuid())
+  legacySourceId  String?           @unique
   displayName     String
   email           String?
   emailNormalized String?           @unique
@@ -463,6 +537,7 @@ model Customer {
 
 model CustomerAddress {
   id              String    @id @default(cuid())
+  legacySourceId  String?   @unique
   customerId      String
   customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
   label           String?
@@ -479,6 +554,8 @@ model CustomerAddress {
   geocodedAt      DateTime?
   geocodeProvider String?
   rememberedGreeting String?
+  validationStatus String    @default("VALID")
+  reviewReason     String?
   version         Int       @default(1)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -490,6 +567,7 @@ model CustomerAddress {
 
 model Order {
   id                  String                @id @default(cuid())
+  legacySourceId      String?               @unique
   seasonId            String
   season              Season                @relation(fields: [seasonId], references: [id])
   customerId          String

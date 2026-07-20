@@ -3,6 +3,26 @@
     {
       "path": "/api/cron/season-status",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/pickup-expiry",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/message-outbox",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/message-log-purge",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/stripe-reconciliation",
+      "schedule": "0 6 * * *"
     }
   ]
 }

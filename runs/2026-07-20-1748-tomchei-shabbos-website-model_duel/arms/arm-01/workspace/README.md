@@ -43,6 +43,7 @@ them, non-production builds use the local identity adapter for smoke testing.
 - `npm run smoke:p9`
 - `npm run smoke:p10`
 - `npm run smoke:p11`
+- `npm run smoke:p12`
 
 The project uses one pattern per concern: server components for reads, route
 handlers for mutations, Prisma for persistence, Tailwind tokens for styling,
@@ -165,3 +166,18 @@ and native `node:test` through `tsx` for unit tests.
   `/api/cron/message-log-purge` removes eligible logs while retaining outbox and audit rows.
 - Resend is isolated in `src/lib/resend.ts`; test mode records captures without
   contacting Resend or the configured SMS provider.
+
+## P12 launch readiness
+
+- `/admin/reports` provides multi-season KPIs, item and fulfillment drill-downs,
+  package-level shipping margin, five audited streaming CSV datasets, and Stripe
+  reconciliation with durable idempotent findings.
+- Historical JSON imports follow `docs/LEGACY-ENTITY-MAP.md`: dry-run validation,
+  checkpoint resume, deterministic order-number repair, normalized customer and
+  address dedupe, one serializable commit, and a staff review queue.
+- The local-only test console seeds or resets the 1,000-order / 5,000-package
+  dress-rehearsal fixture. Production returns 404 for destructive operations.
+- A persistent TEST MODE banner and guided order, fulfillment, delivery, and
+  reporting tours make environment state and launch procedures visible.
+- `vercel.json` registers season, pickup, payment reminder, outbox, purge, and
+  Stripe reconciliation jobs; every route requires `CRON_SECRET`.
