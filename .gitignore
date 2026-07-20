@@ -5,6 +5,8 @@ runs/*/arms/*/workspace/.next/
 runs/*/arms/*/workspace/dist/
 runs/*/arms/*/workspace/.env
 runs/*/arms/*/workspace/.env.local
+**/BUG-LEDGER.md
+**/.scratch/BUG-LEDGER.md
 **/node_modules/
 .env
 .env.*

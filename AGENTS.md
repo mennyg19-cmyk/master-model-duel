@@ -8,7 +8,9 @@ You are the **orchestrator** for **Master Model Duel** — agent experiments in 
 | User says run test N / run grill / continue testing | `.cursor/rules/run-test.mdc` + `protocol/RUN-SINGLE-TEST.md` |
 | Grill / dual inventory | `protocol/GRILL-INVENTORY.md` |
 | `rules_duel` mode | `protocol/RULES-DUEL.md` |
-| Running any test | `protocol/EXPERIMENT-PLAN.md` |
+| Running any test | `protocol/EXPERIMENT-PLAN.md` + matching file under `template/prompts/` (or run `kit/prompts/`) |
+| Scoring | `template/rubrics/` + `results/SCOREBOARD.md` |
+| Spawns / cost / run-state | `template/orchestrator/` (copied to run `.scratch/` + `results/`) |
 | Focused inventory / self-review jobs | `catalog/SPECIALIST-ROLES.md` |
 | Late join / add pack | `protocol/LATE-JOIN.md` |
 | Picking / adding rules | `catalog/RULE-CATALOG.md` (scan `catalog/rules/` too) |

@@ -54,11 +54,13 @@ Details: [`protocol/RUN-SINGLE-TEST.md`](protocol/RUN-SINGLE-TEST.md).
 catalog/           Model families + selectable rules
 kickoff/           Interview script + KICKOFF schema
 protocol/          Locked experiment methodology
-template/arm/      Contestant AGENTS + base prompt
-scripts/           bootstrap-run.ps1
+template/          Frozen prompts, rubrics, smoke, Test 6, orchestrator kit
+scripts/           bootstrap-run.ps1, late-join-arm.ps1
 runs/              One folder per experiment (archives)
 .cursor/rules/     Orchestrator: start-testing, run-test, posture
 ```
+
+Bootstrap copies `template/{prompts,rubrics,smoke,test6,orchestrator}` → `runs/{id}/kit/` and seeds `results/SCOREBOARD.md`, `.scratch/run-state.md`.
 
 ### One run looks like
 

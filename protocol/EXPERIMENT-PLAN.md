@@ -10,10 +10,11 @@
 **Greenfield:** absolute — no prior apps, no prior run trees, no web harvest of the target product  
 **Scorecard mode:** **Option D** — one internal /100 **plus two published headlines**
 
-Kickoff interview: `kickoff/QUESTIONS.md`. Bootstrap: `scripts/bootstrap-run.ps1`.  
+Kickoff interview: `kickoff/QUESTIONS.md`. Bootstrap: `scripts/bootstrap-run.ps1` (copies **execution kit** → `runs/{id}/kit/`).  
 **Late join:** `protocol/LATE-JOIN.md` + `scripts/late-join-arm.ps1` (new model *or* new pack, depending on mode).  
 **Single test:** `protocol/RUN-SINGLE-TEST.md` + **"run test N"** (tests need not run as one batch).  
-**Grill inventory (Test 1b):** `protocol/GRILL-INVENTORY.md` — dual inventories (codebase + grill), reviewer turn grades + user-facing diff.
+**Grill inventory (Test 1b):** `protocol/GRILL-INVENTORY.md` — dual inventories (codebase + grill), reviewer turn grades + user-facing diff.  
+**Frozen prompts / rubrics:** `template/` (see `template/README.md`).
 
 ---
 

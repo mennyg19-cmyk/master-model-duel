@@ -46,11 +46,12 @@ Unchanged: read source → arm codebase inventory → reconciler → grade vs re
 
 ### B — Grill inventory (Test 1b)
 
-1. Orchestrator ensures `grill-protocol` is available to the grill agent (copy into arm rules for this phase if not already in `rules_selected`).  
-2. Give the same **seed** to every arm (user’s fuzzy intent). **Do not** attach the codebase inventory to the grill agent by default (avoids anchoring). Optional kickoff flag `grill_sees_codebase_inventory: false` (default).  
-3. Contestant runs a grill (one question at a time per protocol). Record every turn in `GRILL-TRANSCRIPT.md`.  
-4. When the model stops (or user ends), a **fresh** same-model agent (or same agent if continuous is preferred — lock at kickoff; default **fresh**) writes `GRILL-INVENTORY.md` from transcript only.  
-5. Repeat for every arm (interleave recommended).
+1. Orchestrator ensures `grill-protocol` is available to the grill agent (bootstrap auto-adds it when `include_grill_inventory: true`).  
+2. Give the same **seed** to every arm (`shared/GRILL-SEED.md`). **Do not** attach the codebase inventory to the grill agent by default (`grill_sees_codebase_inventory: false`).  
+3. **Interleave:** same human should alternate arms turn-by-turn (`arm-01 T1` → `arm-02 T1` → …). See `kit/orchestrator/SPAWN-CHECKLIST.md`. Log order in `.scratch/run-state.md`.  
+4. Contestant runs a grill using frozen prompt `kit/prompts/01b-grill.md`. Record every turn in `GRILL-TRANSCRIPT.md`.  
+5. When the model stops (or user ends), a **fresh** same-model agent writes `GRILL-INVENTORY.md` from transcript only (`01b-grill-inventory-from-transcript.md`).  
+6. Repeat until all arms finished (interleaved).
 
 ### C — Reviewer: turn quality (not turn count)
 

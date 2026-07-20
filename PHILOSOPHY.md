@@ -119,6 +119,7 @@ That is the whole philosophy: **treat agent setup like an engineering decision**
 |---|---|
 | [`README.md`](README.md) | How to run |
 | [`protocol/EXPERIMENT-PLAN.md`](protocol/EXPERIMENT-PLAN.md) | Locked methodology |
+| [`template/README.md`](template/README.md) | Frozen prompts, rubrics, smoke, Test 6 kit |
 | [`protocol/GRILL-INVENTORY.md`](protocol/GRILL-INVENTORY.md) | Dual inventory + grill turn grades |
 | [`protocol/RUN-SINGLE-TEST.md`](protocol/RUN-SINGLE-TEST.md) | Run test 1–6 separately |
 | [`catalog/SPECIALIST-ROLES.md`](catalog/SPECIALIST-ROLES.md) | Focused inventory / self-review jobs |

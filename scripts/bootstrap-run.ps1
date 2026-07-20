@@ -48,6 +48,11 @@ $sharedRules = @()
 $reviewerModel = $null
 $source = $null
 $contestantModel = $null
+$includeGrill = $true
+$grillSeesCodebase = $false
+$grillSeed = $null
+$inventoryMode = "single"
+$selfReviewMode = "single"
 $mode = "root"
 $current = $null
 $currentPack = $null
@@ -62,6 +67,25 @@ foreach ($line in $rawLines) {
   }
   if ($line -match '^\s*contestant_model:\s*(.+)$') {
     $contestantModel = $Matches[1].Trim().Trim('"').Trim("'"); continue
+  }
+  if ($line -match '^\s*include_grill_inventory:\s*(.+)$') {
+    $v = $Matches[1].Trim().Trim('"').Trim("'").ToLowerInvariant()
+    $includeGrill = ($v -eq "true" -or $v -eq "yes" -or $v -eq "1")
+    continue
+  }
+  if ($line -match '^\s*grill_sees_codebase_inventory:\s*(.+)$') {
+    $v = $Matches[1].Trim().Trim('"').Trim("'").ToLowerInvariant()
+    $grillSeesCodebase = ($v -eq "true" -or $v -eq "yes" -or $v -eq "1")
+    continue
+  }
+  if ($line -match '^\s*grill_seed:\s*(.+)$') {
+    $grillSeed = $Matches[1].Trim().Trim('"').Trim("'"); continue
+  }
+  if ($line -match '^\s*inventory_mode:\s*(.+)$') {
+    $inventoryMode = $Matches[1].Trim().Trim('"').Trim("'"); continue
+  }
+  if ($line -match '^\s*self_review_mode:\s*(.+)$') {
+    $selfReviewMode = $Matches[1].Trim().Trim('"').Trim("'"); continue
   }
   if ($line -match '^\s*rules_selected:\s*$') { $mode = "shared_rules"; continue }
   if ($line -match '^\s*rule_packs:\s*$') { $mode = "rule_packs"; continue }
@@ -223,13 +247,36 @@ if (Test-Path $runDir) { throw "Run already exists: $runDir" }
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
 @(
   (Join-Path $runDir "shared"),
+  (Join-Path $runDir "shared\phases"),
+  (Join-Path $runDir "shared\smoke"),
   (Join-Path $runDir "results"),
   (Join-Path $runDir "results\reviews"),
   (Join-Path $runDir ".scratch"),
+  (Join-Path $runDir "kit"),
   (Join-Path $runDir "arms")
 ) | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
 
 Copy-Item $KickoffYaml (Join-Path $runDir "KICKOFF.yaml") -Force
+
+# Frozen execution kit (prompts, rubrics, smoke, test6, orchestrator helpers)
+$templateRoot = Join-Path $root "template"
+foreach ($sub in @("prompts", "rubrics", "smoke", "test6", "orchestrator")) {
+  $src = Join-Path $templateRoot $sub
+  $dst = Join-Path $runDir "kit\$sub"
+  if (Test-Path $src) {
+    Copy-Item $src $dst -Recurse -Force
+  }
+}
+Copy-Item (Join-Path $templateRoot "smoke\*") (Join-Path $runDir "shared\smoke\") -Force -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $templateRoot "rubrics\SCOREBOARD.md") (Join-Path $runDir "results\SCOREBOARD.md") -Force
+Copy-Item (Join-Path $templateRoot "rubrics\FINAL-REPORT.md") (Join-Path $runDir "results\FINAL-REPORT.md") -Force
+$runStateSrc = Join-Path $templateRoot "orchestrator\RUN-STATE.template.md"
+$runStateBody = (Get-Content $runStateSrc -Raw) -replace '__RUN_ID__', $runId
+$runStateBody = $runStateBody -replace 'include_grill_inventory: true\|false', "include_grill_inventory: $includeGrill"
+Set-Content -Path (Join-Path $runDir ".scratch\run-state.md") -Value $runStateBody -Encoding utf8
+Copy-Item (Join-Path $templateRoot "orchestrator\SPAWN-CHECKLIST.md") (Join-Path $runDir ".scratch\SPAWN-CHECKLIST.md") -Force
+Copy-Item (Join-Path $templateRoot "orchestrator\COST-LEDGER-HOWTO.md") (Join-Path $runDir "results\COST-LEDGER-HOWTO.md") -Force
+Copy-Item (Join-Path $templateRoot "test6\BUG-LEDGER.template.md") (Join-Path $runDir ".scratch\BUG-LEDGER.template.md") -Force
 
 # Persist expanded contestants into run KICKOFF for late-join / auditors
 $expandedPath = Join-Path $runDir "ARMS-EXPANDED.yaml"
@@ -253,20 +300,30 @@ Set-Content -Path $ledger -Encoding utf8 -Value $header
 $mapLines = @(
   "# Mapping - do not commit until FINAL-REPORT",
   "run_mode: $runMode",
-  "reviewer: $reviewerModel ($reviewerFamily)"
+  "reviewer: $reviewerModel ($reviewerFamily)",
+  "inventory_mode: $inventoryMode",
+  "self_review_mode: $selfReviewMode",
+  "include_grill_inventory: $includeGrill",
+  "grill_sees_codebase_inventory: $grillSeesCodebase"
 )
+if ($grillSeed) { $mapLines += "grill_seed: $grillSeed" }
 foreach ($c in $contestants) {
   $rk = Rules-Key $c.rules
   $mapLines += "$($c.arm_id): model=$($c.model) family=$($c.family) pack=$($c.pack_id) rules=[$rk]"
 }
 Set-Content -Path (Join-Path $runDir ".scratch\mapping.md") -Value ($mapLines -join "`n") -Encoding utf8
 
+if ($grillSeed) {
+  Set-Content -Path (Join-Path $runDir "shared\GRILL-SEED.md") -Value $grillSeed -Encoding utf8
+}
+
 $sourceMd = @"
-# Source codebase (Test 1 only)
+# Source codebase (Test 1a only)
 
 Path: ``$source``
 
-Builders must NOT receive this path after Test 1.
+Builders must NOT receive this path after Test 1a.
+Grill agents: grill_sees_codebase_inventory=$grillSeesCodebase
 "@
 Set-Content -Path (Join-Path $runDir "SOURCE.md") -Value $sourceMd -Encoding utf8
 
@@ -274,9 +331,15 @@ foreach ($c in $contestants) {
   $armRoot = Join-Path $runDir "arms\$($c.arm_id)"
   $ws = Join-Path $armRoot "workspace"
   $rulesDir = Join-Path $armRoot ".cursor\rules"
-  New-Item -ItemType Directory -Force -Path $ws, $rulesDir | Out-Null
+  $armResults = Join-Path $armRoot "results"
+  New-Item -ItemType Directory -Force -Path $ws, $rulesDir, $armResults | Out-Null
 
-  foreach ($rid in $c.rules) {
+  $ruleIds = @($c.rules)
+  if ($includeGrill -and ($ruleIds -notcontains "grill-protocol")) {
+    $ruleIds += "grill-protocol"
+  }
+
+  foreach ($rid in $ruleIds) {
     $srcRule = Join-Path $catalogRules "$rid.mdc"
     if (-not (Test-Path $srcRule)) {
       throw "Rule file missing for id '$rid' (expected catalog/rules/$rid.mdc)"
@@ -284,7 +347,7 @@ foreach ($c in $contestants) {
     Copy-Item $srcRule $rulesDir -Force
   }
 
-  $ruleList = $c.rules -join ", "
+  $ruleList = $ruleIds -join ", "
   $armMd = @"
 # Arm $($c.arm_id)
 
@@ -294,8 +357,13 @@ foreach ($c in $contestants) {
 - web_port: $($c.web_port)
 - db_port: $($c.db_port)
 - rules: $ruleList
+- inventory_mode: $inventoryMode
+- self_review_mode: $selfReviewMode
+- include_grill_inventory: $includeGrill
 - workspace: ``workspace/``
-- Do not run git. Do not touch ``../../results``.
+- results: ``results/``
+- Frozen prompts: ``../../kit/prompts/``
+- Do not run git. Do not touch ``../../results`` (run-level) except via orchestrator.
 "@
   Set-Content -Path (Join-Path $armRoot "ARM.md") -Value $armMd -Encoding utf8
   Copy-Item (Join-Path $templateArm "AGENTS.md") (Join-Path $armRoot "AGENTS.md") -Force
@@ -305,6 +373,7 @@ foreach ($c in $contestants) {
 $armIds = ($contestants | ForEach-Object { $_.arm_id }) -join ", "
 $packSummary = ($contestants | ForEach-Object { "$($_.arm_id)=$($_.pack_id)" }) -join "; "
 $rulesNote = if ($runMode -eq "rules_duel") { " and ``protocol/RULES-DUEL.md``" } else { "" }
+$grillNote = if ($includeGrill) { "yes" } else { "no" }
 $runReadme = @"
 # Run ``$runId``
 
@@ -315,8 +384,19 @@ $runReadme = @"
 | Reviewer | ``$reviewerModel`` ($reviewerFamily) |
 | Arms | $armIds |
 | Packs | $packSummary |
+| Inventory mode | ``$inventoryMode`` |
+| Self-review mode | ``$selfReviewMode`` |
+| Grill inventory (1b) | $grillNote |
 
-See ``protocol/EXPERIMENT-PLAN.md``$rulesNote.
+## Kit (frozen at bootstrap)
+
+- Prompts: ``kit/prompts/``
+- Rubrics: ``kit/rubrics/``
+- Smoke templates: ``shared/smoke/`` + ``kit/smoke/``
+- Orchestrator: ``.scratch/run-state.md``, ``.scratch/SPAWN-CHECKLIST.md``
+- Scoreboard: ``results/SCOREBOARD.md``
+
+See ``protocol/EXPERIMENT-PLAN.md``$rulesNote. Grill: ``protocol/GRILL-INVENTORY.md``.
 "@
 Set-Content -Path (Join-Path $runDir "README.md") -Value $runReadme -Encoding utf8
 
@@ -324,4 +404,6 @@ Write-Output "Bootstrapped $runDir"
 Write-Output "run_mode=$runMode"
 Write-Output "Arms: $armIds"
 Write-Output "Packs: $packSummary"
+Write-Output "include_grill_inventory=$includeGrill inventory_mode=$inventoryMode self_review_mode=$selfReviewMode"
+Write-Output "Kit copied to kit/ + shared/smoke/"
 Write-Output "Reviewer family OK: $reviewerFamily"
