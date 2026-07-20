@@ -2,7 +2,7 @@
 
 Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
-**UTC snapshot:** 2026-07-20T20:10:00Z (approx)
+**UTC snapshot:** 2026-07-20T21:10:00Z (approx)
 
 ## Status
 
@@ -16,12 +16,12 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 | Arm | P1 | P2 | P3 | P4 | P5 |
 |---|---|---|---|---|---|
-| arm-01 | ✓ | ✓ | ✓ | ✓ gated | next |
-| arm-02 | ✓ | ✓ | ✓ | building | — |
+| arm-01 | ✓ | ✓ | ✓ | ✓ | fix pass running |
+| arm-02 | ✓ | ✓ | ✓ | build done · review running | — |
 
 ## In flight
 
-- arm-01 P5: review panel (security, quality, rules, clean-code) → aggregate → fix
-- arm-02: [arm-02 Test4 P4 build](b86bea98-c701-49ea-9cc4-402ddbd24c27)
+- arm-01 P5: [arm-01 P5 fix pass](19e11af5-e0cf-4802-a6e9-3dc881f9f931) (4 blockers + majors)
+- arm-02 P4: 4-reviewer panel → aggregate → fix → gate
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)
