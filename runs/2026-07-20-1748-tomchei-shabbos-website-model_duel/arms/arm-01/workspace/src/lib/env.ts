@@ -6,6 +6,13 @@ type ServerEnvironment = {
   SHIPPO_API_TOKEN?: string;
   SHIPPO_FEDEX_ACCOUNT_ID?: string;
   SHIPPO_UPS_ACCOUNT_ID?: string;
+  SHIP_FROM_NAME?: string;
+  SHIP_FROM_STREET1?: string;
+  SHIP_FROM_STREET2?: string;
+  SHIP_FROM_CITY?: string;
+  SHIP_FROM_STATE?: string;
+  SHIP_FROM_ZIP?: string;
+  SHIP_FROM_COUNTRY?: string;
 };
 
 function requireEnvironmentValue(name: string) {
@@ -25,6 +32,13 @@ export function readServerEnvironment(): ServerEnvironment {
     SHIPPO_API_TOKEN: process.env.SHIPPO_API_TOKEN,
     SHIPPO_FEDEX_ACCOUNT_ID: process.env.SHIPPO_FEDEX_ACCOUNT_ID,
     SHIPPO_UPS_ACCOUNT_ID: process.env.SHIPPO_UPS_ACCOUNT_ID,
+    SHIP_FROM_NAME: process.env.SHIP_FROM_NAME,
+    SHIP_FROM_STREET1: process.env.SHIP_FROM_STREET1,
+    SHIP_FROM_STREET2: process.env.SHIP_FROM_STREET2,
+    SHIP_FROM_CITY: process.env.SHIP_FROM_CITY,
+    SHIP_FROM_STATE: process.env.SHIP_FROM_STATE,
+    SHIP_FROM_ZIP: process.env.SHIP_FROM_ZIP,
+    SHIP_FROM_COUNTRY: process.env.SHIP_FROM_COUNTRY,
   };
 }
 

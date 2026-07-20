@@ -11,6 +11,7 @@ import { quoteDraftShipping } from "@/domain/shipping";
 import { findAccessibleDraft } from "@/lib/customer-access";
 import { db } from "@/lib/db";
 import {
+  guardPublicRateLimit,
   guardPublicWrite,
   publicRequestErrorResponse,
 } from "@/lib/public-request";
@@ -39,6 +40,14 @@ const checkoutSchema = z.object({
 });
 
 export async function GET(request: Request) {
+  try {
+    await guardPublicRateLimit(request, "checkout-shipping-quotes", {
+      limit: 10,
+      rateLimitMessage: "Too many shipping quote requests. Try again in a minute.",
+    });
+  } catch (error) {
+    return publicRequestErrorResponse(error);
+  }
   const draftId = new URL(request.url).searchParams.get("draftId");
   if (!draftId) {
     return NextResponse.json({ error: "Draft ID is required." }, { status: 400 });

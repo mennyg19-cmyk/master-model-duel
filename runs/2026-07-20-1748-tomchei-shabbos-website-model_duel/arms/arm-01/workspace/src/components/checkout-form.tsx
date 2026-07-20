@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { calculateFulfillmentFees } from "@/domain/fulfillment-fees";
 import { formatCurrency } from "@/lib/currency";
 
 type CheckoutPayload = {
@@ -76,22 +77,17 @@ export function CheckoutForm({ draftId }: { draftId: string }) {
 
   const fulfillmentCents = useMemo(() => {
     if (!checkout) return 0;
-    const chargedGroups = new Set<string>();
-    return choices.reduce((sum, choice) => {
-      const line = checkout.order.lines.find((candidate) => candidate.id === choice.orderLineId);
-      if (!line?.recipientAddress) return sum;
-      const group =
-        choice.fulfillmentCode === "PACKAGE_DELIVERY"
-          ? `${choice.fulfillmentCode}:${choice.orderLineId}`
-          : `${choice.fulfillmentCode}:${line.recipientAddress.id}`;
-      if (chargedGroups.has(group)) return sum;
-      chargedGroups.add(group);
-      const fee =
-        choice.fulfillmentCode === "SHIPPING"
-          ? checkout.shippingFeesByAddressId[line.recipientAddress.id]
-          : checkout.fulfillmentFees[choice.fulfillmentCode];
-      return sum + (fee ?? 0);
-    }, 0);
+    const addressIdsByLineId = new Map(
+      checkout.order.lines.flatMap((line) =>
+        line.recipientAddress ? [[line.id, line.recipientAddress.id] as const] : [],
+      ),
+    );
+    const feesByLineId = calculateFulfillmentFees(
+      choices,
+      addressIdsByLineId,
+      new Map(Object.entries(checkout.shippingFeesByAddressId)),
+    );
+    return [...feesByLineId.values()].reduce((sum, fee) => sum + fee, 0);
   }, [checkout, choices]);
   const donationCents = Math.max(0, Math.round(donationDollars * 100));
   const totalCents =

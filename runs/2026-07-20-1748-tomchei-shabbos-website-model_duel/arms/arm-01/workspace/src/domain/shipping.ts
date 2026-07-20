@@ -5,6 +5,7 @@ import {
   type ShippingParcel,
   type ShippingProvider,
 } from "@/lib/shippo";
+import { readServerEnvironment } from "@/lib/env";
 
 const millimetersPerInch = 25.4;
 const gramsPerOunce = 28.3495;
@@ -129,6 +130,7 @@ function snapshotAddress(recipientName: string, snapshot: Prisma.JsonValue): Shi
 }
 
 function organizationAddress(): ShippingAddress {
+  const environment = readServerEnvironment();
   const required = [
     "SHIP_FROM_NAME",
     "SHIP_FROM_STREET1",
@@ -137,20 +139,23 @@ function organizationAddress(): ShippingAddress {
     "SHIP_FROM_ZIP",
   ] as const;
   for (const name of required) {
-    if (!process.env[name]) throw new Error(`Shipping provider requires ${name}.`);
+    if (!environment[name]) throw new Error(`Shipping provider requires ${name}.`);
   }
   return {
-    name: process.env.SHIP_FROM_NAME!,
-    street1: process.env.SHIP_FROM_STREET1!,
-    street2: process.env.SHIP_FROM_STREET2,
-    city: process.env.SHIP_FROM_CITY!,
-    state: process.env.SHIP_FROM_STATE!,
-    zip: process.env.SHIP_FROM_ZIP!,
-    country: process.env.SHIP_FROM_COUNTRY ?? "US",
+    name: environment.SHIP_FROM_NAME!,
+    street1: environment.SHIP_FROM_STREET1!,
+    street2: environment.SHIP_FROM_STREET2,
+    city: environment.SHIP_FROM_CITY!,
+    state: environment.SHIP_FROM_STATE!,
+    zip: environment.SHIP_FROM_ZIP!,
+    country: environment.SHIP_FROM_COUNTRY ?? "US",
   };
 }
 
-async function loadPackagePlan(prisma: PrismaClient, packageId: string) {
+async function loadPackagePlan(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  packageId: string,
+) {
   const packageRecord = await prisma.package.findUniqueOrThrow({
     where: { id: packageId },
     include: {
@@ -264,31 +269,64 @@ export async function buyPackageLabel(
   packageId: string,
   actorStaffId: string,
 ) {
-  const active = await prisma.shippingLabel.findFirst({
-    where: { packageId, status: "PURCHASED" },
-  });
-  if (active) throw new Error("Void the active label before buying another.");
-  const quotes = await prisma.shippingQuote.findMany({
-    where: { packageId, expiresAt: { gt: new Date() }, providerQuoteId: { not: null } },
-  });
-  const margin = selectShippingMargin(
-    quotes.map((quote) => ({
-      id: quote.providerQuoteId!,
-      carrier: quote.provider,
-      serviceCode: quote.serviceCode,
-      serviceName: quote.serviceName,
-      amountCents: quote.amountCents,
-      currency: quote.currency,
-      expiresAt: quote.expiresAt,
-    })),
-  );
-  const firstBox = await prisma.shipmentBox.findFirst({
-    where: { packageId },
-    orderBy: { sequence: "desc" },
-  });
-  try {
-    const purchased = await provider.buyLabel(margin.purchasedRate.id);
-    return await prisma.$transaction(async (transaction) => {
+  const result = await prisma.$transaction(
+    async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT "id" FROM "Package" WHERE "id" = ${packageId} FOR UPDATE
+      `;
+      await loadPackagePlan(transaction, packageId);
+      const active = await transaction.shippingLabel.findFirst({
+        where: { packageId, status: "PURCHASED" },
+      });
+      if (active) throw new Error("Void the active label before buying another.");
+      const quotes = await transaction.shippingQuote.findMany({
+        where: { packageId, expiresAt: { gt: new Date() }, providerQuoteId: { not: null } },
+      });
+      const margin = selectShippingMargin(
+        quotes.map((quote) => ({
+          id: quote.providerQuoteId!,
+          carrier: quote.provider,
+          serviceCode: quote.serviceCode,
+          serviceName: quote.serviceName,
+          amountCents: quote.amountCents,
+          currency: quote.currency,
+          expiresAt: quote.expiresAt,
+        })),
+      );
+      const firstBox = await transaction.shipmentBox.findFirst({
+        where: { packageId },
+        orderBy: { sequence: "desc" },
+      });
+      let purchased;
+      try {
+        purchased = await provider.buyLabel(margin.purchasedRate.id);
+      } catch (error) {
+        const failureMessage =
+          error instanceof Error ? error.message : "Label purchase failed.";
+        const failed = await transaction.shippingLabel.create({
+          data: {
+            packageId,
+            shipmentBoxId: firstBox?.id,
+            provider: margin.purchasedRate.carrier,
+            serviceCode: margin.purchasedRate.serviceCode,
+            providerRateId: margin.purchasedRate.id,
+            chargedCents: margin.chargedCents,
+            purchasedCents: margin.purchasedCents,
+            marginCents: margin.marginCents,
+            status: "FAILED",
+            failureMessage,
+          },
+        });
+        await transaction.packageAudit.create({
+          data: {
+            packageId,
+            actorStaffId,
+            action: "shipping.label_purchase_failed",
+            metadata: { labelId: failed.id, failureMessage },
+          },
+        });
+        return { error };
+      }
       const label = await transaction.shippingLabel.create({
         data: {
           packageId,
@@ -323,25 +361,14 @@ export async function buyPackageLabel(
           },
         },
       });
-      return label;
-    });
-  } catch (error) {
-    await prisma.shippingLabel.create({
-      data: {
-        packageId,
-        shipmentBoxId: firstBox?.id,
-        provider: margin.purchasedRate.carrier,
-        serviceCode: margin.purchasedRate.serviceCode,
-        providerRateId: margin.purchasedRate.id,
-        chargedCents: margin.chargedCents,
-        purchasedCents: margin.purchasedCents,
-        marginCents: margin.marginCents,
-        status: "FAILED",
-        failureMessage: error instanceof Error ? error.message : "Label purchase failed.",
-      },
-    });
-    throw error;
+      return { label };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20_000 },
+  );
+  if ("error" in result) {
+    throw result.error;
   }
+  return result.label;
 }
 
 export async function voidPackageLabel(
@@ -350,17 +377,24 @@ export async function voidPackageLabel(
   packageId: string,
   actorStaffId: string,
 ) {
-  const packageRecord = await prisma.package.findUniqueOrThrow({ where: { id: packageId } });
-  if (packageRecord.stage === "SENT" || packageRecord.stage === "PICKED_UP") {
-    throw new Error("A sent or picked-up package label cannot be voided.");
-  }
-  const label = await prisma.shippingLabel.findFirstOrThrow({
-    where: { packageId, status: "PURCHASED" },
-    orderBy: { createdAt: "desc" },
-  });
-  if (!label.providerTransactionId) throw new Error("The active label has no provider transaction.");
-  await provider.voidLabel(label.providerTransactionId);
   return prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`
+      SELECT "id" FROM "Package" WHERE "id" = ${packageId} FOR UPDATE
+    `;
+    const packageRecord = await transaction.package.findUniqueOrThrow({
+      where: { id: packageId },
+    });
+    if (packageRecord.stage === "SENT" || packageRecord.stage === "PICKED_UP") {
+      throw new Error("A sent or picked-up package label cannot be voided.");
+    }
+    const label = await transaction.shippingLabel.findFirstOrThrow({
+      where: { packageId, status: "PURCHASED" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!label.providerTransactionId) {
+      throw new Error("The active label has no provider transaction.");
+    }
+    await provider.voidLabel(label.providerTransactionId);
     const voided = await transaction.shippingLabel.update({
       where: { id: label.id },
       data: { status: "VOIDED", voidedAt: new Date() },
@@ -374,7 +408,7 @@ export async function voidPackageLabel(
       },
     });
     return voided;
-  });
+  }, { timeout: 20_000 });
 }
 
 export async function refreshPackageTracking(

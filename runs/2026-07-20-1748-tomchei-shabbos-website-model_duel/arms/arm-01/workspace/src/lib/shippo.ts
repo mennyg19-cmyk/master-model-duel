@@ -1,3 +1,5 @@
+import { readServerEnvironment } from "@/lib/env";
+
 export type ShippingAddress = {
   name: string;
   street1: string;
@@ -69,7 +71,10 @@ function mapAddress(address: ShippingAddress) {
 }
 
 export class ShippoProvider implements ShippingProvider {
-  constructor(private readonly token: string) {}
+  constructor(
+    private readonly token: string,
+    private readonly carrierAccountIds: readonly string[] = [],
+  ) {}
 
   private async request(path: string, init?: RequestInit) {
     const response = await fetch(`${shippoBaseUrl}${path}`, {
@@ -109,6 +114,9 @@ export class ShippoProvider implements ShippingProvider {
           weight: parcel.weightOunces.toFixed(2),
           mass_unit: "oz",
         })),
+        ...(this.carrierAccountIds.length
+          ? { carrier_accounts: this.carrierAccountIds }
+          : {}),
         async: false,
       }),
     });
@@ -160,9 +168,10 @@ export class ShippoProvider implements ShippingProvider {
   }
 
   async track(carrier: string, trackingNumber: string) {
-    const payload = await this.request(
-      `/tracks/${encodeURIComponent(carrier)}/${encodeURIComponent(trackingNumber)}`,
-    );
+    const payload = await this.request("/tracks/", {
+      method: "POST",
+      body: JSON.stringify({ carrier, tracking_number: trackingNumber }),
+    });
     const trackingStatus = (payload.tracking_status ?? {}) as Record<string, unknown>;
     return { status: String(trackingStatus.status ?? "UNKNOWN") };
   }
@@ -197,7 +206,13 @@ export class ShippoProvider implements ShippingProvider {
 }
 
 export function getShippingProvider() {
-  return process.env.SHIPPO_API_TOKEN
-    ? new ShippoProvider(process.env.SHIPPO_API_TOKEN)
-    : null;
+  const environment = readServerEnvironment();
+  if (!environment.SHIPPO_API_TOKEN) return null;
+  return new ShippoProvider(
+    environment.SHIPPO_API_TOKEN,
+    [
+      environment.SHIPPO_FEDEX_ACCOUNT_ID,
+      environment.SHIPPO_UPS_ACCOUNT_ID,
+    ].filter((accountId): accountId is string => Boolean(accountId)),
+  );
 }

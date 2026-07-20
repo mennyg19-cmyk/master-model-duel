@@ -18,24 +18,12 @@ export class PublicRequestError extends Error {
   }
 }
 
-export async function guardPublicWrite(
+export async function guardPublicRateLimit(
   request: Request,
   action: string,
   options: PublicWriteOptions = {},
 ) {
   const limit = options.limit ?? PUBLIC_WRITE_LIMIT_PER_MINUTE;
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  let originHost: string | null = null;
-  try {
-    originHost = origin ? new URL(origin).host : null;
-  } catch {
-    originHost = null;
-  }
-  if (!host || originHost !== host) {
-    throw new PublicRequestError("This request must come from the ordering site.", 403);
-  }
-
   const source = request.headers.get("x-real-ip")?.trim() || "unknown";
   const key = createHash("sha256")
     .update(`${action}:${source}`)
@@ -63,6 +51,26 @@ export async function guardPublicWrite(
       429,
     );
   }
+}
+
+export async function guardPublicWrite(
+  request: Request,
+  action: string,
+  options: PublicWriteOptions = {},
+) {
+  const limit = options.limit ?? PUBLIC_WRITE_LIMIT_PER_MINUTE;
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("host");
+  let originHost: string | null = null;
+  try {
+    originHost = origin ? new URL(origin).host : null;
+  } catch {
+    originHost = null;
+  }
+  if (!host || originHost !== host) {
+    throw new PublicRequestError("This request must come from the ordering site.", 403);
+  }
+  await guardPublicRateLimit(request, action, { ...options, limit });
 }
 
 export function publicRequestErrorResponse(error: unknown) {
