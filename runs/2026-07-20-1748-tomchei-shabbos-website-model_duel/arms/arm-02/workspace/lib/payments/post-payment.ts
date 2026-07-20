@@ -1,6 +1,8 @@
 import type { PaymentMethod, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { recalcPaymentStatus } from "@/lib/domain/payment-status";
+import { writeAudit } from "@/lib/audit";
+import type { StaffContext } from "@/lib/auth/current-user";
 
 // All payment writes go through here so every row is followed by a payment-
 // status recalc (R-036, R-152) inside the same transaction.
@@ -59,16 +61,35 @@ export async function recordRefund(entry: {
   });
 }
 
-/** Staff void (UR-011, G-028): the row stays for the audit trail, its money stops counting. */
-export async function voidPayment(paymentId: string, staffId: string) {
-  return db.$transaction(async (tx) => {
+export type VoidPaymentResult =
+  | { ok: true }
+  | { ok: false; reason: "stripe_not_voidable" | "already_voided" };
+
+/**
+ * Staff void (UR-011, G-028): the row stays for the books, its money stops
+ * counting, and the void is audited in the same transaction. Stripe payments
+ * are refunded, never voided — money already moved.
+ */
+export async function voidPayment(paymentId: string, staff: StaffContext): Promise<VoidPaymentResult> {
+  return db.$transaction(async (tx): Promise<VoidPaymentResult> => {
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
-    if (payment.state === "VOIDED") return payment;
-    const voided = await tx.payment.update({
+    if (payment.method === "STRIPE") return { ok: false, reason: "stripe_not_voidable" };
+    if (payment.state === "VOIDED") return { ok: false, reason: "already_voided" };
+    await tx.payment.update({
       where: { id: paymentId },
-      data: { state: "VOIDED", voidedAt: new Date(), voidedByStaffId: staffId },
+      data: { state: "VOIDED", voidedAt: new Date(), voidedByStaffId: staff.realUser.id },
     });
     await recalcPaymentStatus(tx, payment.orderId);
-    return voided;
+    await writeAudit(
+      staff,
+      {
+        action: "payment.void",
+        targetType: "Order",
+        targetId: payment.orderId,
+        detail: { paymentId, method: payment.method, amountCents: payment.amountCents },
+      },
+      tx
+    );
+    return { ok: true };
   });
 }

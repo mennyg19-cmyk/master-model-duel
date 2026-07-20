@@ -97,6 +97,11 @@ let gateway: PaymentGateway | null = null;
 
 export function getPaymentGateway(): PaymentGateway {
   if (!gateway) {
+    // Fail closed (env.ts enforces this at startup too): a production deploy
+    // that lost its Stripe key must error, never silently accept mock "payments".
+    if (!env.STRIPE_SECRET_KEY && process.env.NODE_ENV === "production") {
+      throw new Error("The mock payment gateway is dev-only — set STRIPE_SECRET_KEY in production");
+    }
     gateway = env.STRIPE_SECRET_KEY ? realGateway(env.STRIPE_SECRET_KEY) : mockGateway();
   }
   return gateway;

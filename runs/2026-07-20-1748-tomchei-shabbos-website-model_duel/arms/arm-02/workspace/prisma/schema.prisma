@@ -488,12 +488,16 @@ model StripeCheckoutSession {
   updatedAt       DateTime @updatedAt
 }
 
-// Webhook idempotency ledger (R-125, R-167): an event id is processed exactly
-// once; replays hit the unique constraint and are acknowledged without effect.
+// Webhook idempotency ledger (R-125, R-167): the unique insert claims an event
+// id with status "pending"; only after the money work commits is it flipped to
+// "processed". Replays of processed events are no-ops; a retry of a pending
+// event (crash mid-work) reprocesses through retry-safe handlers, so a failed
+// delivery is never permanently lost.
 model StripeWebhookEvent {
   id            String   @id @default(cuid())
   stripeEventId String   @unique
   type          String
+  status        String   @default("pending")
   processedAt   DateTime @default(now())
 }
 

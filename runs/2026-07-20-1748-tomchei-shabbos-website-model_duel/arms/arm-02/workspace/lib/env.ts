@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+// Repo-committed secret for the MOCK gateway only. Real mode (STRIPE_SECRET_KEY
+// set) and production both fail startup if the webhook secret is still this value.
+export const DEV_WEBHOOK_SECRET = "whsec_dev_mock_secret";
+
+// `next build` evaluates modules with NODE_ENV=production before any real env
+// exists; the production-only guards must not fire during the build phase.
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
 const envSchema = z
   .object({
     DATABASE_URL: z.string().min(1, "DATABASE_URL is required (postgres connection string)"),
@@ -22,14 +30,34 @@ const envSchema = z
     // hosted-checkout stand-in that signs and posts events through the REAL
     // webhook route, so the money path is identical either way.
     STRIPE_SECRET_KEY: z.string().optional(),
-    STRIPE_WEBHOOK_SECRET: z.string().default("whsec_dev_mock_secret"),
+    STRIPE_WEBHOOK_SECRET: z.string().default(DEV_WEBHOOK_SECRET),
     // Absolute base URL for Stripe redirect/webhook URLs.
     APP_URL: z.string().default("http://127.0.0.1:3102"),
   })
   .refine(
     (vars) => vars.AUTH_MODE !== "clerk" || (vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && vars.CLERK_SECRET_KEY),
     { message: "AUTH_MODE=clerk requires NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY" }
-  );
+  )
+  // Fail-closed money guards: the webhook route authenticates every Stripe
+  // event with STRIPE_WEBHOOK_SECRET, so real mode must never run with the
+  // public repo default, and production must never fall back to the mock gateway.
+  .superRefine((vars, ctx) => {
+    if (vars.STRIPE_SECRET_KEY && vars.STRIPE_WEBHOOK_SECRET === DEV_WEBHOOK_SECRET) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["STRIPE_WEBHOOK_SECRET"],
+        message:
+          "STRIPE_SECRET_KEY is set (real mode) but STRIPE_WEBHOOK_SECRET is still the public dev default — set the endpoint secret from the Stripe dashboard",
+      });
+    }
+    if (process.env.NODE_ENV === "production" && !isBuildPhase && !vars.STRIPE_SECRET_KEY) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["STRIPE_SECRET_KEY"],
+        message: "STRIPE_SECRET_KEY is required in production — the mock payment gateway is dev-only",
+      });
+    }
+  });
 
 function loadEnv() {
   const parsed = envSchema.safeParse(process.env);
