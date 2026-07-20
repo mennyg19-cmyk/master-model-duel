@@ -11,10 +11,12 @@
 - Call `AskQuestion` once per turn  
 - Short option labels  
 - At most one escape: `Something else (I will type it)`  
+- **Contestant models:** `allow_multiple: true` (multi-select), require **≥2** selections  
 
 **Don’t:**
 - “Reply A or B”  
 - Markdown option tables for typing letters  
+- One-model-at-a-time yes/no when multi-select is possible  
 
 ## Short-reply fallback (no AskQuestion)
 
@@ -28,7 +30,8 @@ Example for Q0:
 
 Map: `models` → `model_duel`, `rules` → `rules_duel`.
 
-Same pattern for every fixed choice (see ready-made sets: use the **fallback reply** column).
+Same pattern for every fixed choice (see ready-made sets).  
+**Exception — contestant models:** numbered multi-pick (`1,4,7`) from `list-model-options.ps1`, not a single word.
 
 ## Host map
 
@@ -44,9 +47,50 @@ Same pattern for every fixed choice (see ready-made sets: use the **fallback rep
 - Grill seed paragraph  
 - Custom model id / custom pack names  
 
-## Ready-made sets
+## Contestant models (Q2 — model_duel) — MULTI-SELECT
 
-### Q0 Run mode
+**Required:** user picks **2+** models in one step.
+
+### Before asking
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/list-model-options.ps1 -DuelHost auto
+```
+
+Build options from that list (every row = one selectable model for this host).
+
+### If AskQuestion is available
+
+Call **`AskQuestion` with multi-select enabled** (`allow_multiple: true` / equivalent).
+
+- Prompt: `Which models should duel? Select 2 or more.`  
+- Options: one option per catalog model id for this host (label = family + slug from list-model-options)  
+- Optional last option: `Something else (I will type more slugs)`  
+- If fewer than 2 selected → AskQuestion again: `Need at least 2. Select again.`
+
+### If AskQuestion is missing (e.g. Grok)
+
+Print the numbered list from `list-model-options.ps1`, then:
+
+> Select **2 or more** models. Reply with **comma-separated numbers** (example: `1,4,7`) or comma-separated slugs.
+
+Do **not** ask one model at a time. Do **not** use single-select yes/no per model unless the user asks for that.
+
+### After selection
+
+Assign `arm-01`…`arm-N`, ports `3100+i`. Record exact model ids in KICKOFF.
+
+---
+
+### Q2 rules_duel — contestant model (single)
+
+AskQuestion **single-select** over the same list (one model for all packs). Fallback: one number or one slug.
+
+---
+
+### Reviewer (Q3) — single-select
+
+AskQuestion single-select over reviewer_defaults for this host **excluding** families already in the contestant set. Fallback: one number/slug from that filtered list.
 
 | AskQuestion options | Fallback reply |
 |---|---|

@@ -56,21 +56,22 @@ Record `run_mode`. Details for rules mode: `protocol/RULES-DUEL.md`.
 
 ### If `model_duel`
 
-**Ask:** List of model ids for **this host** (`N ≥ 2`).  
-Cursor: Cursor slugs. OpenCode: `provider/model` ids from `hosts.opencode` in MODEL-FAMILIES (edit that file if yours differ).
+**Multi-select (required).** See `kickoff/ASK-UI.md` § Contestant models.
+
+1. Run `scripts/list-model-options.ps1 -DuelHost auto`.  
+2. **AskQuestion multi-select** over that list (2+ models), **or** fallback: user replies with comma-separated numbers/slugs.  
+3. Do not pick models for the user. Do not ask one-at-a-time unless they request it.
 
 Assign `arm_id` = `arm-01` … `arm-N`, ports `3100+i`.
 
 ### If `rules_duel`
 
-**Ask:**
+1. **One** contestant model — AskQuestion **single-select** from `list-model-options.ps1` (or one number/slug).  
+2. **N ≥ 2 named rule packs** — each pack = rule IDs from the live catalog (Q4 procedure / AskQuestion for pack shape).
 
-1. **One** contestant model slug (same for every arm).  
-2. **N ≥ 2 named rule packs** — each pack = list of rule IDs from the **live catalog** (`catalog/RULE-CATALOG.md` + `catalog/rules/*.mdc`). Present the full catalog when building packs (same procedure as Q4).
+**Validate:** Packs must not be identical sets. Suggest labels (`full`, `no-clean-code`, `no-canary`, `minimal`).
 
-**Validate:** Packs must not be identical sets. Suggest clear labels (`full`, `no-clean-code`, `no-canary`, `minimal`).
-
-Each pack becomes one arm (`arm-01` …) with that pack’s rules only.
+Each pack → one arm with that pack’s rules only.
 
 ---
 
