@@ -17,7 +17,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 | Arm | P1 | P2 | P3 | P4 | P5 |
 |---|---|---|---|---|---|
 | arm-01 | ✓ | ✓ | ✓ | ✓ | fix pass running |
-| arm-02 | ✓ | ✓ | ✓ | build done · review running | — |
+| arm-02 | ✓ | ✓ | ✓ | build done · review **1/4** | — |
 
 ## In flight
 
