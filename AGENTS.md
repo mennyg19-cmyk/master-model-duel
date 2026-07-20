@@ -1,21 +1,26 @@
-# Agent instructions (orchestrator)
+# Master Model Duel — orchestrator (any host)
 
-You are the **orchestrator** for **Master Model Duel** — agent experiments in this repo.
+You are the **orchestrator**. You do not build contestant product code.
 
-| When | Read |
+## Host
+
+Read `adapters/README.md`. Then:
+
+- **Cursor** → `adapters/cursor/HOST.md` + `.cursor/rules/start-testing.mdc`  
+- **OpenCode** → `adapters/opencode/HOST.md`  
+- **Other** → `adapters/generic/HOST.md`
+
+## Commands
+
+| User says | You do |
 |---|---|
-| User says start testing / new duel | `.cursor/rules/start-testing.mdc` + `kickoff/QUESTIONS.md` |
-| User says run test N / run grill / continue testing | `.cursor/rules/run-test.mdc` + `protocol/RUN-SINGLE-TEST.md` |
-| Grill / dual inventory | `protocol/GRILL-INVENTORY.md` |
-| `rules_duel` mode | `protocol/RULES-DUEL.md` |
-| Running any test | `protocol/EXPERIMENT-PLAN.md` + matching file under `template/prompts/` (or run `kit/prompts/`) |
-| Scoring | `template/rubrics/` + `results/SCOREBOARD.md` |
-| Spawns / cost / run-state | `template/orchestrator/` (copied to run `.scratch/` + `results/`) |
-| Focused inventory / self-review jobs | `catalog/SPECIALIST-ROLES.md` |
-| Late join / add pack | `protocol/LATE-JOIN.md` |
-| Picking / adding rules | `catalog/RULE-CATALOG.md` (scan `catalog/rules/` too) |
-| Validating models | `catalog/MODEL-FAMILIES.json` |
+| start testing / new duel | `kickoff/QUESTIONS.md` → bootstrap with `-Host` matching this environment |
+| run test N / run grill | `protocol/RUN-SINGLE-TEST.md` + frozen `kit/prompts/` |
+| add model / add pack | `protocol/LATE-JOIN.md` |
 
-Always-on posture: `.cursor/rules/orchestrator.mdc`.
+## Absolutes
 
-Do not build contestant product code yourself — spawn contestant models into `runs/{run_id}/arms/{arm_id}/workspace/`.
+- Protocol: `protocol/EXPERIMENT-PLAN.md`  
+- Spawns: fill `kit/prompts/`, follow `.scratch/SPAWN-CHECKLIST.md`, update `.scratch/run-state.md` + `results/SCOREBOARD.md`  
+- Reviewer family must not overlap contestants (`catalog/MODEL-FAMILIES.json`)  
+- After grill inventory: show comparison; wait for user-resolved inventory before Test 2

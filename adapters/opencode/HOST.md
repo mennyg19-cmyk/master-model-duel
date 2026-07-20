@@ -1,0 +1,54 @@
+# OpenCode host
+
+Run the **same duel** in [OpenCode](https://opencode.ai) (multi-model). Rules become `AGENTS.md` + `rules/*.md` + `opencode.json` `instructions` — not `.cursor/rules`.
+
+## One-time setup
+
+1. Install OpenCode and configure providers (Anthropic, OpenAI, Gemini, etc.).  
+2. Open **this repo** in OpenCode.  
+3. Ensure root `AGENTS.md` is present (orchestrator instructions — already in repo).  
+4. Put OpenCode model ids in `catalog/MODEL-FAMILIES.json` under each family’s `hosts.opencode` list (examples included; edit to match your providers).
+
+## Start a run
+
+1. In OpenCode chat: **start testing** (same kickoff questions).  
+2. When writing `KICKOFF.yaml`, set `host: opencode` and use **OpenCode model ids** (e.g. `anthropic/claude-sonnet-4-20250514`) that appear under `hosts.opencode` for that family.  
+3. Bootstrap:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-run.ps1 -KickoffYaml "runs/{id}/KICKOFF.yaml" -DuelHost opencode
+```
+
+Each arm gets:
+
+| Path | Purpose |
+|---|---|
+| `AGENTS.md` | Contestant always-on + rule pack |
+| `rules/*.md` | Selected catalog rules (plain markdown) |
+| `opencode.json` | `"instructions": ["rules/*.md"]` so OpenCode loads them |
+| `workspace/` | Build tree |
+| `results/` | Arm deliverables |
+
+## How to spawn (you are the orchestrator)
+
+OpenCode does not use Cursor’s Task tool. For each spawn:
+
+1. Fill placeholders in `runs/{id}/kit/prompts/…`.  
+2. Start a **new** OpenCode session (or subagent) with:
+   - **Working directory** = `runs/{id}/arms/{arm_id}/` (so `AGENTS.md` applies)  
+   - **Model** = that arm’s model from mapping  
+3. Paste the frozen prompt.  
+4. For reviewer roles: same, but use `reviewer_model` and usually deny edits if your OpenCode agent permissions allow.  
+5. Append cost to `COST-LEDGER.csv` from OpenCode usage if shown; else estimate/leave blank and note it.
+
+### Focused specialists / grill interleave
+
+Same protocol files. One OpenCode session per specialist job; merge agent is another session.
+
+## Rules duel on OpenCode
+
+Same as Cursor: different packs → different `rules/*.md` per arm; **same** `contestant_model` OpenCode id.
+
+## If something feels “Cursor-only”
+
+Ignore `.cursor/` in this repo when on OpenCode. Orchestrator truth is `AGENTS.md` + `adapters/opencode/` + `protocol/`.

@@ -14,7 +14,7 @@ Cursor (and friends) keep adding flagship models. Each one claims to be better a
 - When the code is identical, who **finds bugs** and who **fixes from vague symptoms**?
 - What does the job **actually cost** in tokens and dollars?
 
-Master Model Duel exists to force those questions into a repeatable run you can publish, argue with, and re-run when the next “high” model shows up.
+Master Model Duel exists to force those questions into a repeatable run you can publish — in **Cursor**, **OpenCode**, or another multi-model host (`adapters/`).
 
 ## What we learned the hard way (v1)
 
@@ -119,6 +119,7 @@ That is the whole philosophy: **treat agent setup like an engineering decision**
 |---|---|
 | [`README.md`](README.md) | How to run |
 | [`protocol/EXPERIMENT-PLAN.md`](protocol/EXPERIMENT-PLAN.md) | Locked methodology |
+| [`adapters/README.md`](adapters/README.md) | Run on Cursor, OpenCode, or generic |
 | [`template/README.md`](template/README.md) | Frozen prompts, rubrics, smoke, Test 6 kit |
 | [`protocol/GRILL-INVENTORY.md`](protocol/GRILL-INVENTORY.md) | Dual inventory + grill turn grades |
 | [`protocol/RUN-SINGLE-TEST.md`](protocol/RUN-SINGLE-TEST.md) | Run test 1–6 separately |

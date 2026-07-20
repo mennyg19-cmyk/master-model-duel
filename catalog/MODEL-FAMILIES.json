@@ -1,18 +1,73 @@
 {
   "version": "2026-07-20",
-  "note": "Family IDs used to enforce: reviewer family must not appear in the contestant set. Update when Cursor slugs change.",
+  "note": "Families enforce: reviewer family must not appear in contestant set. 'slugs' = Cursor ids. 'hosts.opencode' = provider/model ids for OpenCode — edit to match your providers.",
   "families": {
-    "composer": { "label": "Composer", "slugs": ["composer-2.5", "composer-2.5-fast"] },
-    "gpt-sol": { "label": "GPT Sol", "slugs": ["gpt-5.6-sol-high", "gpt-5.6-sol-medium"] },
-    "gpt-terra": { "label": "GPT Terra", "slugs": ["gpt-5.6-terra-high", "gpt-5.6-terra-medium"] },
-    "gpt-codex": { "label": "GPT/Codex", "slugs": ["gpt-5.2-codex"] },
-    "gemini": { "label": "Gemini", "slugs": ["gemini-3.1-pro"] },
-    "grok": { "label": "Grok", "slugs": ["cursor-grok-4.5-high", "cursor-grok-4.5-high-fast"] },
-    "claude-sonnet": { "label": "Claude Sonnet", "slugs": ["claude-4.6-sonnet-medium-thinking", "claude-sonnet-5-thinking-high", "claude-4.6-sonnet-thinking-high"] },
-    "claude-fable": { "label": "Claude Fable", "slugs": ["claude-fable-5-thinking-high", "claude-fable-5-thinking-medium"] },
-    "glm": { "label": "GLM", "slugs": ["glm-5.2-high", "glm-5.2"] },
-    "kimi": { "label": "Kimi", "slugs": ["kimi-k2.7-code"] }
+    "composer": {
+      "label": "Composer",
+      "slugs": ["composer-2.5", "composer-2.5-fast"],
+      "hosts": { "cursor": ["composer-2.5", "composer-2.5-fast"], "opencode": [] }
+    },
+    "gpt-sol": {
+      "label": "GPT Sol / flagship GPT",
+      "slugs": ["gpt-5.6-sol-high", "gpt-5.6-sol-medium"],
+      "hosts": {
+        "cursor": ["gpt-5.6-sol-high", "gpt-5.6-sol-medium"],
+        "opencode": ["openai/gpt-5", "openai/gpt-4.1"]
+      }
+    },
+    "gpt-terra": {
+      "label": "GPT Terra / mid GPT",
+      "slugs": ["gpt-5.6-terra-high", "gpt-5.6-terra-medium"],
+      "hosts": {
+        "cursor": ["gpt-5.6-terra-high", "gpt-5.6-terra-medium"],
+        "opencode": ["openai/gpt-4.1-mini", "openai/gpt-4o-mini"]
+      }
+    },
+    "gpt-codex": {
+      "label": "GPT/Codex",
+      "slugs": ["gpt-5.2-codex"],
+      "hosts": { "cursor": ["gpt-5.2-codex"], "opencode": ["openai/codex-mini-latest"] }
+    },
+    "gemini": {
+      "label": "Gemini",
+      "slugs": ["gemini-3.1-pro"],
+      "hosts": { "cursor": ["gemini-3.1-pro"], "opencode": ["google/gemini-2.5-pro"] }
+    },
+    "grok": {
+      "label": "Grok",
+      "slugs": ["cursor-grok-4.5-high", "cursor-grok-4.5-high-fast"],
+      "hosts": { "cursor": ["cursor-grok-4.5-high", "cursor-grok-4.5-high-fast"], "opencode": ["xai/grok-3"] }
+    },
+    "claude-sonnet": {
+      "label": "Claude Sonnet",
+      "slugs": ["claude-4.6-sonnet-medium-thinking", "claude-sonnet-5-thinking-high", "claude-4.6-sonnet-thinking-high"],
+      "hosts": {
+        "cursor": ["claude-4.6-sonnet-medium-thinking", "claude-sonnet-5-thinking-high", "claude-4.6-sonnet-thinking-high"],
+        "opencode": ["anthropic/claude-sonnet-4-20250514", "anthropic/claude-sonnet-4-5"]
+      }
+    },
+    "claude-fable": {
+      "label": "Claude Fable / Opus-class",
+      "slugs": ["claude-fable-5-thinking-high", "claude-fable-5-thinking-medium"],
+      "hosts": {
+        "cursor": ["claude-fable-5-thinking-high", "claude-fable-5-thinking-medium"],
+        "opencode": ["anthropic/claude-opus-4-20250514", "anthropic/claude-opus-4-5"]
+      }
+    },
+    "glm": {
+      "label": "GLM",
+      "slugs": ["glm-5.2-high", "glm-5.2"],
+      "hosts": { "cursor": ["glm-5.2-high", "glm-5.2"], "opencode": ["opencode/glm-5.2"] }
+    },
+    "kimi": {
+      "label": "Kimi",
+      "slugs": ["kimi-k2.7-code"],
+      "hosts": { "cursor": ["kimi-k2.7-code"], "opencode": ["moonshotai/kimi-k2"] }
+    }
   },
-  "reviewer_defaults": ["glm-5.2-high", "cursor-grok-4.5-high", "gemini-3.1-pro"],
+  "reviewer_defaults": {
+    "cursor": ["glm-5.2-high", "cursor-grok-4.5-high", "gemini-3.1-pro"],
+    "opencode": ["opencode/glm-5.2", "google/gemini-2.5-pro", "xai/grok-3"]
+  },
   "forbidden_reviewer_overlap": true
 }

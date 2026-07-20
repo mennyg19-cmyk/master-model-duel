@@ -2,6 +2,7 @@
 
 run_id: string
 created_utc: string
+host: cursor | opencode | generic
 run_mode: model_duel | rules_duel
 source_codebase: string
 reviewer_model: string

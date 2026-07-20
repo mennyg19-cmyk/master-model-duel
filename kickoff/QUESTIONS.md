@@ -2,6 +2,20 @@
 
 Ask **one group at a time**. Do not bootstrap until all answers are locked in `runs/{run_id}/KICKOFF.yaml`.
 
+## Q-1 — Host tool
+
+**Ask:** Where are you running this duel?
+
+| Answer | Record `host` | Notes |
+|---|---|---|
+| Cursor | `cursor` | Default; `.cursor/rules` |
+| OpenCode | `opencode` | `AGENTS.md` + `rules/*.md` — see `adapters/opencode/HOST.md` |
+| Other multi-model tool | `generic` | Plain `rules/*.md` — see `adapters/generic/HOST.md` |
+
+Model ids must exist for that host in `catalog/MODEL-FAMILIES.json` (`slugs` / `hosts.cursor` for Cursor; `hosts.opencode` for OpenCode).
+
+---
+
 ## Q0 — Run mode
 
 **Ask:** What are you comparing?
@@ -27,7 +41,8 @@ Record `run_mode`. Details for rules mode: `protocol/RULES-DUEL.md`.
 
 ### If `model_duel`
 
-**Ask:** List of Cursor model slugs (`N ≥ 2`).
+**Ask:** List of model ids for **this host** (`N ≥ 2`).  
+Cursor: Cursor slugs. OpenCode: `provider/model` ids from `hosts.opencode` in MODEL-FAMILIES (edit that file if yours differ).
 
 Assign `arm_id` = `arm-01` … `arm-N`, ports `3100+i`.
 
@@ -146,7 +161,13 @@ Show summary:
 - `self_review_mode` (+ jobs if focused)  
 - run path `runs/{run_id}/`
 
-**Ask:** Proceed to bootstrap? Yes → `scripts/bootstrap-run.ps1`.
+**Ask:** Proceed to bootstrap? Yes →
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-run.ps1 -KickoffYaml "runs/{run_id}/KICKOFF.yaml" -DuelHost cursor
+```
+
+Use `-DuelHost opencode` or `generic` to match Q-1 (or set `host:` in KICKOFF.yaml).
 
 **Then ask:** Run the full suite now (Tests 1–6), or stop after bootstrap so you can say **run test 1** (etc.) one at a time? See `protocol/RUN-SINGLE-TEST.md`.
 

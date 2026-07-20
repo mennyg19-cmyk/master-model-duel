@@ -18,13 +18,13 @@ You do **not** build contestant code. You interview, validate, bootstrap, then e
 2. Ask kickoff questions **in order** starting with **Q0 run mode** (one group at a time). Include **Q5 / Q5b** (inventory spawn + grill track) and **Q6 self-review spawn**. Prefer recommended defaults when offering choices.
 3. **Rules question (Q4 / packs):** always offer the **full live catalog** (table ∪ files on disk). Do not use a memorized subset. User-added `.mdc` files in `catalog/rules/` must appear in the ask. If they want a brand-new rule, point them to add it under `catalog/` first (see `RULE-CATALOG.md` → Add your own rules), then refresh the list.
 4. **Reviewer family check:** load families for every contestant slug and the reviewer slug. If reviewer’s family ∈ contestant families → **stop and re-ask**. Never soft-override. (`rules_duel` still has one contestant family.)
-5. After confirm: write `runs/{run_id}/KICKOFF.yaml` (include `inventory_mode` / `self_review_mode` / `include_grill_inventory` / `grill_seed` + jobs). For `rules_duel`, include `contestant_model` + `rule_packs`. Then run:
+5. After confirm: write `runs/{run_id}/KICKOFF.yaml` including `host:`. Then:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-run.ps1 -KickoffYaml "runs/{run_id}/KICKOFF.yaml"
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-run.ps1 -KickoffYaml "runs/{run_id}/KICKOFF.yaml" -DuelHost cursor
 ```
 
-Bootstrap also copies the execution kit (`kit/prompts`, rubrics, smoke, test6 helpers) and seeds `.scratch/run-state.md` + `results/SCOREBOARD.md`.
+Use `-DuelHost opencode` or `generic` when that is the host. Bootstrap copies the execution kit and projects rules for the host.
 
 6. Ask: **full suite now**, or **stop** so the user can **run test N** separately?  
    - Full suite → begin Test 1 per `EXPERIMENT-PLAN.md` (honor focused inventory if set).  

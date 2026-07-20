@@ -3,7 +3,9 @@
 # Accepts either expanded contestants[] or rules_duel rule_packs[] (+ contestant_model).
 param(
   [Parameter(Mandatory = $true)]
-  [string]$KickoffYaml
+  [string]$KickoffYaml,
+  [ValidateSet("cursor", "opencode", "generic")]
+  [string]$DuelHost = "cursor"
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,6 +17,7 @@ if (-not (Test-Path $KickoffYaml)) { throw "Kickoff not found: $KickoffYaml" }
 $rawLines = Get-Content $KickoffYaml
 $runId = $null
 $runMode = "model_duel"
+$hostFromYaml = $null
 foreach ($line in $rawLines) {
   if ($line -match '^\s*run_id:\s*(.+)$') {
     $runId = $Matches[1].Trim().Trim('"').Trim("'")
@@ -22,8 +25,17 @@ foreach ($line in $rawLines) {
   if ($line -match '^\s*run_mode:\s*(.+)$') {
     $runMode = $Matches[1].Trim().Trim('"').Trim("'")
   }
+  if ($line -match '^\s*host:\s*(.+)$') {
+    $hostFromYaml = $Matches[1].Trim().Trim('"').Trim("'").ToLowerInvariant()
+  }
 }
 if (-not $runId) { throw "KICKOFF.yaml missing run_id" }
+if ($hostFromYaml) {
+  if (@("cursor", "opencode", "generic") -notcontains $hostFromYaml) {
+    throw "Unknown host in KICKOFF.yaml: $hostFromYaml"
+  }
+  $DuelHost = $hostFromYaml
+}
 
 $runDir = Join-Path $root "runs\$runId"
 $catalogRules = Join-Path $root "catalog\rules"
@@ -33,9 +45,71 @@ $families = Get-Content $familiesPath -Raw | ConvertFrom-Json
 
 function Get-FamilyId([string]$slug) {
   foreach ($prop in $families.families.PSObject.Properties) {
-    if (@($prop.Value.slugs) -contains $slug) { return $prop.Name }
+    $fam = $prop.Value
+    $all = @()
+    if ($fam.slugs) { $all += @($fam.slugs) }
+    if ($fam.hosts) {
+      foreach ($hp in $fam.hosts.PSObject.Properties) {
+        if ($hp.Value) { $all += @($hp.Value) }
+      }
+    }
+    if ($all -contains $slug) { return $prop.Name }
   }
   return $null
+}
+
+function Strip-MdcFrontmatter([string]$text) {
+  if ($text -match '(?s)\A---\r?\n.*?\r?\n---\r?\n(.*)\z') {
+    return $Matches[1].TrimStart()
+  }
+  return $text
+}
+
+function Write-ArmRules {
+  param(
+    [string]$ArmRoot,
+    [string[]]$RuleIds,
+    [string]$HostName
+  )
+  $plainDir = Join-Path $ArmRoot "rules"
+  New-Item -ItemType Directory -Force -Path $plainDir | Out-Null
+  $bodies = @()
+  foreach ($rid in $RuleIds) {
+    $srcRule = Join-Path $catalogRules "$rid.mdc"
+    if (-not (Test-Path $srcRule)) {
+      throw "Rule file missing for id '$rid' (expected catalog/rules/$rid.mdc)"
+    }
+    $raw = Get-Content $srcRule -Raw
+    $body = Strip-MdcFrontmatter $raw
+    Set-Content -Path (Join-Path $plainDir "$rid.md") -Value $body -Encoding utf8
+    $bodies += "---`n# Rule: $rid`n`n$body"
+    if ($HostName -eq "cursor") {
+      $cursorDir = Join-Path $ArmRoot ".cursor\rules"
+      New-Item -ItemType Directory -Force -Path $cursorDir | Out-Null
+      Copy-Item $srcRule $cursorDir -Force
+    }
+  }
+  if ($HostName -eq "opencode" -or $HostName -eq "generic") {
+    $agentsExtra = @"
+
+## Selected rule pack (also in rules/)
+
+Read and follow every file in ``rules/``. Summary concatenated below for hosts that only load AGENTS.md.
+
+$($bodies -join "`n`n")
+"@
+    $baseAgents = Get-Content (Join-Path $templateArm "AGENTS.md") -Raw
+    Set-Content -Path (Join-Path $ArmRoot "AGENTS.md") -Value ($baseAgents.TrimEnd() + "`n" + $agentsExtra) -Encoding utf8
+  }
+  if ($HostName -eq "opencode") {
+    $ocJson = @"
+{
+  "`$schema": "https://opencode.ai/config.json",
+  "instructions": ["rules/*.md"]
+}
+"@
+    Set-Content -Path (Join-Path $ArmRoot "opencode.json") -Value $ocJson -Encoding utf8
+  }
 }
 
 function Rules-Key($list) {
@@ -299,6 +373,7 @@ Set-Content -Path $ledger -Encoding utf8 -Value $header
 
 $mapLines = @(
   "# Mapping - do not commit until FINAL-REPORT",
+  "host: $DuelHost",
   "run_mode: $runMode",
   "reviewer: $reviewerModel ($reviewerFamily)",
   "inventory_mode: $inventoryMode",
@@ -330,27 +405,25 @@ Set-Content -Path (Join-Path $runDir "SOURCE.md") -Value $sourceMd -Encoding utf
 foreach ($c in $contestants) {
   $armRoot = Join-Path $runDir "arms\$($c.arm_id)"
   $ws = Join-Path $armRoot "workspace"
-  $rulesDir = Join-Path $armRoot ".cursor\rules"
   $armResults = Join-Path $armRoot "results"
-  New-Item -ItemType Directory -Force -Path $ws, $rulesDir, $armResults | Out-Null
+  New-Item -ItemType Directory -Force -Path $ws, $armResults | Out-Null
 
   $ruleIds = @($c.rules)
   if ($includeGrill -and ($ruleIds -notcontains "grill-protocol")) {
     $ruleIds += "grill-protocol"
   }
 
-  foreach ($rid in $ruleIds) {
-    $srcRule = Join-Path $catalogRules "$rid.mdc"
-    if (-not (Test-Path $srcRule)) {
-      throw "Rule file missing for id '$rid' (expected catalog/rules/$rid.mdc)"
-    }
-    Copy-Item $srcRule $rulesDir -Force
+  Write-ArmRules -ArmRoot $armRoot -RuleIds $ruleIds -HostName $DuelHost
+
+  if ($DuelHost -eq "cursor") {
+    Copy-Item (Join-Path $templateArm "AGENTS.md") (Join-Path $armRoot "AGENTS.md") -Force
   }
 
   $ruleList = $ruleIds -join ", "
   $armMd = @"
 # Arm $($c.arm_id)
 
+- host: $DuelHost
 - run_mode: $runMode
 - pack_id: $($c.pack_id)
 - model: (see .scratch/mapping.md)
@@ -363,10 +436,10 @@ foreach ($c in $contestants) {
 - workspace: ``workspace/``
 - results: ``results/``
 - Frozen prompts: ``../../kit/prompts/``
+- Host guide: ``../../../adapters/$DuelHost/HOST.md``
 - Do not run git. Do not touch ``../../results`` (run-level) except via orchestrator.
 "@
   Set-Content -Path (Join-Path $armRoot "ARM.md") -Value $armMd -Encoding utf8
-  Copy-Item (Join-Path $templateArm "AGENTS.md") (Join-Path $armRoot "AGENTS.md") -Force
   Copy-Item (Join-Path $templateArm "CONTESTANT-PROMPT.md") (Join-Path $armRoot "CONTESTANT-PROMPT.md") -Force
 }
 
@@ -379,6 +452,7 @@ $runReadme = @"
 
 | Item | Value |
 |---|---|
+| Host | ``$DuelHost`` |
 | Mode | ``$runMode`` |
 | Source | ``$source`` |
 | Reviewer | ``$reviewerModel`` ($reviewerFamily) |
@@ -396,12 +470,12 @@ $runReadme = @"
 - Orchestrator: ``.scratch/run-state.md``, ``.scratch/SPAWN-CHECKLIST.md``
 - Scoreboard: ``results/SCOREBOARD.md``
 
-See ``protocol/EXPERIMENT-PLAN.md``$rulesNote. Grill: ``protocol/GRILL-INVENTORY.md``.
+See ``adapters/$DuelHost/HOST.md`` and ``protocol/EXPERIMENT-PLAN.md``$rulesNote. Grill: ``protocol/GRILL-INVENTORY.md``.
 "@
 Set-Content -Path (Join-Path $runDir "README.md") -Value $runReadme -Encoding utf8
 
 Write-Output "Bootstrapped $runDir"
-Write-Output "run_mode=$runMode"
+Write-Output "host=$DuelHost run_mode=$runMode"
 Write-Output "Arms: $armIds"
 Write-Output "Packs: $packSummary"
 Write-Output "include_grill_inventory=$includeGrill inventory_mode=$inventoryMode self_review_mode=$selfReviewMode"
