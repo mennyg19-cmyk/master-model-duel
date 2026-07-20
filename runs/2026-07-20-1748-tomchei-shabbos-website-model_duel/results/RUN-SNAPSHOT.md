@@ -22,6 +22,6 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 ## In flight
 
 - arm-01 P10: quality + clean-code reviews pending
-- arm-02 P6: [arm-02 P6 fix pass](pending)
+- arm-02 P6: [arm-02 P6 fix pass](2a8dd104-0ca9-4ffe-ac31-9cc0f661a326) → gate (+1.5 → **9.0/20**)
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)
