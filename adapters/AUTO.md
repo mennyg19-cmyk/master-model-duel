@@ -25,7 +25,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/spawn-agent.ps1 -Arm
 
 3. Exit code **2** on Cursor/generic = you must finish the spawn in-UI (brief path printed).  
 4. Exit code **0** on OpenCode = CLI run finished (check arm `results/`).  
-5. Always append `COST-LEDGER.csv`.
+5. **Immediately** append the cost ledger (spawn incomplete until this prints `appended=1`):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/append-cost-ledger.ps1 -RunId "{id}" -Test "1a" -ArmId "arm-01" -Role "inventory" -Model "{model}" -CostUsd "" -Notes ""
+```
+
+6. Do not start the next spawn until step 5 succeeds. At test gates run `scripts/verify-cost-ledger.ps1` and fill SCOREBOARD Cost from the CSV.
 
 ## Kickoff
 

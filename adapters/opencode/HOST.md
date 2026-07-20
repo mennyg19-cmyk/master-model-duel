@@ -39,6 +39,10 @@ opencode run --model <id> --file <filled-prompt.md> "…"
 
 inside the arm directory. Interactive sessions are optional for debugging only.
 
+## Cost (hard gate)
+
+After every `opencode run` / spawn, run `scripts/append-cost-ledger.ps1` with whatever usage the CLI printed (or blank + `usage_missing_pending_export`). Next spawn waits on that row. See `results/COST-LEDGER-HOWTO.md`.
+
 ### Focused specialists / grill interleave
 
 Same protocol files. One OpenCode session per specialist job; merge agent is another session.

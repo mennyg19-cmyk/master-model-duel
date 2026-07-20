@@ -25,7 +25,7 @@ Details: [`AUTO.md`](AUTO.md). Override with env `DUEL_HOST`.
 1. Open **this repo** as the orchestrator workspace.  
 2. Run kickoff → bootstrap with `-DuelHost` matching your tool.  
 3. For each spawn: open the **arm folder**, load that arm’s rules the host way, paste the frozen prompt from `kit/prompts/`, use the model id from mapping.  
-4. Log cost into `COST-LEDGER.csv` (paste usage; hosts differ).  
+4. **Immediately** append cost via `scripts/append-cost-ledger.ps1` (required; blank `$` OK). Verify at gates with `scripts/verify-cost-ledger.ps1`.  
 5. Never let contestants edit run-level `results/` except via you.
 
 ## Pick a host at bootstrap

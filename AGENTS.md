@@ -23,6 +23,7 @@ Override: environment `DUEL_HOST=cursor|opencode|generic`.
 
 - Kickoff choices: **`AskQuestion` when the tool exists**; otherwise **short-reply words** from `kickoff/ASK-UI.md` (not “Reply A or B”, and not a dead-end).  
 - Protocol: `protocol/EXPERIMENT-PLAN.md`  
-- Spawns: fill prompt → `spawn-agent.ps1` → COST-LEDGER + run-state + SCOREBOARD  
+- Spawns: fill prompt → `spawn-agent.ps1` → **`append-cost-ledger.ps1`** (required) → run-state + SCOREBOARD  
+- Cost gate: no next spawn / no test-done without a ledger row; `verify-cost-ledger.ps1` at gates; see `results/COST-LEDGER-HOWTO.md`  
 - Reviewer family must not overlap contestants  
 - After grill inventory: show comparison; wait for user-resolved inventory before Test 2

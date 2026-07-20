@@ -18,6 +18,8 @@ If grill off: put 1a score scaled to /15 in 1a column; leave 1b blank; note in f
 
 ## Cost (from COST-LEDGER.csv)
 
+**Gate:** fill this from `results/COST-LEDGER.csv` at every test gate. Empty cells while the CSV has rows (or CSV has only a header after spawns) = incomplete. Use `scripts/append-cost-ledger.ps1` / `verify-cost-ledger.ps1`.
+
 | Arm | Builder $ | Full pipeline $ | Solo TCO (T5) |
 |---|---:|---:|---:|
 | arm-01 | | | |

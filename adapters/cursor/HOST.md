@@ -13,9 +13,10 @@
 4. Spawn via `scripts/spawn-agent.ps1` → execute the Cursor Task brief.  
 5. Arm rules live in `arms/{id}/.cursor/rules/*.mdc`.
 
-## Cost
+## Cost (hard gate)
 
-Paste Cursor usage / Cost into `results/COST-LEDGER.csv`. Optional: reconcile from Cursor CSV export later.
+After **every** Task spawn, run `scripts/append-cost-ledger.ps1` before the next spawn. Paste Cursor usage/`Cost` into `-CostUsd` / token fields when shown; if missing, still append (notes get `usage_missing_pending_export`).  
+Do not mark a test done until `scripts/verify-cost-ledger.ps1` prints `ok=true` and SCOREBOARD Cost is filled. See `results/COST-LEDGER-HOWTO.md`.
 
 ## Model ids
 

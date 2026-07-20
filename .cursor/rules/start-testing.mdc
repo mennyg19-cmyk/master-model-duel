@@ -33,7 +33,7 @@ Pass `-DuelHost` matching detected/confirmed host (`opencode` / `generic` as nee
 
 7. **After bootstrap:** AskQuestion **multi-select** — Full suite + each test with short description (`kickoff/ASK-UI.md`). Record `tests_selected`; run that set in order.
 8. For every contestant/reviewer spawn: fill `kit/prompts/…` → `scripts/spawn-agent.ps1` (see `adapters/AUTO.md`). On Cursor, execute the Task brief (exit code 2).  
-9. Keep artifacts under the run folder; COST-LEDGER + `.scratch/run-state.md` + `results/SCOREBOARD.md`.  
+9. Keep artifacts under the run folder; **append COST-LEDGER after every spawn** (`scripts/append-cost-ledger.ps1`) + `.scratch/run-state.md` + `results/SCOREBOARD.md` (Cost section from ledger).  
 10. Mapping → `.scratch/mapping.md` until FINAL-REPORT.
 
 ## Multi-run

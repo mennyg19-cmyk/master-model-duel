@@ -18,6 +18,7 @@ This repository is **Master Model Duel**. It runs agent experiments (`model_duel
 - Say **"run test N"** / **"run grill"** (or aliases) to run one test; ask for missing inventories/plans/seeds per `protocol/RUN-SINGLE-TEST.md` + `protocol/GRILL-INVENTORY.md`.
 - Follow `protocol/EXPERIMENT-PLAN.md` for Tests 1–6; use frozen prompts in `runs/{id}/kit/prompts/`; `protocol/RULES-DUEL.md` when mode is `rules_duel`.
 - Keep `.scratch/run-state.md` and `results/SCOREBOARD.md` updated after each gate.
+- **Cost ledger (mandatory):** after **every** spawn, run `scripts/append-cost-ledger.ps1` before the next spawn. Missing usage → still append (notes=`usage_missing_pending_export`). A spawn without a ledger row is **not done**. Before a test/phase gate: `scripts/verify-cost-ledger.ps1` must print `ok=true`, and SCOREBOARD Cost must be filled from the CSV. Details: `template/orchestrator/COST-LEDGER-HOWTO.md` (copied to `results/COST-LEDGER-HOWTO.md` on bootstrap).
 - **Git snapshots (mobile tracking):** after each phase gate (and after Tests 1–2 complete), update `runs/{run_id}/results/RUN-SNAPSHOT.md`, then **commit + push** the run folder (`runs/{run_id}/`) so the user can follow on GitHub. Message pattern: `Duel {slug}: Pn gated` or `Test N complete`. Never commit `.env`, `node_modules`, or `.scratch/`.
 - PowerShell: no inline `$` — use `scripts/*.ps1` or `runs/{run_id}/.scratch/*.ps1`.
 
