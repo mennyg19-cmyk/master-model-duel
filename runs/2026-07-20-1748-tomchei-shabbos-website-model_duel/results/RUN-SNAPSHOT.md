@@ -16,7 +16,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 | Arm | P8 | P9/P6 | P5 |
 |---|---|---|---|
-| arm-01 | ✓ | review **1/4** (security ✓) | — |
+| arm-01 | ✓ | review **3/4** (security, rules, clean-code ✓) | — |
 | arm-02 | — | P6 building | ✓ |
 
 ## In flight
