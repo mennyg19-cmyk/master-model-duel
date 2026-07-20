@@ -30,4 +30,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/spawn-agent.ps1 -Arm
 ## Kickoff
 
 If `detect-host` confidence is **high**, skip asking Q-1 — write `host:` from detection.  
-If **low/medium**, show detection + ask user to confirm.
+If **low/medium**, show detection + ask user to confirm (use **AskQuestion** on Cursor).
+
+All other fixed kickoff choices: **`kickoff/ASK-UI.md`** (AskQuestion / A/B/C). Minimize freeform typing.

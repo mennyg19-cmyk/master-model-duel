@@ -11,7 +11,9 @@ A **host** is the tool that deals the cards (starts models, loads rules, reports
 
 **Claude Code alone** is a bad *host for the whole duel* (one model family). Claude can still be one *contestant* inside Cursor or OpenCode.
 
-## Auto-detect (preferred)
+## Kickoff UI
+
+Prefer structured ask tools so the user clicks options. Cursor: `AskQuestion` — see `kickoff/ASK-UI.md`.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/detect-host.ps1

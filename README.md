@@ -12,7 +12,7 @@ A **multi-model agent experiment**. It **detects** whether you’re in Cursor or
 ## Quick start
 
 1. Open this repo in **Cursor** or **OpenCode**.  
-2. Say **start testing** — orchestrator runs `detect-host`, then kickoff.  
+2. Say **start testing** — orchestrator detects host, then asks setup with **clickable questions** (Cursor `AskQuestion`) when available.  
 3. Bootstrap uses the detected `-DuelHost`.  
 4. Spawns go through `scripts/spawn-agent.ps1`:
    - **OpenCode** → `opencode run` in the arm folder (CLI)  

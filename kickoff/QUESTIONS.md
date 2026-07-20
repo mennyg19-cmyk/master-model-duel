@@ -2,7 +2,16 @@
 
 Ask **one group at a time**. Do not bootstrap until all answers are locked in `runs/{run_id}/KICKOFF.yaml`.
 
-## Q-1 — Host tool (auto-detect first)
+## How to ask (important)
+
+**Prefer the host’s question UI** so the user clicks instead of typing.
+
+1. Read `kickoff/ASK-UI.md`.  
+2. On **Cursor**: use the **`AskQuestion` tool** for every fixed-choice kickoff step (one question per message).  
+3. Only use freeform chat for paths, seeds, and “Something else”.  
+4. If AskQuestion is missing: short A/B/C prose (same options as ASK-UI).
+
+---
 
 **Before asking:** run:
 

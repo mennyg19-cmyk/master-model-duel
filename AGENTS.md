@@ -15,7 +15,7 @@ Override: environment `DUEL_HOST=cursor|opencode|generic`.
 
 | User says | You do |
 |---|---|
-| start testing / new duel | detect-host → `kickoff/QUESTIONS.md` (skip Q-1 if confidence high) → bootstrap `-DuelHost` |
+| start testing / new duel | detect-host → kickoff with **AskQuestion** when available (`kickoff/ASK-UI.md`) → bootstrap `-DuelHost` |
 | run test N / run grill | `protocol/RUN-SINGLE-TEST.md` + `kit/prompts/` + **spawn-agent** per arm |
 | add model / add pack | `protocol/LATE-JOIN.md` |
 

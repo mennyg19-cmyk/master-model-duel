@@ -15,11 +15,12 @@ You do **not** build contestant code. You interview, validate, bootstrap, then e
 ## Procedure
 
 0. Run `scripts/detect-host.ps1`. Follow `adapters/AUTO.md`. If confidence **high**, lock `host` without asking Q-1.
-1. Read `kickoff/QUESTIONS.md`, `catalog/RULE-CATALOG.md`, **scan `catalog/rules/*.mdc`**, `catalog/SPECIALIST-ROLES.md`, `catalog/MODEL-FAMILIES.json`, `protocol/EXPERIMENT-PLAN.md`. If `run_mode` will be `rules_duel`, also read `protocol/RULES-DUEL.md`.
-2. Ask kickoff questions **in order** (skip Q-1 when detection confidence is high). Include **Q5 / Q5b** and **Q6**. Prefer recommended defaults.
-3. **Rules question (Q4 / packs):** always offer the **full live catalog** (table ∪ files on disk). Do not use a memorized subset. User-added `.mdc` files in `catalog/rules/` must appear in the ask. If they want a brand-new rule, point them to add it under `catalog/` first (see `RULE-CATALOG.md` → Add your own rules), then refresh the list.
-4. **Reviewer family check:** load families for every contestant slug and the reviewer slug. If reviewer’s family ∈ contestant families → **stop and re-ask**. Never soft-override. (`rules_duel` still has one contestant family.)
-5. After confirm: write `runs/{run_id}/KICKOFF.yaml` including `host:` from detection/confirm. Then:
+1. Read `kickoff/QUESTIONS.md` + **`kickoff/ASK-UI.md`**. On Cursor, drive kickoff with **`AskQuestion`** (one fixed-choice question per turn). Freeform only for paths/seeds/custom ids.
+2. Read `catalog/RULE-CATALOG.md`, scan `catalog/rules/*.mdc`, `catalog/SPECIALIST-ROLES.md`, `catalog/MODEL-FAMILIES.json`, `protocol/EXPERIMENT-PLAN.md`. If `rules_duel`, also `protocol/RULES-DUEL.md`.
+3. Ask kickoff questions **in order** (skip Q-1 when detection confidence is high). Prefer recommended defaults as the AskQuestion default/recommended option.
+4. **Rules (Q4 / packs):** use AskQuestion presets from `ASK-UI.md`, then multi-select / checklist over the **full live catalog** when choosing custom. Never invent a shortlist from memory.
+5. **Reviewer family check:** if reviewer’s family ∈ contestant families → **stop and re-ask** via AskQuestion. Never soft-override.
+6. After confirm (AskQuestion): write `runs/{run_id}/KICKOFF.yaml` including `host:`. Then:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-run.ps1 -KickoffYaml "runs/{run_id}/KICKOFF.yaml" -DuelHost cursor
@@ -27,10 +28,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-run.ps1 -K
 
 Pass `-DuelHost` matching detected/confirmed host (`opencode` / `generic` as needed).
 
-6. Ask: **full suite now**, or **stop** for **run test N**?  
-7. For every contestant/reviewer spawn: fill `kit/prompts/…` → `scripts/spawn-agent.ps1` (see `adapters/AUTO.md`). On Cursor, execute the Task brief spawn-agent prints (exit code 2).  
-8. Keep artifacts under the run folder; COST-LEDGER + `.scratch/run-state.md` + `results/SCOREBOARD.md`.  
-9. Mapping → `.scratch/mapping.md` until FINAL-REPORT.
+7. AskQuestion: **full suite** vs **stop for run test N**.  
+8. For every contestant/reviewer spawn: fill `kit/prompts/…` → `scripts/spawn-agent.ps1` (see `adapters/AUTO.md`). On Cursor, execute the Task brief (exit code 2).  
+9. Keep artifacts under the run folder; COST-LEDGER + `.scratch/run-state.md` + `results/SCOREBOARD.md`.  
+10. Mapping → `.scratch/mapping.md` until FINAL-REPORT.
 
 ## Multi-run
 
