@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getStaffContext } from "@/lib/auth/current-user";
+import { getOpenSeason } from "@/lib/season";
 import type { Permission } from "@/lib/auth/permissions";
 import { BRAND } from "@/lib/brand";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +9,10 @@ import { StopImpersonationButton, LogoutButton } from "@/components/session-butt
 
 const NAV_ITEMS: { href: string; label: string; permission: Permission | null }[] = [
   { href: "/admin", label: "Dashboard", permission: null },
+  { href: "/admin/orders", label: "Orders", permission: "orders.view" },
+  { href: "/admin/pos", label: "Point of sale", permission: "orders.manage" },
+  { href: "/admin/customers", label: "Customers", permission: "customers.manage" },
+  { href: "/admin/import", label: "Import", permission: "customers.manage" },
   { href: "/admin/catalog", label: "Catalog", permission: "catalog.manage" },
   { href: "/admin/media", label: "Media", permission: "media.manage" },
   { href: "/admin/staff", label: "Staff", permission: "staff.manage" },
@@ -25,9 +30,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const visibleNavItems = NAV_ITEMS.filter(
     (item) => item.permission === null || staff.actingAs.permissions.has(item.permission)
   );
+  // Alert banner (R-106): remind staff when customers currently see the closed store.
+  const openSeason = await getOpenSeason();
 
   return (
     <div className="flex-1 flex flex-col">
+      {!openSeason && (
+        <div className="bg-amber-100 px-4 py-2 text-sm text-amber-900" data-testid="admin-alert-banner">
+          No season is open — the storefront shows the closed notice. Open a season under Settings.
+        </div>
+      )}
       {staff.isImpersonating && (
         <div className="bg-accent text-white px-4 py-2 text-sm flex items-center justify-between gap-3">
           <span>
@@ -52,6 +64,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               {item.label}
             </Link>
           ))}
+          <Link
+            href="/"
+            className="mt-2 rounded-md border border-border px-3 py-1.5 text-sm text-muted hover:bg-brand-soft"
+          >
+            Visit store ↗
+          </Link>
           <div className="mt-auto pt-4 border-t border-border text-xs text-muted">
             <p className="truncate">{staff.actingAs.email}</p>
             <Badge tone="brand" className="mt-1">{staff.actingAs.role}</Badge>

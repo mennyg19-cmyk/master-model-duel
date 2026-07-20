@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getCustomerContext } from "@/lib/auth/customer-session";
 import { cartSchema, type Cart } from "@/lib/order-builder/cart";
+import { saveToAddressBook } from "@/lib/addresses/book";
 
 // Draft ownership (R-121, R-023): a draft is reachable ONLY through the
 // customer session cookie or the guest draft cookie. No API accepts a draft id
@@ -133,4 +134,47 @@ export async function completeDraft(draftId: string, ownedGuestCookie: boolean):
 
 export function parseCart(raw: unknown): Cart {
   return cartSchema.parse(raw);
+}
+
+/**
+ * POS drafts (UR-006, UR-011): the same OrderDraft table keyed by a
+ * deterministic per-customer marker in guestTokenHash. Not a secret — every
+ * POS API sits behind a staff permission gate — the marker just keeps one
+ * resumable POS cart per customer per season without ever colliding with the
+ * customer's own web draft (which lives under customerId).
+ */
+export function posDraftOwner(customerId: string): DraftOwner {
+  return { kind: "guest", tokenHash: `pos|${customerId}` };
+}
+
+// Server-side assignment rules, shared by the storefront draft API and the
+// POS draft API (same builder, same rules — UR-006):
+// - "new recipient" auto-saves to the owning customer's address book (G-019)
+//   and the line is rewritten to point at the saved entry.
+// - address-book assignments must point into that customer's own book;
+//   anything else is dropped back to unassigned rather than trusted.
+export async function applyAssignmentRules(cart: Cart, customerId: string | null): Promise<Cart> {
+  const ownedAddressIds = customerId
+    ? new Set(
+        (
+          await db.customerAddress.findMany({ where: { customerId }, select: { id: true } })
+        ).map((address) => address.id)
+      )
+    : new Set<string>();
+
+  const lines = [];
+  for (const line of cart.lines) {
+    if (line.assignment?.type === "newRecipient" && customerId) {
+      const saved = await saveToAddressBook(customerId, line.assignment.address);
+      ownedAddressIds.add(saved.id);
+      lines.push({ ...line, assignment: { type: "addressBook" as const, addressId: saved.id } });
+      continue;
+    }
+    if (line.assignment?.type === "addressBook" && !ownedAddressIds.has(line.assignment.addressId)) {
+      lines.push({ ...line, assignment: null });
+      continue;
+    }
+    lines.push(line);
+  }
+  return { ...cart, lines };
 }

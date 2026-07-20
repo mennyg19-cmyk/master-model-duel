@@ -33,6 +33,8 @@ export function OrderBuilder({
   initialAddressBook,
   isSignedIn,
   mode = "storefront",
+  draftUrl = "/api/draft",
+  addressUrlFor = (addressId: string) => `/api/account/addresses/${addressId}`,
 }: {
   seasonName: string;
   catalog: BuilderCatalog;
@@ -41,6 +43,9 @@ export function OrderBuilder({
   initialAddressBook: SavedAddress[];
   isSignedIn: boolean;
   mode?: "storefront" | "pos";
+  /** POS swaps these for the staff-gated draft/address endpoints (UR-006). */
+  draftUrl?: string;
+  addressUrlFor?: (addressId: string) => string;
 }) {
   const [cart, setCart] = useState<Cart>(initialCart ?? emptyCart());
   const [priced, setPriced] = useState<PricedCart | null>(initialPriced);
@@ -60,7 +65,7 @@ export function OrderBuilder({
     setSaveState("saving");
     const editsAtSend = pendingEditsRef.current;
     try {
-      const response = await fetch("/api/draft", {
+      const response = await fetch(draftUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cartRef.current),
@@ -78,7 +83,7 @@ export function OrderBuilder({
     } catch {
       setSaveState("error");
     }
-  }, []);
+  }, [draftUrl]);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleSave = useCallback(() => {
@@ -169,7 +174,7 @@ export function OrderBuilder({
 
   // Mid-order saved-address edit (R-029). Returns an error message or null.
   async function editSavedAddress(addressId: string, address: AddressInput): Promise<string | null> {
-    const response = await fetch(`/api/account/addresses/${addressId}`, {
+    const response = await fetch(addressUrlFor(addressId), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(address),
@@ -200,7 +205,9 @@ export function OrderBuilder({
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4 py-8 sm:px-6" data-builder-mode={mode}>
       <section className="min-w-0 flex-1">
-        <h1 className="text-2xl font-semibold">Build your {seasonName} order</h1>
+        <h1 className="text-2xl font-semibold">
+          {mode === "pos" ? `POS order — ${seasonName}` : `Build your ${seasonName} order`}
+        </h1>
         <p className="mt-1 mb-5 text-sm text-muted">
           Add packages and quantities first — then choose who each one goes to.
         </p>

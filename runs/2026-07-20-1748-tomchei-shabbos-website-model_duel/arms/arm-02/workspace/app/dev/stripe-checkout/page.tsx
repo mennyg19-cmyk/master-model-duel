@@ -14,9 +14,10 @@ export default async function MockStripeCheckoutPage({
 }: {
   searchParams: Promise<{ session?: string; success?: string; cancel?: string }>;
 }) {
-  if (getPaymentGateway().mode !== "mock") notFound();
-
+  // Read searchParams before touching the gateway: it marks the route dynamic,
+  // so `next build` never evaluates the mock-only gateway during prerender.
   const { session: sessionId, success, cancel } = await searchParams;
+  if (getPaymentGateway().mode !== "mock") notFound();
   if (!sessionId) notFound();
   const session = await db.stripeCheckoutSession.findUnique({
     where: { stripeSessionId: sessionId },

@@ -23,6 +23,7 @@ export type SettingsHubData = {
   deliveryZips: string[];
   shippingRates: ShippingRate[];
   shippingRules: ShippingRules;
+  purimDayChoices: string[];
   emailFrom: string;
   emailReplyTo: string;
 };
@@ -91,6 +92,7 @@ export function SettingsHub({ data }: { data: SettingsHubData }) {
           deliveryZips={data.deliveryZips}
           shippingRates={data.shippingRates}
           shippingRules={data.shippingRules}
+          purimDayChoices={data.purimDayChoices}
           saveSetting={saveSetting}
         />
       )}
@@ -248,21 +250,29 @@ function ShippingTab({
   deliveryZips,
   shippingRates,
   shippingRules,
+  purimDayChoices,
   saveSetting,
 }: {
   deliveryZips: string[];
   shippingRates: ShippingRate[];
   shippingRules: ShippingRules;
+  purimDayChoices: string[];
   saveSetting: SaveSettingFn;
 }) {
   const [zipsText, setZipsText] = useState(deliveryZips.join(", "));
   const [rates, setRates] = useState(shippingRates);
   const [rules, setRules] = useState(shippingRules);
   const [newRate, setNewRate] = useState({ name: "", price: "" });
+  const [dayChoicesText, setDayChoicesText] = useState(purimDayChoices.join("\n"));
 
   function saveZips() {
     const zips = zipsText.split(",").map((zip) => zip.trim()).filter(Boolean);
     void saveSetting("shipping.delivery_zips", zips, "Delivery ZIPs saved — checkout blocking updates immediately.");
+  }
+
+  function saveDayChoices() {
+    const choices = dayChoicesText.split("\n").map((choice) => choice.trim()).filter(Boolean);
+    void saveSetting("delivery.purim_day_choices", choices, "Delivery day choices saved — checkout offers them immediately.");
   }
 
   return (
@@ -336,6 +346,20 @@ function ShippingTab({
           </label>
           <Button onClick={() => saveSetting("shipping.rules", rules)}>Save rules</Button>
         </div>
+      </Card>
+
+      <Card>
+        <CardTitle>Purim delivery day choices</CardTitle>
+        <p className="mb-2 text-sm text-muted">
+          One per line (UR-009). Checkout requires a pick whenever an order uses per-package delivery.
+        </p>
+        <textarea
+          value={dayChoicesText}
+          onChange={(event) => setDayChoicesText(event.target.value)}
+          rows={4}
+          className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-ink"
+        />
+        <Button className="mt-2" onClick={saveDayChoices}>Save day choices</Button>
       </Card>
     </div>
   );

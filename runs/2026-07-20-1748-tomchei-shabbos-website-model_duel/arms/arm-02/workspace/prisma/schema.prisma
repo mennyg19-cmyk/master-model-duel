@@ -129,6 +129,8 @@ model AuditLog {
   createdAt    DateTime @default(now())
 
   @@index([createdAt])
+  // Per-target audit trail on the order detail page (R-053).
+  @@index([targetType, targetId, createdAt])
 }
 
 // Typed key-value settings store (R-161).
@@ -331,6 +333,10 @@ model Order {
   shippingQuotes ShippingQuote[]
 
   @@index([sourceDraftId, status])
+  // Admin list/dashboard queries at 1k+ scale (R-105, G-024).
+  @@index([status, createdAt])
+  @@index([customerId, createdAt])
+  @@index([seasonId, createdAt])
 
   @@unique([seasonId, orderNumber])
 }
@@ -417,6 +423,8 @@ model Package {
   shippingQuotes      ShippingQuote[]
 
   @@index([seasonId, groupingKey])
+  // Dashboard stage counts at 5k+ package scale (G-024).
+  @@index([seasonId, stage])
 }
 
 model PackageAudit {
