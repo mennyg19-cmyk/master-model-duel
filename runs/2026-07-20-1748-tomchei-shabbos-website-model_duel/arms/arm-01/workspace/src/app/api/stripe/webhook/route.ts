@@ -1,4 +1,4 @@
-import { PaymentIntentStatus } from "@prisma/client";
+import { PaymentIntentStatus, PaymentMethod, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import {
@@ -14,6 +14,7 @@ async function markSafetyRefund(
   orderId: string,
   paymentIntentId: string,
   conflicts: string[],
+  eventType: string,
 ) {
   const stripe = getStripe();
   if (stripe && !paymentIntentId.startsWith("pi_local_")) {
@@ -22,30 +23,46 @@ async function markSafetyRefund(
       { idempotencyKey: `safety-refund:${eventId}` },
     );
   }
-  await db.$transaction([
-    db.stripePaymentIntent.updateMany({
-      where: { orderId },
-      data: {
-        stripePaymentIntentId: paymentIntentId,
-        status: PaymentIntentStatus.REFUNDED,
-      },
-    }),
-    db.order.update({
-      where: { id: orderId },
-      data: { cachedPaymentStatus: "REFUNDED" },
-    }),
-    db.auditLog.create({
-      data: {
-        action: "payment.safety_refunded",
-        targetType: "Order",
-        targetId: orderId,
-        metadata: { stripeEventId: eventId, conflicts },
-      },
-    }),
-    db.stripeWebhookEvent.create({
-      data: { id: eventId, type: "checkout.session.completed" },
-    }),
-  ]);
+  await db.$transaction(
+    async (transaction) => {
+      const priorEvent = await transaction.stripeWebhookEvent.findUnique({
+        where: { id: eventId },
+      });
+      if (priorEvent) return;
+      const activeIntent = await transaction.stripePaymentIntent.findFirst({
+        where: {
+          orderId,
+          status: { in: [PaymentIntentStatus.CREATED, PaymentIntentStatus.PROCESSING] },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (activeIntent) {
+        await transaction.stripePaymentIntent.update({
+          where: { id: activeIntent.id },
+          data: {
+            stripePaymentIntentId: paymentIntentId,
+            status: PaymentIntentStatus.REFUNDED,
+          },
+        });
+      }
+      await transaction.order.update({
+        where: { id: orderId },
+        data: { cachedPaymentStatus: "REFUNDED" },
+      });
+      await transaction.auditLog.create({
+        data: {
+          action: "payment.safety_refunded",
+          targetType: "Order",
+          targetId: orderId,
+          metadata: { stripeEventId: eventId, conflicts },
+        },
+      });
+      await transaction.stripeWebhookEvent.create({
+        data: { id: eventId, type: eventType },
+      });
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
 }
 
 async function processCheckoutCompleted(event: Stripe.CheckoutSessionCompletedEvent) {
@@ -68,7 +85,7 @@ async function processCheckoutCompleted(event: Stripe.CheckoutSessionCompletedEv
     );
   } catch (error) {
     if (!(error instanceof CheckoutConflictError)) throw error;
-    await markSafetyRefund(event.id, orderId, paymentIntentId, error.conflicts);
+    await markSafetyRefund(event.id, orderId, paymentIntentId, error.conflicts, event.type);
     return { safetyRefunded: true };
   }
 }
@@ -80,24 +97,51 @@ async function processRefund(event: Stripe.ChargeRefundedEvent) {
       ? charge.payment_intent
       : charge.payment_intent?.id;
   if (!paymentIntentId) return;
-  const intent = await db.stripePaymentIntent.findUnique({
+  const storedIntent = await db.stripePaymentIntent.findUnique({
     where: { stripePaymentIntentId: paymentIntentId },
   });
-  if (!intent) return;
-  await db.$transaction([
-    db.stripePaymentIntent.update({
-      where: { id: intent.id },
-      data: { status: PaymentIntentStatus.REFUNDED },
-    }),
-    db.payment.updateMany({
-      where: { orderId: intent.orderId, method: "STRIPE", reference: paymentIntentId },
-      data: { status: "VOIDED", voidedAt: new Date() },
-    }),
-    db.stripeWebhookEvent.create({
-      data: { id: event.id, type: event.type },
-    }),
-  ]);
-  await recalculatePaymentStatus(db, intent.orderId);
+  if (!storedIntent) return;
+  await db.$transaction(
+    async (transaction) => {
+      const priorEvent = await transaction.stripeWebhookEvent.findUnique({
+        where: { id: event.id },
+      });
+      if (priorEvent) return;
+      const payment = await transaction.payment.findUnique({
+        where: {
+          method_reference: {
+            method: PaymentMethod.STRIPE,
+            reference: paymentIntentId,
+          },
+        },
+      });
+      if (!payment) {
+        await transaction.stripeWebhookEvent.create({
+          data: { id: event.id, type: event.type },
+        });
+        return;
+      }
+      const refundedCents = Math.min(
+        payment.amountCents,
+        charge.amount_refunded ?? charge.amount ?? payment.amountCents,
+      );
+      await transaction.payment.update({
+        where: { id: payment.id },
+        data: { refundedCents },
+      });
+      if (refundedCents >= payment.amountCents) {
+        await transaction.stripePaymentIntent.update({
+          where: { id: storedIntent.id },
+          data: { status: PaymentIntentStatus.REFUNDED },
+        });
+      }
+      await transaction.stripeWebhookEvent.create({
+        data: { id: event.id, type: event.type },
+      });
+      await recalculatePaymentStatus(transaction, storedIntent.orderId);
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
 }
 
 export async function POST(request: Request) {

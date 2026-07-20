@@ -245,6 +245,22 @@ async function run() {
     (await postCheckout(packageOrder, "PACKAGE_DELIVERY", packageTotal)).status,
     200,
   );
+  const sameAddressPackageOrder = await createDraft(
+    customerId,
+    seasonId,
+    product,
+    [addresses[0].id, addresses[0].id],
+  );
+  assert.equal(
+    (
+      await postCheckout(
+        sameAddressPackageOrder,
+        "PACKAGE_DELIVERY",
+        product.priceCents * 2 + 800 * 2,
+      )
+    ).status,
+    200,
+  );
 
   const stalePriceOrder = await createDraft(customerId, seasonId, product, [addresses[0].id]);
   await prisma.product.update({
@@ -348,19 +364,39 @@ async function run() {
   });
   assert.notEqual(paidOrder.orderNumber, finalizedCashOrder.orderNumber);
 
-  const refundEvent = {
+  const partialRefundEvent = {
     ...stripeEvent,
-    id: `evt_refund_p5_${runKey}`,
+    id: `evt_partial_refund_p5_${runKey}`,
     type: "charge.refunded",
     data: {
       object: {
         id: `ch_p5_${runKey}`,
         object: "charge",
         payment_intent: `pi_p5_${runKey}`,
+        amount: stripeIntent.amountCents,
+        amount_refunded: Math.floor(stripeIntent.amountCents / 2),
       },
     },
   };
-  assert.equal((await postStripeEvent(refundEvent)).status, 200);
+  assert.equal((await postStripeEvent(partialRefundEvent)).status, 200);
+  const partiallyRefundedOrder = await prisma.order.findUniqueOrThrow({
+    where: { id: stripeOrder.id },
+    include: { payments: true },
+  });
+  assert.equal(partiallyRefundedOrder.cachedPaymentStatus, "PARTIALLY_PAID");
+  assert.equal(partiallyRefundedOrder.payments[0]?.status, "POSTED");
+
+  const fullRefundEvent = {
+    ...partialRefundEvent,
+    id: `evt_full_refund_p5_${runKey}`,
+    data: {
+      object: {
+        ...partialRefundEvent.data.object,
+        amount_refunded: stripeIntent.amountCents,
+      },
+    },
+  };
+  assert.equal((await postStripeEvent(fullRefundEvent)).status, 200);
   const refundedOrder = await prisma.order.findUniqueOrThrow({
     where: { id: stripeOrder.id },
   });
@@ -375,10 +411,24 @@ async function run() {
         replaySafe: true,
         confirmationTriggered: Boolean(paidOrder.confirmationTriggeredAt),
       },
-      S2: { zipBlocked: true, bulkDestinations: 2, bulkFeeCents: 2400, packageRecipients: 3, packageFeeCents: 2400 },
+      S2: {
+        zipBlocked: true,
+        bulkDestinations: 2,
+        bulkFeeCents: 2400,
+        packageRecipients: 3,
+        packageFeeCents: 2400,
+        sameAddressPackageRecipients: 2,
+        sameAddressPackageFeeCents: 1600,
+      },
       S3: { stalePrice: 409, staleStock: 409, tamperedTotal: 409 },
       S4: { cashPost: 201, cashVoid: 200, audits: paymentAudits, publicCash: 400 },
-      S5: { discard: "CANCELLED", refund: refundedOrder.cachedPaymentStatus, forbiddenTransition: true },
+      S5: {
+        discard: "CANCELLED",
+        partialRefund: partiallyRefundedOrder.cachedPaymentStatus,
+        partialPaymentStatus: partiallyRefundedOrder.payments[0]?.status,
+        fullRefund: refundedOrder.cachedPaymentStatus,
+        forbiddenTransition: true,
+      },
     }),
   );
 }

@@ -1,7 +1,11 @@
 import { PaymentMethod } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { recalculatePaymentStatus } from "@/domain/checkout";
+import {
+  CheckoutConflictError,
+  finalizePosOrder,
+  recalculatePaymentStatus,
+} from "@/domain/checkout";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -15,6 +19,12 @@ const voidPaymentSchema = z.object({ paymentId: z.string().min(1) });
 function paymentError(error: unknown) {
   if (error instanceof AccessDeniedError) {
     return NextResponse.json({ error: error.message }, { status: 403 });
+  }
+  if (error instanceof CheckoutConflictError) {
+    return NextResponse.json(
+      { error: error.message, conflicts: error.conflicts },
+      { status: 409 },
+    );
   }
   throw error;
 }
@@ -33,26 +43,13 @@ export async function POST(
       );
     }
     const { orderId } = await context.params;
-    const payment = await db.$transaction(async (transaction) => {
+    const result = await db.$transaction(async (transaction) => {
       const order = await transaction.order.findUnique({ where: { id: orderId } });
       if (!order || order.status === "CANCELLED") {
         throw new Error("Payment requires an active draft or finalized order.");
       }
       if (order.status === "DRAFT") {
-        const season = await transaction.season.update({
-          where: { id: order.seasonId },
-          data: { nextOrderNumber: { increment: 1 } },
-          select: { nextOrderNumber: true },
-        });
-        await transaction.order.update({
-          where: { id: order.id },
-          data: {
-            status: "FINALIZED",
-            orderNumber: season.nextOrderNumber - 1,
-            finalizedAt: new Date(),
-            version: { increment: 1 },
-          },
-        });
+        await finalizePosOrder(transaction, orderId);
       }
       const createdPayment = await transaction.payment.create({
         data: {
@@ -76,10 +73,10 @@ export async function POST(
           },
         },
       });
-      return createdPayment;
+      const cachedPaymentStatus = await recalculatePaymentStatus(transaction, orderId);
+      return { payment: createdPayment, cachedPaymentStatus };
     });
-    const cachedPaymentStatus = await recalculatePaymentStatus(db, orderId);
-    return NextResponse.json({ payment, cachedPaymentStatus }, { status: 201 });
+    return NextResponse.json(result, { status: 201 });
   } catch (error) {
     return paymentError(error);
   }
@@ -96,7 +93,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Payment ID is required." }, { status: 400 });
     }
     const { orderId } = await context.params;
-    const payment = await db.$transaction(async (transaction) => {
+    const result = await db.$transaction(async (transaction) => {
       const voided = await transaction.payment.updateMany({
         where: {
           id: parsed.data.paymentId,
@@ -120,16 +117,19 @@ export async function PATCH(
           metadata: { orderId },
         },
       });
-      return transaction.payment.findUnique({ where: { id: parsed.data.paymentId } });
+      const payment = await transaction.payment.findUnique({
+        where: { id: parsed.data.paymentId },
+      });
+      const cachedPaymentStatus = await recalculatePaymentStatus(transaction, orderId);
+      return { payment, cachedPaymentStatus };
     });
-    if (!payment) {
+    if (!result) {
       return NextResponse.json(
         { error: "Posted cash or check payment was not found." },
         { status: 404 },
       );
     }
-    const cachedPaymentStatus = await recalculatePaymentStatus(db, orderId);
-    return NextResponse.json({ payment, cachedPaymentStatus });
+    return NextResponse.json(result);
   } catch (error) {
     return paymentError(error);
   }

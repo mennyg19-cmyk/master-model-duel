@@ -78,7 +78,10 @@ export function CheckoutForm({ draftId }: { draftId: string }) {
     return choices.reduce((sum, choice) => {
       const line = checkout.order.lines.find((candidate) => candidate.id === choice.orderLineId);
       if (!line?.recipientAddress) return sum;
-      const group = `${choice.fulfillmentCode}:${line.recipientAddress.id}`;
+      const group =
+        choice.fulfillmentCode === "PACKAGE_DELIVERY"
+          ? `${choice.fulfillmentCode}:${choice.orderLineId}`
+          : `${choice.fulfillmentCode}:${line.recipientAddress.id}`;
       if (chargedGroups.has(group)) return sum;
       chargedGroups.add(group);
       return sum + (checkout.fulfillmentFees[choice.fulfillmentCode] ?? 0);

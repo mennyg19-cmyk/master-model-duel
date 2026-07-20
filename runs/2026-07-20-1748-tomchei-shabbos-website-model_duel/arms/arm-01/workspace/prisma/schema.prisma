@@ -476,6 +476,7 @@ model Payment {
   method          PaymentMethod
   status          PaymentStatus @default(POSTED)
   amountCents     Int
+  refundedCents   Int           @default(0)
   reference       String?
   postedByStaffId String?
   postedAt        DateTime      @default(now())

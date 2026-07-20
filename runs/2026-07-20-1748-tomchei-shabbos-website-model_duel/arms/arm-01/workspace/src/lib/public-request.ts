@@ -26,8 +26,7 @@ export async function guardPublicWrite(request: Request, action: string) {
     throw new PublicRequestError("This request must come from the ordering site.", 403);
   }
 
-  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const source = forwardedFor || request.headers.get("x-real-ip") || "unknown";
+  const source = request.headers.get("x-real-ip")?.trim() || "unknown";
   const key = createHash("sha256")
     .update(`${action}:${source}`)
     .digest("hex");

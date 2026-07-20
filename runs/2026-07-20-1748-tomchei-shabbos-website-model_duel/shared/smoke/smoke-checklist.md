@@ -36,14 +36,25 @@ See `shared/phases/PHASE-P3-EXPECTED.md`. Both arms P3 **gated**.
 
 See `shared/phases/PHASE-P4-EXPECTED.md`. arm-01 P4 **gated**.
 
-## P5 (next)
+## P5
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Stripe web checkout | | |
-| S2 | Delivery fees + zip block | | |
-| S3 | Stale price/stock | | |
-| S4 | POS cash/check | | |
-| S5 | Order lifecycle | | |
+| S1 | Stripe web checkout | ✓ | |
+| S2 | Delivery fees + zip block | ✓ | |
+| S3 | Stale price/stock | ✓ | |
+| S4 | POS cash/check | ✓ | |
+| S5 | Order lifecycle | ✓ | |
 
-See `shared/phases/PHASE-P5-EXPECTED.md`.
+See `shared/phases/PHASE-P5-EXPECTED.md`. arm-01 P5 **gated**.
+
+## P6 (next)
+
+| # | Check | arm-01 | arm-02 |
+|---|---|---|---|
+| S1 | Ops hub | | |
+| S2 | POS | | |
+| S3 | Import | | |
+| S4 | Scale | | |
+
+See `shared/phases/PHASE-P6-EXPECTED.md`.

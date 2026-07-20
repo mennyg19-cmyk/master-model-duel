@@ -138,11 +138,39 @@ export async function POST(request: Request) {
       });
     }
 
+    await db.stripePaymentIntent.upsert({
+      where: { idempotencyKey },
+      create: {
+        orderId: draft.id,
+        stripePaymentIntentId: `pending:${idempotencyKey}`,
+        idempotencyKey,
+        status: PaymentIntentStatus.CREATED,
+        amountCents: prepared.totalCents,
+      },
+      update: {
+        status: PaymentIntentStatus.CREATED,
+        amountCents: prepared.totalCents,
+      },
+    });
+
     const stripe = getStripe();
     let sessionId: string;
     let checkoutUrl: string | null;
     if (stripe) {
-      const requestUrl = new URL(request.url);
+      const configuredBaseUrl = process.env.APP_BASE_URL;
+      if (!configuredBaseUrl) {
+        return NextResponse.json(
+          { error: "The trusted application base URL is not configured." },
+          { status: 503 },
+        );
+      }
+      const applicationBaseUrl = new URL(configuredBaseUrl);
+      if (!["http:", "https:"].includes(applicationBaseUrl.protocol)) {
+        return NextResponse.json(
+          { error: "The trusted application base URL is invalid." },
+          { status: 503 },
+        );
+      }
       const session = await stripe.checkout.sessions.create(
         {
           mode: "payment",
@@ -162,8 +190,14 @@ export async function POST(request: Request) {
             metadata: { orderId: draft.id },
           },
           metadata: { orderId: draft.id },
-          success_url: `${requestUrl.origin}/account/orders/${draft.id}?paid=1`,
-          cancel_url: `${requestUrl.origin}/checkout/${draft.id}?cancelled=1`,
+          success_url: new URL(
+            `/account/orders/${draft.id}?paid=1`,
+            applicationBaseUrl,
+          ).toString(),
+          cancel_url: new URL(
+            `/checkout/${draft.id}?cancelled=1`,
+            applicationBaseUrl,
+          ).toString(),
         },
         { idempotencyKey },
       );
@@ -180,12 +214,11 @@ export async function POST(request: Request) {
       checkoutUrl = `/checkout/test?session=${encodeURIComponent(sessionId)}`;
     }
 
-    await db.stripePaymentIntent.create({
+    await db.stripePaymentIntent.update({
+      where: { idempotencyKey },
       data: {
-        orderId: draft.id,
         stripePaymentIntentId: `pending:${sessionId}`,
         stripeCheckoutSessionId: sessionId,
-        idempotencyKey,
         status: PaymentIntentStatus.CREATED,
         amountCents: prepared.totalCents,
       },

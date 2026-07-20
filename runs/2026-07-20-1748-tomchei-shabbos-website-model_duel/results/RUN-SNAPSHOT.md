@@ -2,26 +2,26 @@
 
 Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
-**UTC snapshot:** 2026-07-20T21:10:00Z (approx)
+**UTC snapshot:** 2026-07-20T21:25:00Z (approx)
 
 ## Status
 
 | Item | Value |
 |---|---|
 | Test | 4 — build with review |
-| Phase | **P5** (arm-01) · **P4** (arm-02) |
-| Scoreboard | arm-01 **33.0**/100 · arm-02 **33.5**/100 (Test 4: **6.0/20** vs **4.5/20**) |
+| Phase | **P6** (arm-01) · **P4** (arm-02) |
+| Scoreboard | arm-01 **34.5**/100 · arm-02 **33.5**/100 (Test 4: **7.5/20** vs **4.5/20**) |
 
 ## Phase gates
 
-| Arm | P1 | P2 | P3 | P4 | P5 |
-|---|---|---|---|---|---|
-| arm-01 | ✓ | ✓ | ✓ | ✓ | fix pass running |
-| arm-02 | ✓ | ✓ | ✓ | build done · review **1/4** | — |
+| Arm | P1 | P2 | P3 | P4 | P5 | P6 |
+|---|---|---|---|---|---|---|
+| arm-01 | ✓ | ✓ | ✓ | ✓ | ✓ | building |
+| arm-02 | ✓ | ✓ | ✓ | review **2/4** | — | — |
 
 ## In flight
 
-- arm-01 P5: [arm-01 P5 fix pass](19e11af5-e0cf-4802-a6e9-3dc881f9f931) (4 blockers + majors)
-- arm-02 P4: 4-reviewer panel → aggregate → fix → gate
+- arm-01 P6 build (ops hub + POS)
+- arm-02 P4: quality + rules reviews → aggregate → fix
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)
