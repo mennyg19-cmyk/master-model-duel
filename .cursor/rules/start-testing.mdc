@@ -18,9 +18,9 @@ You do **not** build contestant code. You interview, validate, bootstrap, then m
 1. Read `kickoff/QUESTIONS.md` + **`kickoff/ASK-UI.md`**.  
    - If **`AskQuestion` is in your tools** → use it for every fixed choice (never “Reply A or B”).  
    - If **AskQuestion is missing** (e.g. Grok Agent) → use **short-reply fallback** from ASK-UI (`models` / `rules`, `yes` / `no`, …). Do **not** dead-end the user.  
-   - Freeform chat only for paths / seeds / custom ids.
+   - Freeform chat only for local/URL escapes on Q1, grill seeds, custom ids.
 2. Read `catalog/RULE-CATALOG.md`, scan `catalog/rules/*.mdc`, `catalog/SPECIALIST-ROLES.md`, `catalog/MODEL-FAMILIES.json`, `protocol/EXPERIMENT-PLAN.md`. If `rules_duel`, also `protocol/RULES-DUEL.md`.
-3. Ask kickoff in order. For **model_duel contestants**: run `list-model-options.ps1`, then **AskQuestion multi-select** (2+) or comma-separated fallback — see ASK-UI. Prefer recommended defaults elsewhere.
+3. Ask kickoff in order. **Q1 source:** run `list-source-options.ps1`; if logged into gh/glab, AskQuestion single-select over repos (ASK-UI). Resolve with `resolve-source.ps1`. For **model_duel contestants**: run `list-model-options.ps1`, then **AskQuestion multi-select** (2+) or comma-separated fallback — see ASK-UI. Prefer recommended defaults elsewhere.
 4. **Rules (Q4 / packs):** use AskQuestion presets from `ASK-UI.md`, then multi-select / checklist over the **full live catalog** when choosing custom. Never invent a shortlist from memory.
 5. **Reviewer family check:** if reviewer’s family ∈ contestant families → **stop and re-ask** via AskQuestion. Never soft-override.
 6. After confirm (AskQuestion): write `runs/{run_id}/KICKOFF.yaml` including `host:`. Then:

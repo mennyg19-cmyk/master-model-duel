@@ -43,9 +43,49 @@ Same pattern for every fixed choice (see ready-made sets).
 
 ## Freeform chat only for
 
-- Absolute path to source codebase  
-- Grill seed paragraph  
-- Custom model id / custom pack names  
+- Local path / git URL when user picks those escapes on Q1 (or when not logged into gh/glab)
+- Grill seed paragraph
+- Custom model id / custom pack names
+
+## Source codebase (Q1) — list remotes when logged in
+
+### Before asking
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/list-source-options.ps1
+```
+
+| `auth=` line | What you do |
+|---|---|
+| `github:yes` and/or `gitlab:yes` | Build AskQuestion (or numbered fallback) from the listed repos + Local / URL / More |
+| both `no` | Freeform: ask absolute path or git URL only. Mention `gh auth login` (or `glab auth login`) to enable listing next time. |
+
+### If AskQuestion is available
+
+**Single-select** (not multi).
+
+- Prompt: `Which repo or directory should Test 1 inventory?`
+- Options: every numbered remote row label from the script, then:
+  - `Local directory - I will type an absolute path`
+  - `Git URL - I will paste a clone URL`
+  - `Show more remote repos` (if `has_more=true` / more option present) → re-run script with `-Offset N`, ask again
+
+### If AskQuestion is missing
+
+Print the numbered list from the script, then:
+
+> Reply with a **number**, or `owner/repo`, or an absolute path, or a git URL.
+
+### After selection
+
+| Choice | Action |
+|---|---|
+| Remote `owner/repo` | Run `scripts/resolve-source.ps1 -OwnerRepo owner/repo` (clones to `.scratch/sources/{name}` if needed). Record printed `source_codebase=`. |
+| Local escape | Ask absolute path next turn; `resolve-source.ps1 -LocalPath …` |
+| URL escape | Ask URL next turn; `resolve-source.ps1 -GitUrl …` |
+| More | Re-list with higher `-Offset`; ask again |
+
+**Validate:** path exists and is readable. After Test 1 this path is **not** mounted into builder workspaces.
 
 ## Contestant models (Q2 — model_duel) — MULTI-SELECT
 

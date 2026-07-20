@@ -12,7 +12,7 @@ A **multi-model agent experiment**. It **detects** whether you’re in Cursor or
 ## Quick start
 
 1. Open this repo in **Cursor** or **OpenCode**.  
-2. Say **start testing** — orchestrator detects host, then asks setup with **clickable questions** (Cursor `AskQuestion`) when available.  
+2. Say **start testing** — orchestrator detects host, then asks setup with **clickable questions** (Cursor `AskQuestion`) when available. If you’re logged into GitHub (`gh auth login`) or GitLab (`glab`), Q1 lists your remotes to pick from.  
 3. Bootstrap uses the detected `-DuelHost`.  
 4. Spawns go through `scripts/spawn-agent.ps1`:
    - **OpenCode** → `opencode run` in the arm folder (CLI)  
@@ -46,7 +46,7 @@ protocol/          The duel rules (host-agnostic)
 template/          Frozen prompts, rubrics, smoke, Test 6
 catalog/           Model families + selectable rules
 kickoff/           Interview script
-scripts/           bootstrap-run.ps1 (-DuelHost …)
+scripts/           bootstrap, detect-host, list-model/source-options, resolve-source, spawn
 runs/              One archive per experiment
 ```
 

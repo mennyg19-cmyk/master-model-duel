@@ -46,7 +46,12 @@ Record `run_mode`. Details for rules mode: `protocol/RULES-DUEL.md`.
 
 ## Q1 — Source codebase
 
-**Ask:** Absolute path (or git URL + local clone path) of the repo to inventory in Test 1.
+**Ask:** Which repo or directory should Test 1 inventory?
+
+1. Run `scripts/list-source-options.ps1`.  
+2. If GitHub (`gh`) and/or GitLab (`glab`) auth is yes → **AskQuestion single-select** (or numbered fallback) over listed remotes + Local path + Git URL (+ More if needed). See `kickoff/ASK-UI.md` § Source codebase.  
+3. If not logged in → freeform absolute path or git URL; suggest `gh auth login`.  
+4. Resolve to a local tree with `scripts/resolve-source.ps1` (`-OwnerRepo` / `-LocalPath` / `-GitUrl`).
 
 **Validate:** Path exists; readable tree. Record `source_codebase`. After Test 1 this path is **not** mounted into builder workspaces.
 
