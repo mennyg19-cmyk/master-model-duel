@@ -16,15 +16,46 @@ export function BulkRepeatButton({
       setMessage("No finalized orders on this page.");
       return;
     }
+    const reviewResponse = await fetch("/api/admin/orders/bulk-repeat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "review", sources }),
+    });
+    const review = await reviewResponse.json();
+    if (!reviewResponse.ok || !review.ready?.length) {
+      setMessage(
+        reviewResponse.ok
+          ? `0 ready; ${review.conflicts.length} require individual review.`
+          : review.error,
+      );
+      return;
+    }
+    const confirmation = review.ready
+      .flatMap((source: {
+        customerName: string;
+        confirmations: { productName: string; recipientName: string }[];
+      }) => [
+        source.customerName,
+        ...source.confirmations.map(
+          (line) => `  ${line.productName} → ${line.recipientName}`,
+        ),
+      ])
+      .join("\n");
+    if (!window.confirm(
+      `Confirm these replacements and recipients before creating ${review.ready.length} drafts:\n\n${confirmation}`,
+    )) {
+      setMessage("Bulk repeat cancelled before creating drafts.");
+      return;
+    }
     const response = await fetch("/api/admin/orders/bulk-repeat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sources }),
+      body: JSON.stringify({ action: "create", sources: review.ready }),
     });
     const payload = await response.json();
     setMessage(
       response.ok
-        ? `${payload.applied.length} repeated; ${payload.conflicts.length} conflicts.`
+        ? `${payload.applied.length} repeated; ${payload.conflicts.length + review.conflicts.length} conflicts.`
         : payload.error,
     );
   }

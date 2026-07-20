@@ -1,5 +1,4 @@
 import { type CachedPaymentStatus, type OrderStatus, Prisma } from "@prisma/client";
-import { repeatOrdersInBulk } from "@/domain/repeat-orders";
 import { db } from "@/lib/db";
 
 export const ADMIN_PAGE_SIZE = 25;
@@ -146,12 +145,5 @@ export function getOrderDetail(orderId: string) {
       },
     },
   });
-}
-
-export function repeatOrders(
-  actorStaffId: string,
-  requestedSources: { orderId: string; version: number }[],
-) {
-  return repeatOrdersInBulk(db, actorStaffId, requestedSources);
 }
 

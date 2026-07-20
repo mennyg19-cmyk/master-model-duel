@@ -48,7 +48,11 @@ export async function POST(request: Request) {
     );
   }
   try {
-    const draft = await createRepeatDraft(db, parsed.data);
+    const draft = await createRepeatDraft(db, {
+      ...parsed.data,
+      actorCustomerId: account.customerId,
+      actorClerkUserId: account.clerkUserId,
+    });
     return NextResponse.json({ draftId: draft.id }, { status: 201 });
   } catch (error) {
     return NextResponse.json(

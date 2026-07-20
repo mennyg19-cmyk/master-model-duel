@@ -169,6 +169,14 @@ export async function getRepeatReview(
           "Recipient missing",
         mappedProductId,
         suggestions,
+        source: {
+          productKind: line.product.kind,
+          optionName: line.productOption?.name ?? null,
+          optionValue: line.productOption?.value ?? null,
+          fulfillmentMethodCode: line.fulfillmentMethod?.code ?? null,
+          greeting: line.greetingSnapshot,
+          deliveryDay: line.deliveryDay,
+        },
       };
     }),
   );
@@ -178,6 +186,7 @@ export async function getRepeatReview(
       version: sourceOrder.version,
       customerId: sourceOrder.customerId,
       customerName: sourceOrder.customer.displayName,
+      defaultGreeting: sourceOrder.defaultGreeting,
       season: sourceOrder.season,
     },
     targetSeason,
@@ -192,11 +201,16 @@ export async function createRepeatDraft(
     sourceOrderId: string;
     sourceVersion: number;
     actorStaffId?: string;
+    actorCustomerId?: string;
+    actorClerkUserId?: string;
     decisions: RepeatLineDecision[];
   },
+  precomputedReview?: Awaited<ReturnType<typeof getRepeatReview>>,
 ) {
-  const targetSeasonId = await getRepeatTargetSeasonId(prisma);
-  const review = await getRepeatReview(prisma, input.sourceOrderId, targetSeasonId);
+  const review =
+    precomputedReview ??
+    (await getRepeatReview(prisma, input.sourceOrderId));
+  const targetSeasonId = review.targetSeason.id;
   if (review.sourceOrder.version !== input.sourceVersion) {
     throw new Error("The source order changed. Reload the review before repeating it.");
   }
@@ -206,39 +220,23 @@ export async function createRepeatDraft(
   if (decisionsByLine.size !== review.lines.length) {
     throw new Error("Confirm a replacement or removal for every source line.");
   }
-  const keptDecisions = review.lines.map((line) => {
+  const resolvedDecisions = review.lines.map((line) => {
     const decision = decisionsByLine.get(line.sourceLineId);
     if (!decision) throw new Error("Confirm every replacement and recipient.");
     if (!decision.productId) return { line, decision, productId: null };
     return { line, decision, productId: decision.productId };
   });
-  if (!keptDecisions.some((entry) => entry.productId)) {
+  if (!resolvedDecisions.some((entry) => entry.productId)) {
     throw new Error("Keep at least one gift in the repeated order.");
   }
 
-  const productIds = keptDecisions.flatMap((entry) =>
+  const productIds = resolvedDecisions.flatMap((entry) =>
     entry.productId ? [entry.productId] : [],
   );
-  const addressIds = keptDecisions.flatMap((entry) =>
+  const addressIds = resolvedDecisions.flatMap((entry) =>
     entry.productId ? [entry.decision.recipientAddressId] : [],
   );
-  const [source, products, addresses, targetMethods] = await Promise.all([
-    prisma.order.findFirstOrThrow({
-      where: {
-        id: input.sourceOrderId,
-        version: input.sourceVersion,
-        status: "FINALIZED",
-      },
-      include: {
-        lines: {
-          include: {
-            product: { select: { kind: true } },
-            productOption: true,
-            fulfillmentMethod: { select: { code: true } },
-          },
-        },
-      },
-    }),
+  const [products, addresses, targetMethods] = await Promise.all([
     prisma.product.findMany({
       where: {
         id: { in: productIds },
@@ -260,32 +258,35 @@ export async function createRepeatDraft(
   const productsById = new Map(products.map((product) => [product.id, product]));
   const addressesById = new Map(addresses.map((address) => [address.id, address]));
   const methodsByCode = new Map(targetMethods.map((method) => [method.code, method]));
-  const sourceLinesById = new Map(source.lines.map((line) => [line.id, line]));
 
-  const preparedLines = keptDecisions.flatMap(({ decision, productId, line }) => {
+  const preparedLines = resolvedDecisions.flatMap(({ decision, productId, line }) => {
     if (!productId) return [];
     const product = productsById.get(productId);
     const address = addressesById.get(decision.recipientAddressId);
-    const sourceLine = sourceLinesById.get(line.sourceLineId);
-    if (!product || !address || !sourceLine) {
+    if (!product || !address) {
       throw new Error("A selected replacement or recipient is no longer available.");
     }
-    if (product.kind !== sourceLine.product.kind) {
+    if (product.kind !== line.source.productKind) {
       throw new Error("A replacement must have the same catalog type.");
     }
     const option =
       product.options.find(
         (candidate) =>
-          candidate.name === sourceLine.productOption?.name &&
-          candidate.value === sourceLine.productOption?.value,
+          candidate.name === line.source.optionName &&
+          candidate.value === line.source.optionValue,
       ) ??
       product.options.find((candidate) => candidate.isDefault) ??
       null;
-    const method = sourceLine.fulfillmentMethod
-      ? methodsByCode.get(sourceLine.fulfillmentMethod.code)
+    const method = line.source.fulfillmentMethodCode
+      ? methodsByCode.get(line.source.fulfillmentMethodCode)
       : null;
+    if (line.source.fulfillmentMethodCode && !method) {
+      throw new Error(
+        `Fulfillment method ${line.source.fulfillmentMethodCode} is unavailable in the target season.`,
+      );
+    }
     return [{
-      sourceLine,
+      line,
       product,
       address,
       option,
@@ -294,7 +295,7 @@ export async function createRepeatDraft(
     }];
   });
   const subtotalCents = preparedLines.reduce(
-    (total, entry) => total + entry.unitPriceCents * entry.sourceLine.quantity,
+    (total, entry) => total + entry.unitPriceCents * entry.line.quantity,
     0,
   );
 
@@ -302,11 +303,11 @@ export async function createRepeatDraft(
     const draft = await transaction.order.create({
       data: {
         seasonId: targetSeasonId,
-        customerId: source.customerId,
-        draftReference: `R-${source.id.slice(-8)}-${randomBytes(4).toString("hex")}`,
+        customerId: review.sourceOrder.customerId,
+        draftReference: `R-${review.sourceOrder.id.slice(-8)}-${randomBytes(4).toString("hex")}`,
         subtotalCents,
         totalCents: subtotalCents,
-        defaultGreeting: source.defaultGreeting,
+        defaultGreeting: review.sourceOrder.defaultGreeting,
         lines: {
           create: preparedLines.map((entry) => ({
             productId: entry.product.id,
@@ -315,12 +316,12 @@ export async function createRepeatDraft(
             recipientSource: "ADDRESS_BOOK",
             recipientNameSnapshot: entry.address.recipientName,
             fulfillmentMethodId: entry.method?.id,
-            greetingSnapshot: entry.sourceLine.greetingSnapshot,
-            deliveryDay: entry.sourceLine.deliveryDay,
+            greetingSnapshot: entry.line.source.greeting,
+            deliveryDay: entry.line.source.deliveryDay,
             productNameSnapshot: entry.product.name,
             skuSnapshot: entry.product.sku,
             unitPriceCentsSnapshot: entry.unitPriceCents,
-            quantity: entry.sourceLine.quantity,
+            quantity: entry.line.quantity,
           })),
         },
       },
@@ -332,8 +333,10 @@ export async function createRepeatDraft(
         targetType: "Order",
         targetId: draft.id,
         metadata: {
-          sourceOrderId: source.id,
-          sourceVersion: source.version,
+          sourceOrderId: review.sourceOrder.id,
+          sourceVersion: review.sourceOrder.version,
+          actorCustomerId: input.actorCustomerId,
+          actorClerkUserId: input.actorClerkUserId,
           confirmedRecipients: preparedLines.length,
           removedLines: review.lines.length - preparedLines.length,
         },
@@ -343,10 +346,68 @@ export async function createRepeatDraft(
   });
 }
 
+export type BulkRepeatSource = {
+  orderId: string;
+  version: number;
+  decisions: RepeatLineDecision[];
+};
+
+export async function reviewOrdersInBulk(
+  prisma: PrismaClient,
+  requestedSources: { orderId: string; version: number }[],
+) {
+  if (requestedSources.length > MAX_REPEAT_BATCH) {
+    throw new Error(`Bulk repeat accepts at most ${MAX_REPEAT_BATCH} orders.`);
+  }
+  const ready: (BulkRepeatSource & {
+    customerName: string;
+    confirmations: { productName: string; recipientName: string }[];
+  })[] = [];
+  const conflicts: { orderId: string; reason: string }[] = [];
+
+  for (const requested of requestedSources) {
+    try {
+      const review = await getRepeatReview(prisma, requested.orderId);
+      if (review.sourceOrder.version !== requested.version) {
+        throw new Error("The source order changed. Reload before reviewing it.");
+      }
+      if (
+        review.lines.some(
+          (line) => !line.mappedProductId || !line.recipientAddressId,
+        )
+      ) {
+        throw new Error("replacement or recipient selection is required");
+      }
+      ready.push({
+        orderId: requested.orderId,
+        version: requested.version,
+        customerName: review.sourceOrder.customerName,
+        confirmations: review.lines.map((line) => ({
+          productName:
+            line.suggestions.find((product) => product.id === line.mappedProductId)
+              ?.name ?? line.sourceProductName,
+          recipientName: line.recipientName,
+        })),
+        decisions: review.lines.map((line) => ({
+          sourceLineId: line.sourceLineId,
+          productId: line.mappedProductId,
+          recipientAddressId: line.recipientAddressId ?? "",
+        })),
+      });
+    } catch (error) {
+      conflicts.push({
+        orderId: requested.orderId,
+        reason: error instanceof Error ? error.message : "review failed",
+      });
+    }
+  }
+  return { ready, conflicts };
+}
+
 export async function repeatOrdersInBulk(
   prisma: PrismaClient,
   actorStaffId: string,
-  requestedSources: { orderId: string; version: number }[],
+  requestedSources: BulkRepeatSource[],
 ) {
   if (requestedSources.length > MAX_REPEAT_BATCH) {
     throw new Error(`Bulk repeat accepts at most ${MAX_REPEAT_BATCH} orders.`);
@@ -365,23 +426,12 @@ export async function repeatOrdersInBulk(
     seen.add(requested.orderId);
     try {
       const review = await getRepeatReview(prisma, requested.orderId);
-      if (
-        review.lines.some(
-          (line) => !line.mappedProductId || !line.recipientAddressId,
-        )
-      ) {
-        throw new Error("replacement or recipient review is required");
-      }
       const draft = await createRepeatDraft(prisma, {
         sourceOrderId: requested.orderId,
         sourceVersion: requested.version,
         actorStaffId,
-        decisions: review.lines.map((line) => ({
-          sourceLineId: line.sourceLineId,
-          productId: line.mappedProductId,
-          recipientAddressId: line.recipientAddressId!,
-        })),
-      });
+        decisions: requested.decisions,
+      }, review);
       applied.push({ sourceOrderId: requested.orderId, draftOrderId: draft.id });
     } catch (error) {
       conflicts.push({

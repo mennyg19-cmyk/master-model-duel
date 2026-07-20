@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
-import { listOrders, repeatOrders } from "../src/lib/admin-operations";
+import {
+  repeatOrdersInBulk,
+  reviewOrdersInBulk,
+} from "../src/domain/repeat-orders";
+import { listOrders } from "../src/lib/admin-operations";
 
 for (const line of readFileSync(".env", "utf8").split(/\r?\n/)) {
   const separator = line.indexOf("=");
@@ -274,11 +278,18 @@ async function run() {
   assert.equal((await listOrders({ page: 1 })).orders.length, 25);
   assert.equal((await listOrders({ page: 40 })).orders.length, 25);
   assert.equal(await prisma.package.count({ where: { order: { draftReference: { startsWith: "P6-SCALE-" } } } }), 5000);
-  const conflicts = await repeatOrders(manager.id, [
+  const reviewed = await reviewOrdersInBulk(prisma, [
     { orderId: finalizedPos.id, version: finalizedPos.version },
     { orderId: finalizedPos.id, version: finalizedPos.version },
     { orderId: refundOrder.id, version: refundOrder.version + 100 },
   ]);
+  const created = await repeatOrdersInBulk(prisma, manager.id, reviewed.ready);
+  const conflicts = {
+    applied: created.applied,
+    conflicts: [...reviewed.conflicts, ...created.conflicts].sort((left, right) =>
+      left.orderId.localeCompare(right.orderId),
+    ),
+  };
   assert.equal(conflicts.applied.length, 1);
   assert.equal(conflicts.conflicts.length, 2);
   assert.deepEqual(

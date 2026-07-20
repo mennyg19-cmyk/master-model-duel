@@ -91,12 +91,24 @@ See `shared/phases/PHASE-P8-EXPECTED.md`. arm-01 P8 **gated**.
 
 See `shared/phases/PHASE-P9-EXPECTED.md`. arm-01 P9 **gated**.
 
-## P10 (next)
+## P10
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Repeat + replacement | | |
-| S2 | Bulk repeat + auto-flip | | |
-| S3 | Imported prior-year repeat | | |
+| S1 | Repeat + replacement | ✓ | |
+| S2 | Bulk repeat + auto-flip | ✓ | |
+| S3 | Imported prior-year repeat | ✓ | |
 
-See `shared/phases/PHASE-P10-EXPECTED.md`.
+See `shared/phases/PHASE-P10-EXPECTED.md`. arm-01 P10 **gated**.
+
+## P11 (next)
+
+| # | Check | arm-01 | arm-02 |
+|---|---|---|---|
+| S1 | Preferences + tokens | | |
+| S2 | Campaign flow | | |
+| S3 | Transactional + failure | | |
+| S4 | Cron auth + overlap | | |
+| S5 | Purge + test mode | | |
+
+See `shared/phases/PHASE-P11-EXPECTED.md`.

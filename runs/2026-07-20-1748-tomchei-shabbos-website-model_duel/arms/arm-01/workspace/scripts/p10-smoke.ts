@@ -6,6 +6,7 @@ import {
   createRepeatDraft,
   getRepeatReview,
   repeatOrdersInBulk,
+  reviewOrdersInBulk,
   resolveReplacementChain,
 } from "../src/domain/repeat-orders";
 import {
@@ -312,10 +313,13 @@ async function run() {
       confirmedAt: new Date(),
     },
   });
-  const bulk = await repeatOrdersInBulk(prisma, staff.id, [
+  const bulkReview = await reviewOrdersInBulk(prisma, [
     { orderId: bulkOrder.id, version: bulkOrder.version },
     { orderId: importedOrder.id, version: importedOrder.version },
   ]);
+  assert.equal(bulkReview.ready.length, 2);
+  assert.equal(bulkReview.conflicts.length, 0);
+  const bulk = await repeatOrdersInBulk(prisma, staff.id, bulkReview.ready);
   assert.equal(bulk.applied.length, 2);
   assert.equal(bulk.conflicts.length, 0);
   await prisma.season.update({

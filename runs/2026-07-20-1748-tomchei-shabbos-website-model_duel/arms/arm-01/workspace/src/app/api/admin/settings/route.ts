@@ -90,21 +90,20 @@ export async function PATCH(request: Request) {
     if (body.adminSettings !== undefined) {
       await saveAdminSettings(body.adminSettings);
     }
-    await db.auditLog.create({
-      data: {
-        actorStaffId: staffSession.actor.id,
-        action: "settings.storefront_updated",
-        targetType: "AppSetting",
-        targetId: body.seasonId ?? "delivery-zips",
-        metadata: {
-          storeStatus: body.storeStatus,
-          scheduledStatus: body.scheduledStatus,
-          scheduledStatusAt: body.scheduledStatusAt,
-          deliveryZipCount: body.deliveryZips?.length,
-          adminSettingsChanged: body.adminSettings !== undefined,
+    if (body.deliveryZips !== undefined || body.adminSettings !== undefined) {
+      await db.auditLog.create({
+        data: {
+          actorStaffId: staffSession.actor.id,
+          action: "settings.storefront_updated",
+          targetType: "AppSetting",
+          targetId: "storefront-settings",
+          metadata: {
+            deliveryZipCount: body.deliveryZips?.length,
+            adminSettingsChanged: body.adminSettings !== undefined,
+          },
         },
-      },
-    });
+      });
+    }
     return NextResponse.json({ saved: true });
   } catch (error) {
     if (error instanceof AccessDeniedError) {
