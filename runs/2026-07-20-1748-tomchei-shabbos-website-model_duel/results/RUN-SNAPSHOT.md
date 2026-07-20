@@ -17,11 +17,11 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 | Arm | P7 | P8 | P5 |
 |---|---|---|---|
 | arm-01 | ✓ | building | — |
-| arm-02 | — | — | review 4/4 · aggregate/fix |
+| arm-02 | — | — | review ✓ · fix running |
 
 ## In flight
 
 - arm-01 P8: build starting
-- arm-02 P5: [arm-02 P5 aggregate review](55ad7aa9-bde8-40fd-8b4c-3aa9b731b6f9) → fix → gate
+- arm-02 P5: [arm-02 P5 fix pass](5c8f0f36-c700-4546-b905-a7ea7bef3269) → gate (+1.5 → 7.5/20)
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)
