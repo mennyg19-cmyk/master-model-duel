@@ -49,7 +49,8 @@ function Esc([string]$v) {
   return $s
 }
 
-if (-not $CostUsd -and -not $TotalTokens -and ($Notes -notmatch "usage_missing")) {
+$usageBlank = (-not $CostUsd -or $CostUsd.Trim() -eq "") -and (-not $TotalTokens -or $TotalTokens.Trim() -eq "")
+if ($usageBlank -and ($Notes -notmatch "usage_missing")) {
   if ($Notes) { $Notes = "$Notes; usage_missing_pending_export" }
   else { $Notes = "usage_missing_pending_export" }
 }
@@ -66,3 +67,9 @@ $n = (Get-Content $ledger | Measure-Object -Line).Lines - 1
 Write-Output "appended=1"
 Write-Output "path=$ledger"
 Write-Output "rows=$n"
+if ($usageBlank) {
+  Write-Output "usage=MISSING"
+  Write-Output "warn=Pass -TotalTokens and/or -CostUsd from Cursor Usage Summary / OpenCode output. Blank usage is provisional only; gate needs backfill via scripts/backfill-cost-ledger.ps1"
+} else {
+  Write-Output "usage=present"
+}

@@ -273,17 +273,17 @@ Same reviewer model for all arms. Fresh context every spawn. Labels `arm-{id}` o
 
 ### Cost ledger (orchestrator-owned — hard gate)
 
-36. **Every spawn** must append one row to `results/COST-LEDGER.csv` via `scripts/append-cost-ledger.ps1` **before** the next spawn. Missing usage/`$` is fine (notes=`usage_missing_pending_export`); **skipping the row is not**. A spawn without a ledger row is incomplete.
+36. **Every spawn** must append one row via `scripts/append-cost-ledger.ps1` **before** the next spawn. Pass **tokens/`$` when the host shows them**. Cursor Task does not inject usage automatically — orchestrator must copy Usage Summary or backfill from dashboard CSV (`scripts/backfill-cost-ledger.ps1`). A spawn without a ledger **row** is incomplete; a **test** without tokens-or-`$` on those rows fails `verify-cost-ledger.ps1 -RequireUsage`.
 
 ```text
 timestamp_utc,run_id,test,arm_id,phase,role,model,agent_id,kind,input_w_cache_write,input_wo_cache,cache_read,output_tokens,total_tokens,cost_usd,notes
 ```
 
 37. Roles include at least: `inventory`, `reconcile`, `inventory_grade`, `plan`, `plan_review`, `plan_choose`, `build`, `review_security`, `review_quality`, `review_rules`, `review_clean_code`, `review_aggregate`, `fix`, `self_review`, `self_fix`, `residual_review_*`, `detect`, `vague_fix`, `orchestrate`, `grill`, `grill_inventory`.  
-38. Paste Cursor/OpenCode usage when the turn ends; if unavailable, still append the row and reconcile from export later.  
-39. Headline tables: **builder-only `$`** vs **full-pipeline `$`** (includes reviewer panel). Fill SCOREBOARD Cost at every test gate from the CSV — empty Cost section = gate fail.  
+38. Paste Cursor/OpenCode usage when the turn ends; if unavailable, append with `usage_missing_pending_export` and **backfill before the test gate**.  
+39. Headline tables: **builder-only `$`** vs **full-pipeline `$`**. Fill SCOREBOARD Cost at every test gate from the CSV.  
 40. Test 5 **solo TCO** = lineage build + self-review + self-fix; residual reviewer = audit line item.  
-40b. Gate check: `scripts/verify-cost-ledger.ps1 -RunId …` must print `ok=true` before declaring a test done. How-to: `template/orchestrator/COST-LEDGER-HOWTO.md`.
+40b. Gate: `scripts/verify-cost-ledger.ps1 -RunId … -RequireUsage` → `ok=true` before declaring a test done. How-to: `template/orchestrator/COST-LEDGER-HOWTO.md`.
 
 ### Public packaging
 

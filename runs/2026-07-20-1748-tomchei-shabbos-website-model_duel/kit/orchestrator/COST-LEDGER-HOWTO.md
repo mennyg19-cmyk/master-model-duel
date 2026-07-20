@@ -2,47 +2,63 @@
 
 File: `runs/{run_id}/results/COST-LEDGER.csv`
 
-## Hard gate
+## Why tokens/$ are often blank (Cursor Task)
 
-A spawn is **not done** until a ledger row exists for it.
+Cursor **Task/subagent** spawn does **not** return token or dollar totals to the parent chat in a structured field.  
+So if you only run `append-cost-ledger.ps1` with `-Role` / `-AgentId` / notes, the CSV gets a row but **empty** `total_tokens` / `cost_usd`.
+
+That is not “ledger broken” — usage was never passed in. Fix by capturing usage (below) or backfilling from Cursor’s export.
+
+## Hard gate
 
 | Rule | Detail |
 |---|---|
-| When | **Immediately after every spawn returns** (contestant, specialist, merge, reviewer, reconciler, grader, chooser, fix, detect) |
-| How | Prefer `scripts/append-cost-ledger.ps1` (do not hand-edit unless the script fails) |
-| Missing $ / tokens | **Still append.** Script adds `usage_missing_pending_export` in notes. Never skip the row. |
-| Before next spawn | Confirm previous row landed (`verify-cost-ledger.ps1` or open the CSV) |
-| Before test / phase gate | Ledger must cover that test’s spawns; fill SCOREBOARD **Cost** from the CSV. Empty Cost table = **gate fail** |
-| Contestants | Never write the ledger — orchestrator only |
+| When | **Immediately after every spawn returns** |
+| How | `scripts/append-cost-ledger.ps1` with **`-TotalTokens` and/or `-CostUsd` whenever known** |
+| Cursor | Turn on **Settings → Agents → Usage Summary → Always**. After each Task finishes, read the usage/`$` line and pass those numbers into append. |
+| OpenCode | Parse CLI usage if printed; pass into append. |
+| Still unknown? | Append anyway (notes=`usage_missing_pending_export`) — **provisional only**. Do not claim the test’s Cost gate is done. |
+| Before next spawn | Row must exist (`appended=1`). Prefer `usage=present`. |
+| Before test gate | `verify-cost-ledger.ps1 -RequireUsage` must print `ok=true`, **or** you have backfilled from export and then verify. Empty SCOREBOARD Cost = fail. |
 
-Skipping the ledger to “move faster” is a protocol violation. Log it in `results/DEVIATIONS.md` if it already happened, then backfill.
-
-## Append (required command)
+## Append (required)
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/append-cost-ledger.ps1 `
-  -RunId "{run_id}" `
-  -Test "1a" `
-  -ArmId "arm-01" `
-  -Role "inventory" `
-  -Model "{model_slug}" `
-  -Phase "" `
-  -AgentId "{cursor_agent_id_if_known}" `
-  -TotalTokens "{n_or_blank}" `
-  -CostUsd "{dollars_or_blank}" `
-  -Notes "job=product"
+  -RunId "{run_id}" -Test "4" -ArmId "arm-01" -Role "build" -Model "{slug}" `
+  -Phase "P3" -AgentId "{task_id}" `
+  -TotalTokens "123456" -CostUsd "1.23" `
+  -InputWithCacheWrite "" -InputWithoutCache "" -CacheRead "" -OutputTokens "" `
+  -Notes "…"
 ```
 
-OpenCode: pull usage from CLI output when available.  
-Cursor: paste usage/`Cost` from the Task turn when shown; otherwise leave blank + `usage_missing_pending_export`.
+If append prints `usage=MISSING`, you still owe tokens/`$` before the test gate.
 
-## Verify (gate)
+## Backfill from Cursor dashboard (when live paste failed)
+
+1. https://cursor.com/dashboard/usage → Export CSV for the duel days  
+2. Save as `runs/{run_id}/.scratch/cursor-usage-export.csv`  
+3. Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-cost-ledger.ps1 -RunId "{run_id}" -MinRows 1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backfill-cost-ledger.ps1 -RunId "{run_id}"
 ```
 
-After Test 1a example (2 arms, focused off): expect rows for each inventory + reconcile + inventory_grade (at least). Use `-RequireRoles` when checking a finished test.
+Matches by model + timestamp window (~20 min). Then:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-cost-ledger.ps1 -RunId "{run_id}" -RequireUsage
+```
+
+## Verify
+
+```powershell
+# rows exist
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-cost-ledger.ps1 -RunId "{run_id}" -MinRows 1
+
+# tokens or $ present on every real spawn (test gate)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-cost-ledger.ps1 -RunId "{run_id}" -RequireUsage
+```
 
 ## Columns
 
@@ -57,15 +73,9 @@ After Test 1a example (2 arms, focused off): expect rows for each inventory + re
 | model | slug |
 | agent_id | Cursor/OpenCode agent id if known |
 | kind | input/output split if known |
-| *_tokens / cost_usd | numbers or blank |
-| notes | pack id, job id, usage_missing_pending_export |
+| *_tokens / cost_usd | **required by test gate** (live or backfill) |
+| notes | pack id, job id, usage_missing_pending_export, backfilled_from_cursor_csv |
 
 ## Scoreboard Cost section
 
-At every test gate, roll the CSV into SCOREBOARD:
-
-- **Builder-only $:** roles `inventory`, `grill`, `plan`, `build`, `fix`, `self_*`, `detect`, `vague_fix`  
-- **Full pipeline $:** everything including reviewer panel  
-- **Solo TCO (T5):** lineage build for that tree + `self_review` + `self_fix` (exclude residual reviewer)
-
-If the CSV has rows but SCOREBOARD Cost is blank, the gate is incomplete.
+Roll CSV into SCOREBOARD at every test gate (builder-only / full pipeline / solo TCO). Blank Cost while spawns ran = incomplete.

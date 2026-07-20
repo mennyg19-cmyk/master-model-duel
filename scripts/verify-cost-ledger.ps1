@@ -1,12 +1,13 @@
-# Gate check: COST-LEDGER must have data rows; optionally require min rows / roles.
+# Gate check: COST-LEDGER must have data rows; optionally require min rows / roles / usage.
 # Exit 0 = ok; exit 1 = gate fail (print missing=).
 #
-#   powershell -File scripts/verify-cost-ledger.ps1 -RunId "..." [-MinRows 1] [-RequireRoles inventory,reconcile]
+#   powershell -File scripts/verify-cost-ledger.ps1 -RunId "..." [-MinRows 1] [-RequireRoles inventory,reconcile] [-RequireUsage]
 
 param(
   [Parameter(Mandatory = $true)][string]$RunId,
   [int]$MinRows = 1,
-  [string]$RequireRoles = ""
+  [string]$RequireRoles = "",
+  [switch]$RequireUsage
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,6 +52,27 @@ if ($RequireRoles) {
   if ($miss.Count -gt 0) {
     Write-Output "ok=false"
     Write-Output ("missing_roles=" + ($miss -join ","))
+    exit 1
+  }
+}
+
+if ($RequireUsage) {
+  $csv = Import-Csv $ledger
+  $blank = @()
+  foreach ($r in $csv) {
+    if ($r.role -eq "orchestrate" -and $r.model -eq "orchestrator") { continue }
+    $hasTokens = ($r.total_tokens -and $r.total_tokens.Trim() -ne "")
+    $hasCost = ($r.cost_usd -and $r.cost_usd.Trim() -ne "")
+    if (-not $hasTokens -and -not $hasCost) {
+      $blank += "$($r.test)/$($r.arm_id)/$($r.role)/$($r.timestamp_utc)"
+    }
+  }
+  Write-Output "usage_blank=$($blank.Count)"
+  if ($blank.Count -gt 0) {
+    Write-Output "ok=false"
+    Write-Output "missing=usage_tokens_or_cost"
+    Write-Output "hint=Pass -TotalTokens/-CostUsd on append, or run scripts/backfill-cost-ledger.ps1 after Cursor usage CSV export"
+    Write-Output ("blank_sample=" + (($blank | Select-Object -First 5) -join " | "))
     exit 1
   }
 }

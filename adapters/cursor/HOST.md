@@ -15,8 +15,11 @@
 
 ## Cost (hard gate)
 
-After **every** Task spawn, run `scripts/append-cost-ledger.ps1` before the next spawn. Paste Cursor usage/`Cost` into `-CostUsd` / token fields when shown; if missing, still append (notes get `usage_missing_pending_export`).  
-Do not mark a test done until `scripts/verify-cost-ledger.ps1` prints `ok=true` and SCOREBOARD Cost is filled. See `results/COST-LEDGER-HOWTO.md`.
+After **every** Task spawn, run `scripts/append-cost-ledger.ps1` with **token/`$` from Usage Summary** (Settings → Agents → Usage Summary → Always). Cursor Task does **not** auto-fill the ledger — you must copy the numbers.  
+
+If you missed them: export https://cursor.com/dashboard/usage CSV → `runs/{id}/.scratch/cursor-usage-export.csv` → `scripts/backfill-cost-ledger.ps1`.  
+
+Test gate: `verify-cost-ledger.ps1 -RequireUsage`. See `results/COST-LEDGER-HOWTO.md`.
 
 ## Model ids
 
