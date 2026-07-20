@@ -2,7 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
-import { findOrLinkCustomer, normalizePhone } from "@/lib/customers";
+import { customerSearchWhere, findOrLinkCustomer } from "@/lib/customers";
 
 const SEARCH_LIMIT = 20;
 
@@ -14,18 +14,8 @@ export async function GET(request: Request) {
   const q = (new URL(request.url).searchParams.get("q") ?? "").trim().slice(0, 100);
   if (!q) return Response.json({ customers: [] });
 
-  // Only treat the query as a phone number when it looks like one; otherwise
-  // digits embedded in a name/email would fuzzy-match unrelated phone records.
-  const looksLikePhone = /^[\d\s\-().+]+$/.test(q);
-  const phoneDigits = looksLikePhone ? normalizePhone(q) : null;
   const customers = await db.customer.findMany({
-    where: {
-      OR: [
-        { name: { contains: q, mode: "insensitive" } },
-        { email: { contains: q, mode: "insensitive" } },
-        ...(phoneDigits && phoneDigits.length >= 4 ? [{ phoneNormalized: { contains: phoneDigits } }] : []),
-      ],
-    },
+    where: customerSearchWhere(q),
     select: { id: true, name: true, email: true, phone: true },
     orderBy: [{ name: "asc" }, { id: "asc" }],
     take: SEARCH_LIMIT,

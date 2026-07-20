@@ -9,6 +9,23 @@ export function normalizePhone(phone: string | null | undefined): string | null 
   return digits.length > 0 ? digits : null;
 }
 
+/**
+ * Single source for staff customer search (directory page + lookup API).
+ * The query only matches phones when it LOOKS like a phone number — digits
+ * embedded in a name/email must not fuzzy-match unrelated phone records.
+ */
+export function customerSearchWhere(q: string) {
+  const looksLikePhone = /^[\d\s\-().+]+$/.test(q);
+  const phoneDigits = looksLikePhone ? normalizePhone(q) : null;
+  return {
+    OR: [
+      { name: { contains: q, mode: "insensitive" as const } },
+      { email: { contains: q, mode: "insensitive" as const } },
+      ...(phoneDigits && phoneDigits.length >= 4 ? [{ phoneNormalized: { contains: phoneDigits } }] : []),
+    ],
+  };
+}
+
 // Links a customer record to a login identity (Clerk user id in clerk mode).
 // Matches by identity first, then by email. Phone is NEVER used for matching:
 // supplying someone else's phone number must not link you to (or let you set a

@@ -1,4 +1,5 @@
-import type { PaymentMethod, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { recalcPaymentStatus } from "@/lib/domain/payment-status";
 import { writeAudit } from "@/lib/audit";
@@ -58,6 +59,101 @@ export async function recordRefund(entry: {
     });
     await recalcPaymentStatus(tx, entry.orderId);
     return refund;
+  });
+}
+
+class RefundConflictError extends Error {}
+
+export type StaffRefundStart = { ok: true; paymentId: string } | { ok: false; error: string };
+
+/**
+ * Staff refund, DB-first (no double-refund): the negative row commits BEFORE
+ * Stripe is called, holding the unique stripeRefundId slot with a placeholder
+ * derived from the stable idempotency key. Two concurrent attempts at the same
+ * logical refund collide on that unique key — the loser gets a conflict, never
+ * a second refund. The refundable check is scoped to THIS payment intent and
+ * re-run inside the transaction, and the audit row commits atomically with it.
+ */
+export async function beginStaffRefund(entry: {
+  orderId: string;
+  stripePaymentIntentId: string;
+  chargeAmountCents: number;
+  amountCents: number;
+  idempotencyKey: string;
+  note: string;
+  staff: StaffContext;
+}): Promise<StaffRefundStart> {
+  try {
+    const payment = await db.$transaction(async (tx) => {
+      const refunded = await tx.payment.aggregate({
+        where: {
+          stripePaymentIntentId: entry.stripePaymentIntentId,
+          state: "POSTED",
+          amountCents: { lt: 0 },
+        },
+        _sum: { amountCents: true },
+      });
+      const refundable = entry.chargeAmountCents + (refunded._sum.amountCents ?? 0);
+      if (entry.amountCents > refundable) {
+        throw new RefundConflictError(`Only ${refundable} cents remain refundable on this payment`);
+      }
+      const row = await tx.payment.create({
+        data: {
+          orderId: entry.orderId,
+          method: "STRIPE",
+          amountCents: -Math.abs(entry.amountCents),
+          note: entry.note,
+          stripeRefundId: `pending_${entry.idempotencyKey}`,
+          stripePaymentIntentId: entry.stripePaymentIntentId,
+        },
+      });
+      await recalcPaymentStatus(tx, entry.orderId);
+      await writeAudit(
+        entry.staff,
+        {
+          action: "payment.refund",
+          targetType: "Order",
+          targetId: entry.orderId,
+          detail: {
+            paymentId: row.id,
+            stripePaymentIntentId: entry.stripePaymentIntentId,
+            amountCents: entry.amountCents,
+          },
+        },
+        tx
+      );
+      return row;
+    });
+    return { ok: true, paymentId: payment.id };
+  } catch (error) {
+    if (error instanceof RefundConflictError) return { ok: false, error: error.message };
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { ok: false, error: "This refund is already in progress or was already issued" };
+    }
+    throw error;
+  }
+}
+
+/** Swap the placeholder for Stripe's real refund id once the gateway confirms. */
+export async function resolveStaffRefund(paymentId: string, stripeRefundId: string): Promise<void> {
+  try {
+    await db.payment.update({ where: { id: paymentId }, data: { stripeRefundId } });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      // The webhook already recorded this refund under its real id — drop our
+      // placeholder row so the ledger holds the refund exactly once.
+      await cancelStaffRefund(paymentId);
+      return;
+    }
+    throw error;
+  }
+}
+
+/** Roll the DB row back when the gateway refused the refund (no money moved). */
+export async function cancelStaffRefund(paymentId: string): Promise<void> {
+  await db.$transaction(async (tx) => {
+    const row = await tx.payment.delete({ where: { id: paymentId } });
+    await recalcPaymentStatus(tx, row.orderId);
   });
 }
 

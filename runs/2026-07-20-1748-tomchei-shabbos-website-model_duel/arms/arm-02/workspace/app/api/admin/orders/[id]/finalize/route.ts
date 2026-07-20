@@ -17,12 +17,20 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
 
   try {
-    const finalized = await finalizeOrder(id, gate.staff.realUser.id);
-    await writeAudit(gate.staff, {
-      action: "order.finalize",
-      targetType: "Order",
-      targetId: id,
-      detail: { orderNumber: finalized.orderNumber },
+    // Audit commits atomically with the state change (same pattern as void/post).
+    const finalized = await db.$transaction(async (tx) => {
+      const result = await finalizeOrder(id, gate.staff.realUser.id, tx);
+      await writeAudit(
+        gate.staff,
+        {
+          action: "order.finalize",
+          targetType: "Order",
+          targetId: id,
+          detail: { orderNumber: result.orderNumber },
+        },
+        tx
+      );
+      return result;
     });
     return Response.json({ ok: true, orderNumber: finalized.orderNumber });
   } catch (error) {

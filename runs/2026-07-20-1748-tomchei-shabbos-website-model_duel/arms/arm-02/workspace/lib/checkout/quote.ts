@@ -19,6 +19,14 @@ export type CheckoutQuote = {
   fees: FeeResult | null;
 };
 
+/** Cart + per-line issues flattened to one display list (POS and web quote routes). */
+export function flattenQuoteIssues(priced: PricedCart): string[] {
+  return [
+    ...priced.issues,
+    ...priced.lines.flatMap((line) => line.issues.map((issue) => `${line.productName}: ${issue}`)),
+  ];
+}
+
 export async function loadFeeRuleConfig(): Promise<FeeRuleConfig> {
   const [rules, deliveryZips, purimDayChoices, rates] = await Promise.all([
     getSetting("shipping.rules"),

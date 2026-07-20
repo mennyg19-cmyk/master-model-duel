@@ -45,6 +45,22 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
     .filter((payment) => payment.state === "POSTED")
     .reduce((sum, payment) => sum + payment.amountCents, 0);
   const permissions = staff.actingAs.permissions;
+  // Only offer the refund form when the API can actually honor it: the order
+  // isn't discarded, a posted Stripe charge exists, and refunds haven't already
+  // consumed it (posted Stripe rows net positive).
+  const stripePostedCents = order.payments
+    .filter((payment) => payment.method === "STRIPE" && payment.state === "POSTED")
+    .reduce((sum, payment) => sum + payment.amountCents, 0);
+  const hasRefundableStripe =
+    order.status !== "DISCARDED" &&
+    stripePostedCents > 0 &&
+    order.payments.some(
+      (payment) =>
+        payment.method === "STRIPE" &&
+        payment.state === "POSTED" &&
+        payment.amountCents > 0 &&
+        payment.stripePaymentIntentId !== null
+    );
   const feeBreakdown = Array.isArray(order.feeBreakdown)
     ? (order.feeBreakdown as { label: string; amountCents: number }[])
     : [];
@@ -159,7 +175,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
               balanceCents={order.totalCents - postedCents}
               can={{
                 record: permissions.has("payments.record"),
-                refund: permissions.has("payments.refund"),
+                refund: permissions.has("payments.refund") && hasRefundableStripe,
                 manage: permissions.has("orders.manage"),
               }}
               payments={order.payments.map((payment) => ({

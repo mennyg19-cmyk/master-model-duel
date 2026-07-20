@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "@/lib/api-client";
 
 // Bulk order actions with deterministic conflict reporting (G-024): the API
 // processes sorted ids one guarded transaction each and reports done/skipped;
@@ -64,17 +65,15 @@ export function OrderBulkActions({
     setBusy(true);
     setReport(null);
     try {
-      const response = await fetch("/api/admin/orders/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ids: [...selected] }),
-      });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        setReport({ action, done: [], skipped: [{ id: "request", reason: body?.error ?? `HTTP ${response.status}` }] });
+      const result = await apiFetch<{ done: string[]; skipped: { id: string; reason: string }[] }>(
+        "/api/admin/orders/bulk",
+        { method: "POST", body: { action, ids: [...selected] } }
+      );
+      if (!result.ok) {
+        setReport({ action, done: [], skipped: [{ id: "request", reason: result.error }] });
         return;
       }
-      setReport({ action, done: body.done, skipped: body.skipped });
+      setReport({ action, done: result.body.done, skipped: result.body.skipped });
       setSelected(new Set());
       router.refresh();
     } finally {

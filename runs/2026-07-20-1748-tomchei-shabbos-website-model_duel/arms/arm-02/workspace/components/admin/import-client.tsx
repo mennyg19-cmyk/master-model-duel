@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -35,23 +36,21 @@ export function ImportClient({ canCustomers, canProducts }: { canCustomers: bool
     setError(null);
     setResult(null);
     try {
-      const response = await fetch("/api/admin/import", {
+      const outcome = await apiFetch<Preview & { created: number; skippedDuplicates: number }>("/api/admin/import", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, mode, csv }),
+        body: { kind, mode, csv },
       });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        setError(body?.error ?? `Request failed (${response.status})`);
+      if (!outcome.ok) {
+        setError(outcome.error);
         if (mode === "commit") setPreview(null);
         return;
       }
       if (mode === "preview") {
-        setPreview(body);
+        setPreview(outcome.body);
       } else {
         setPreview(null);
         setCsv("");
-        setResult(`Imported ${body.created} new ${kind}; skipped ${body.skippedDuplicates} duplicate rows.`);
+        setResult(`Imported ${outcome.body.created} new ${kind}; skipped ${outcome.body.skippedDuplicates} duplicate rows.`);
       }
     } finally {
       setBusy(false);

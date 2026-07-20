@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { db } from "@/lib/db";
 import { getOpenSeason } from "@/lib/season";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
@@ -67,45 +68,56 @@ export async function POST(request: Request) {
     );
   }
 
-  // Money first, then finalize (stock reserve + order number + packages). If
-  // finalize hits a stock conflict the order stays DRAFT with the payment
-  // attached and staff resolves it from the order detail page.
+  // Payment, finalize (stock reserve + order number + packages), and both
+  // audit rows commit in ONE transaction: a stock conflict rolls the money
+  // back too, so no DRAFT order is ever left holding a POSTED payment.
   const amountCents = input.payment.amountCents ?? result.totalCents;
-  const payment = await postPayment({
-    orderId: result.orderId,
-    method: input.payment.method,
-    amountCents,
-    note: input.payment.note ?? "POS payment",
-  });
-  await writeAudit(gate.staff, {
-    action: "pos.payment.post",
-    targetType: "Order",
-    targetId: result.orderId,
-    detail: { paymentId: payment.id, method: input.payment.method, amountCents },
-  });
-
-  let orderNumber: number | null = null;
-  let finalizeError: string | null = null;
+  let orderNumber: number | null;
   try {
-    const finalized = await finalizeOrder(result.orderId, gate.staff.realUser.id);
-    orderNumber = finalized.orderNumber;
-    await writeAudit(gate.staff, {
-      action: "pos.checkout",
-      targetType: "Order",
-      targetId: result.orderId,
-      detail: { orderNumber, totalCents: result.totalCents, method: input.payment.method },
+    orderNumber = await db.$transaction(async (tx) => {
+      const payment = await postPayment({
+        orderId: result.orderId,
+        method: input.payment.method,
+        amountCents,
+        note: input.payment.note ?? "POS payment",
+        tx,
+      });
+      await writeAudit(
+        gate.staff,
+        {
+          action: "pos.payment.post",
+          targetType: "Order",
+          targetId: result.orderId,
+          detail: { paymentId: payment.id, method: input.payment.method, amountCents },
+        },
+        tx
+      );
+      const finalized = await finalizeOrder(result.orderId, gate.staff.realUser.id, tx);
+      await writeAudit(
+        gate.staff,
+        {
+          action: "pos.checkout",
+          targetType: "Order",
+          targetId: result.orderId,
+          detail: { orderNumber: finalized.orderNumber, totalCents: result.totalCents, method: input.payment.method },
+        },
+        tx
+      );
+      return finalized.orderNumber;
     });
-    await completeDraft(draft.id, false);
   } catch (error) {
-    finalizeError = error instanceof Error ? error.message : "Finalize failed";
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Finalize failed" },
+      { status: 409 }
+    );
   }
+  await completeDraft(draft.id, false);
 
   return Response.json({
-    ok: finalizeError === null,
+    ok: true,
     orderId: result.orderId,
     orderNumber,
     totalCents: result.totalCents,
     paidCents: amountCents,
-    error: finalizeError,
   });
 }

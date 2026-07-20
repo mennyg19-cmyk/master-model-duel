@@ -3,7 +3,7 @@ import { getOpenSeason } from "@/lib/season";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { cartSchema } from "@/lib/order-builder/cart";
 import { posDraftOwner, findActiveDraft } from "@/lib/order-builder/draft-store";
-import { buildCheckoutQuote } from "@/lib/checkout/quote";
+import { buildCheckoutQuote, flattenQuoteIssues } from "@/lib/checkout/quote";
 
 const quoteSchema = z.object({
   customerId: z.string().min(1),
@@ -35,10 +35,7 @@ export async function POST(request: Request) {
 
   return Response.json({
     itemsCents: quote.priced.totalCents,
-    issues: [
-      ...quote.priced.issues,
-      ...quote.priced.lines.flatMap((line) => line.issues.map((issue) => `${line.productName}: ${issue}`)),
-    ],
+    issues: flattenQuoteIssues(quote.priced),
     recipients: quote.recipients.map((recipient) => ({
       key: recipient.key,
       recipientName: recipient.recipientName,

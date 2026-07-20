@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getOpenSeason } from "@/lib/season";
 import { guardPublicEndpoint } from "@/lib/public-guard";
 import { parseCart, resolveDraftOwner, findActiveDraft } from "@/lib/order-builder/draft-store";
-import { buildCheckoutQuote } from "@/lib/checkout/quote";
+import { buildCheckoutQuote, flattenQuoteIssues } from "@/lib/checkout/quote";
 
 const quoteSchema = z.object({
   choices: z.array(z.object({ recipientKey: z.string().min(1), methodId: z.string().min(1) })).max(200),
@@ -39,10 +39,7 @@ export async function POST(request: Request) {
 
   return Response.json({
     itemsCents: quote.priced.totalCents,
-    issues: [
-      ...quote.priced.issues,
-      ...quote.priced.lines.flatMap((line) => line.issues.map((issue) => `${line.productName}: ${issue}`)),
-    ],
+    issues: flattenQuoteIssues(quote.priced),
     fees: quote.fees,
   });
 }

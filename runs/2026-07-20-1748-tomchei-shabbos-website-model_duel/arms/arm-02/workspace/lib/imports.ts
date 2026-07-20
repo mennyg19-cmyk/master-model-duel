@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { parseCsv } from "@/lib/csv";
 import { normalizePhone } from "@/lib/customers";
@@ -129,45 +129,57 @@ export async function commitImport(kind: ImportKind, csv: string, seasonId: stri
     return { ok: false, error: "No new rows to import — everything was a duplicate" };
   }
 
-  await db.$transaction(async (tx) => {
-    if (kind === "customers") {
-      // Phone dedupe rule matches findOrLinkCustomer: a number someone else
-      // already owns (in the DB or earlier in this file) is stored raw-only.
-      const phones = validRows
-        .map((row) => normalizePhone(row.values.phone))
-        .filter((phone): phone is string => phone !== null);
-      const taken = new Set(
-        (
-          await tx.customer.findMany({
-            where: { phoneNormalized: { in: phones } },
-            select: { phoneNormalized: true },
-          })
-        ).map((row) => row.phoneNormalized as string)
-      );
-      const data: Prisma.CustomerCreateManyInput[] = validRows.map((row) => {
-        const phoneNormalized = normalizePhone(row.values.phone);
-        const phoneFree = phoneNormalized !== null && !taken.has(phoneNormalized);
-        if (phoneNormalized) taken.add(phoneNormalized);
-        return {
+  try {
+    await db.$transaction(async (tx) => {
+      if (kind === "customers") {
+        // Phone dedupe rule matches findOrLinkCustomer: a number someone else
+        // already owns (in the DB or earlier in this file) is stored raw-only.
+        const phones = validRows
+          .map((row) => normalizePhone(row.values.phone))
+          .filter((phone): phone is string => phone !== null);
+        const taken = new Set(
+          (
+            await tx.customer.findMany({
+              where: { phoneNormalized: { in: phones } },
+              select: { phoneNormalized: true },
+            })
+          ).map((row) => row.phoneNormalized as string)
+        );
+        const data: Prisma.CustomerCreateManyInput[] = validRows.map((row) => {
+          const phoneNormalized = normalizePhone(row.values.phone);
+          const phoneFree = phoneNormalized !== null && !taken.has(phoneNormalized);
+          if (phoneNormalized) taken.add(phoneNormalized);
+          return {
+            name: row.values.name,
+            email: row.values.email.toLowerCase(),
+            phone: row.values.phone || null,
+            phoneNormalized: phoneFree ? phoneNormalized : null,
+          };
+        });
+        await tx.customer.createMany({ data });
+      } else {
+        const data: Prisma.ProductCreateManyInput[] = validRows.map((row) => ({
+          seasonId,
           name: row.values.name,
-          email: row.values.email.toLowerCase(),
-          phone: row.values.phone || null,
-          phoneNormalized: phoneFree ? phoneNormalized : null,
-        };
-      });
-      await tx.customer.createMany({ data });
-    } else {
-      const data: Prisma.ProductCreateManyInput[] = validRows.map((row) => ({
-        seasonId,
-        name: row.values.name,
-        slug: row.values.slug,
-        category: row.values.category || null,
-        description: row.values.description || null,
-        basePriceCents: Number.parseInt(row.values.pricecents, 10),
-      }));
-      await tx.product.createMany({ data });
+          slug: row.values.slug,
+          category: row.values.category || null,
+          description: row.values.description || null,
+          basePriceCents: Number.parseInt(row.values.pricecents, 10),
+        }));
+        await tx.product.createMany({ data });
+      }
+    });
+  } catch (error) {
+    // A row created between staging and commit trips the unique constraint:
+    // report it as the duplicate it is, not an unhandled 500.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return {
+        ok: false,
+        error: `A ${kind === "customers" ? "customer email" : "product slug"} in this file was created by someone else since staging — re-stage to see the new duplicates`,
+      };
     }
-  });
+    throw error;
+  }
 
   return { ok: true, created: validRows.length, skippedDuplicates: staged.duplicates };
 }

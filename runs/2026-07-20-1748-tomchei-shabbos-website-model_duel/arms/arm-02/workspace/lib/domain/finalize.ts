@@ -17,8 +17,8 @@ type LineWithInventory = Prisma.OrderLineGetPayload<{ include: typeof lineInclud
 // updateMany runs FIRST so the loser of two concurrent finalizations of the
 // same order aborts before it touches the Season counter — the counter is
 // only ever incremented by the transaction that wins the status flip.
-export async function finalizeOrder(orderId: string, actorStaffId?: string) {
-  return db.$transaction(async (tx) => {
+export async function finalizeOrder(orderId: string, actorStaffId?: string, outerTx?: Prisma.TransactionClient) {
+  const run = async (tx: Prisma.TransactionClient) => {
     const order = await tx.order.findUniqueOrThrow({
       where: { id: orderId },
       include: { lines: { include: lineInclude } },
@@ -43,11 +43,12 @@ export async function finalizeOrder(orderId: string, actorStaffId?: string) {
 
     await assignLinesToPackages(tx, order.seasonId, order.lines, actorStaffId);
     return tx.order.findUniqueOrThrow({ where: { id: orderId } });
-  });
+  };
+  return outerTx ? run(outerTx) : db.$transaction(run);
 }
 
-export async function discardOrder(orderId: string) {
-  return db.$transaction(async (tx) => {
+export async function discardOrder(orderId: string, outerTx?: Prisma.TransactionClient) {
+  const run = async (tx: Prisma.TransactionClient) => {
     const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
     assertTransition(order.status, "DISCARDED");
     const flipped = await tx.order.updateMany({
@@ -58,7 +59,8 @@ export async function discardOrder(orderId: string) {
       throw new Error(`Order ${orderId} was finalized or discarded by a concurrent request`);
     }
     return tx.order.findUniqueOrThrow({ where: { id: orderId } });
-  });
+  };
+  return outerTx ? run(outerTx) : db.$transaction(run);
 }
 
 // Reserve stock for every tracked product / add-on on the order's lines

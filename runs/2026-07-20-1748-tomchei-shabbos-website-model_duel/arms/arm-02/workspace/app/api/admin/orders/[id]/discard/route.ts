@@ -13,8 +13,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
 
   try {
-    await discardOrder(id);
-    await writeAudit(gate.staff, { action: "order.discard", targetType: "Order", targetId: id });
+    // Audit commits atomically with the state change (same pattern as void/post).
+    await db.$transaction(async (tx) => {
+      await discardOrder(id, tx);
+      await writeAudit(gate.staff, { action: "order.discard", targetType: "Order", targetId: id }, tx);
+    });
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Discard failed" }, { status: 409 });

@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { env } from "@/lib/env";
 
 // Stripe gateway (R-166, R-170). Two implementations behind one type:
@@ -25,18 +25,28 @@ export type RefundResult = { refundId: string; amountCents: number };
 export type PaymentGateway = {
   mode: "stripe" | "mock";
   createCheckoutSession(request: CheckoutSessionRequest): Promise<CheckoutSession>;
-  /** Full or partial refund against a payment intent. */
-  createRefund(paymentIntentId: string, amountCents: number): Promise<RefundResult>;
+  /**
+   * Full or partial refund against a payment intent. The caller-supplied
+   * idempotencyKey makes retries of the same logical refund safe: Stripe
+   * (and the mock) return the original refund instead of moving money twice.
+   */
+  createRefund(paymentIntentId: string, amountCents: number, idempotencyKey: string): Promise<RefundResult>;
 };
 
 const STRIPE_API = "https://api.stripe.com/v1";
 
-async function stripeRequest<T>(secretKey: string, path: string, form: Record<string, string>): Promise<T> {
+async function stripeRequest<T>(
+  secretKey: string,
+  path: string,
+  form: Record<string, string>,
+  idempotencyKey?: string
+): Promise<T> {
   const response = await fetch(`${STRIPE_API}${path}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${secretKey}`,
       "Content-Type": "application/x-www-form-urlencoded",
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
     },
     body: new URLSearchParams(form).toString(),
   });
@@ -66,11 +76,13 @@ function realGateway(secretKey: string): PaymentGateway {
       });
       return { sessionId: session.id, url: session.url };
     },
-    async createRefund(paymentIntentId, amountCents) {
-      const refund = await stripeRequest<{ id: string; amount: number }>(secretKey, "/refunds", {
-        payment_intent: paymentIntentId,
-        amount: String(amountCents),
-      });
+    async createRefund(paymentIntentId, amountCents, idempotencyKey) {
+      const refund = await stripeRequest<{ id: string; amount: number }>(
+        secretKey,
+        "/refunds",
+        { payment_intent: paymentIntentId, amount: String(amountCents) },
+        idempotencyKey
+      );
       return { refundId: refund.id, amountCents: refund.amount };
     },
   };
@@ -87,8 +99,11 @@ function mockGateway(): PaymentGateway {
       url.searchParams.set("cancel", request.cancelUrl);
       return { sessionId, url: url.toString() };
     },
-    async createRefund(_paymentIntentId, amountCents) {
-      return { refundId: `re_mock_${randomBytes(12).toString("hex")}`, amountCents };
+    async createRefund(_paymentIntentId, amountCents, idempotencyKey) {
+      // Deterministic id from the idempotency key: a retried refund maps to
+      // the same mock refund, mirroring Stripe's idempotency behavior.
+      const digest = createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 24);
+      return { refundId: `re_mock_${digest}`, amountCents };
     },
   };
 }

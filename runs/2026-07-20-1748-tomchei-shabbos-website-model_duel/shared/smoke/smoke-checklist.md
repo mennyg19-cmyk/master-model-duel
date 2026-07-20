@@ -52,12 +52,12 @@ See `shared/phases/PHASE-P5-EXPECTED.md`. Both arms P5 **gated**.
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Ops hub | ✓ | |
-| S2 | POS | ✓ | |
-| S3 | Import | ✓ | |
-| S4 | Scale | ✓ | |
+| S1 | Ops hub | ✓ | ✓ |
+| S2 | POS | ✓ | ✓ |
+| S3 | Import | ✓ | ✓ |
+| S4 | Scale | ✓ | ✓ |
 
-See `shared/phases/PHASE-P6-EXPECTED.md`. arm-01 P6 **gated**.
+See `shared/phases/PHASE-P6-EXPECTED.md`. Both arms P6 **gated**.
 
 ## P7
 

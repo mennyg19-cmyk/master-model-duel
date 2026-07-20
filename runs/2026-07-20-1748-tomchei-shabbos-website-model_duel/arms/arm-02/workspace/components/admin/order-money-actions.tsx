@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "@/lib/api-client";
 import { formatCents } from "@/lib/catalog";
 import { Badge } from "@/components/ui/badge";
 
@@ -46,14 +47,9 @@ export function OrderMoneyActions({
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        setError(payload?.error ?? `Request failed (${response.status})`);
+      const result = await apiFetch(path, { method: "POST", body });
+      if (!result.ok) {
+        setError(result.error);
         return false;
       }
       router.refresh();

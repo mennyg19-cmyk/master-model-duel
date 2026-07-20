@@ -15,12 +15,13 @@ const STALE_DRAFT_MS = 60 * 60 * 1000;
 export default async function AdminDashboardPage() {
   const staff = await getStaffContext();
   const canSeeOrders = staff?.actingAs.permissions.has("orders.view") ?? false;
+  const canSeeAudit = staff?.actingAs.permissions.has("audit.view") ?? false;
   const season = await getOpenSeason();
 
   const [staffCount, customerCount, auditCount] = await Promise.all([
     db.staffUser.count(),
     db.customer.count(),
-    db.auditLog.count(),
+    canSeeAudit ? db.auditLog.count() : Promise.resolve(0),
   ]);
 
   let orderBlock: React.ReactNode = null;
@@ -187,10 +188,12 @@ export default async function AdminDashboardPage() {
           <CardTitle className="text-sm text-muted mb-1">Customers</CardTitle>
           <p className="text-3xl font-bold">{customerCount}</p>
         </Card>
-        <Card>
-          <CardTitle className="text-sm text-muted mb-1">Audit entries</CardTitle>
-          <p className="text-3xl font-bold">{auditCount}</p>
-        </Card>
+        {canSeeAudit && (
+          <Card>
+            <CardTitle className="text-sm text-muted mb-1">Audit entries</CardTitle>
+            <p className="text-3xl font-bold">{auditCount}</p>
+          </Card>
+        )}
       </div>
     </div>
   );

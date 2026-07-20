@@ -298,7 +298,9 @@ async function autoRefund(
 
   const gateway = getPaymentGateway();
   try {
-    const refund = await gateway.createRefund(paymentIntentId, amountCents);
+    // Full auto-refund of one charge: keying on the intent alone makes webhook
+    // redeliveries reuse the same Stripe refund.
+    const refund = await gateway.createRefund(paymentIntentId, amountCents, `auto-refund:${paymentIntentId}`);
     await recordRefund({
       orderId,
       amountCents,

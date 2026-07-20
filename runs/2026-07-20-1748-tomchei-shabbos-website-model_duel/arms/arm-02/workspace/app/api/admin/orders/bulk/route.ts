@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
 import { finalizeOrder, discardOrder } from "@/lib/domain/finalize";
@@ -32,8 +33,23 @@ export async function POST(request: Request) {
 
   for (const id of ids) {
     try {
-      if (action === "finalize") await finalizeOrder(id, gate.staff.realUser.id);
-      else await discardOrder(id);
+      // Per-order audit row (with targetId) commits inside the same guarded
+      // transaction as the transition, so every bulk money-adjacent state
+      // change stays individually auditable.
+      await db.$transaction(async (tx) => {
+        const finalized =
+          action === "finalize" ? await finalizeOrder(id, gate.staff.realUser.id, tx) : await discardOrder(id, tx);
+        await writeAudit(
+          gate.staff,
+          {
+            action: action === "finalize" ? "order.finalize" : "order.discard",
+            targetType: "Order",
+            targetId: id,
+            detail: { via: "bulk", ...(action === "finalize" ? { orderNumber: finalized.orderNumber } : {}) },
+          },
+          tx
+        );
+      });
       done.push(id);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -45,7 +61,7 @@ export async function POST(request: Request) {
   await writeAudit(gate.staff, {
     action: `orders.bulk_${action}`,
     targetType: "Order",
-    detail: { requested: ids.length, done: done.length, skipped: skipped.length },
+    detail: { requested: ids.length, done, skipped },
   });
 
   return Response.json({ ok: true, action, done, skipped });

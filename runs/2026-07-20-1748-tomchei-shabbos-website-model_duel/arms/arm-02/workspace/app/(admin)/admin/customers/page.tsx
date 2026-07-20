@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermissionPage } from "@/lib/auth/current-user";
-import { normalizePhone } from "@/lib/customers";
+import { customerSearchWhere } from "@/lib/customers";
 import { Card } from "@/components/ui/card";
 
 const PAGE_SIZE = 25;
@@ -18,16 +18,7 @@ export default async function AdminCustomersPage({
   const q = (params.q ?? "").trim().slice(0, 100);
   const page = Math.min(MAX_PAGE, Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1));
 
-  const phoneDigits = normalizePhone(q);
-  const where = q
-    ? {
-        OR: [
-          { name: { contains: q, mode: "insensitive" as const } },
-          { email: { contains: q, mode: "insensitive" as const } },
-          ...(phoneDigits && phoneDigits.length >= 4 ? [{ phoneNormalized: { contains: phoneDigits } }] : []),
-        ],
-      }
-    : {};
+  const where = q ? customerSearchWhere(q) : {};
 
   const [total, customers] = await Promise.all([
     db.customer.count({ where }),
