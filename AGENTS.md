@@ -21,6 +21,7 @@ Override: environment `DUEL_HOST=cursor|opencode|generic`.
 
 ## Absolutes
 
+- On **Cursor**: kickoff fixed choices → **`AskQuestion` tool only**. Never “Reply A or B.” If AskQuestion is missing from your tools, **STOP** and tell the user (`kickoff/ASK-UI.md`).
 - Protocol: `protocol/EXPERIMENT-PLAN.md`  
 - Spawns: fill prompt → `spawn-agent.ps1` → COST-LEDGER + run-state + SCOREBOARD  
 - Reviewer family must not overlap contestants  

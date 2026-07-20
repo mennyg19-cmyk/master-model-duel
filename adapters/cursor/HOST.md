@@ -2,7 +2,8 @@
 
 ## Ask UI
 
-For kickoff and other fixed choices, use Cursor’s **`AskQuestion`** tool (see `kickoff/ASK-UI.md`). Do not paste long option lists in chat when AskQuestion is available.
+Kickoff **must** use Cursor’s **`AskQuestion`** tool (clickable cards).  
+**Never** ask the user to type A/B. If AskQuestion isn’t in the agent’s tool list, stop and tell the user — see `kickoff/ASK-UI.md`.
 
 ## Orchestrator
 

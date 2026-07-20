@@ -1,29 +1,42 @@
-# Kickoff ask UI (less typing)
+# Kickoff ask UI (click, don’t type)
 
-When the **host has a structured question tool** (Cursor: `AskQuestion`), use it for every kickoff choice that has fixed options. Do **not** dump long numbered lists in chat for those.
+## Cursor — HARD RULE
 
-## Rules
+On host `cursor` you **must** call the **`AskQuestion` tool** for every fixed-choice kickoff step.
 
-1. **One question per message** (Cursor AskQuestion limit).  
-2. Prefer **short option labels**; put detail in the option description if the tool allows.  
-3. Always include at most one escape: **Something else (I will type it)** — never two “Other” options.  
-4. Mark the **recommended** option in the prompt text when there is one.  
-5. If AskQuestion (or host equivalent) is **unavailable**, ask the same question in short prose with A/B/C choices.  
-6. Freeform only when required: source path, custom model slug not in the list, custom run label, grill seed text.
+**Forbidden on Cursor (never do these for choices):**
+- “Reply A or B”
+- Markdown tables of options asking the user to type a letter
+- Numbered lists “1) 2) 3) reply with a number”
 
-## Host map
+**If `AskQuestion` is not in your tool list:**  
+STOP. Do not continue kickoff in prose. Tell the user:
+
+> AskQuestion isn’t available in this agent session, so I can’t show clickable options. Switch to a Cursor Agent chat that has the AskQuestion tool (or another model/mode), then say **start testing** again.
+
+Only then may you wait. Do **not** silently fall back to A/B.
+
+**AskQuestion usage**
+- Exactly **one** AskQuestion per assistant turn  
+- Short option labels  
+- At most one escape option: `Something else (I will type it)`  
+- Put the recommended choice in the question prompt text when there is one  
+
+## Other hosts
 
 | Host | Structured ask |
 |---|---|
-| Cursor | `AskQuestion` tool — required when available |
-| OpenCode | No standard picker yet → short A/B/C in chat (or TUI prompts if the product adds them later) |
-| Generic | Short A/B/C in chat |
+| OpenCode / generic | No Cursor AskQuestion → short A/B/C in chat is OK |
 
-## Ready-made Cursor AskQuestion sets
+## Freeform chat is OK only for
 
-Use these titles/options (adapt model lists from `MODEL-FAMILIES.json` for the detected host).
+- Absolute path to source codebase  
+- Grill seed paragraph  
+- Custom model id / custom rule pack names  
 
-### Host confirm (only if detection medium/low)
+## Ready-made AskQuestion sets (Cursor)
+
+### Host confirm (detection medium/low only)
 
 - Prompt: `Which harness should run this duel?`  
 - Options: `Cursor` | `OpenCode` | `Other (generic)` | `Something else (I will type it)`
@@ -31,51 +44,49 @@ Use these titles/options (adapt model lists from `MODEL-FAMILIES.json` for the d
 ### Q0 Run mode
 
 - Prompt: `What are you comparing?`  
-- Options: `Different models (same rules)` → `model_duel` | `Same model, different rules` → `rules_duel`
+- Options: `Different models (same rules)` | `Same model, different rules`
 
-### Q2 Contestants (model_duel) — after listing families
+### Contestant pick method (model_duel)
 
 - Prompt: `How do you want to pick contestant models?`  
-- Options: `Pick from catalog checklist (next)` | `I will type slugs` | `Something else (I will type it)`  
-- Then one AskQuestion **multi-select** if the tool supports it; else several single-selects “Add Sol high?” yes/no per suggested default pair.
+- Options: `Suggested pair next (click models)` | `I will type slugs` | `Something else (I will type it)`
 
-### Q3 Reviewer
+### Reviewer
 
-- Prompt: `Pick reviewer family (must differ from contestants).`  
-- Options: built from `reviewer_defaults` for this host + `Something else (I will type it)`
+- Prompt: `Pick reviewer (must be a different family than contestants). Recommended: GLM if contestants are Claude/GPT.`  
+- Options: build from `reviewer_defaults.cursor` in MODEL-FAMILIES + `Something else (I will type it)`
 
-### Q4 Rules
+### Rules pack
 
-- Prompt: `Rule pack for this run?`  
-- Options: `Default on (ponytail, clean-code, workflow, vocabulary, codegraph)` | `Default + testing-protocol` | `Minimal (ponytail + workflow only)` | `I'll choose each rule next` | `Something else (I will type it)`  
-- If “I'll choose each rule next”: one AskQuestion multi-select over catalog IDs when supported; else yes/no batches.
+- Prompt: `Which rule pack? (recommended: Default on)`  
+- Options: `Default on` | `Default + testing` | `Minimal` | `Choose each rule next` | `Something else (I will type it)`
 
-### Q5 Inventory spawn
+### Inventory shape
 
 - Prompt: `Test 1a codebase inventory shape?`  
-- Options: `One agent per arm` | `Focused specialists (same model, split jobs)` 
+- Options: `One agent per arm` | `Focused specialists`
 
-### Q5b Grill inventory
+### Grill inventory
 
-- Prompt: `Include grill inventory (interview you for what you want)?`  
-- Options: `Yes (recommended for rebuilds)` | `No (codebase inventory only)`
+- Prompt: `Include grill inventory (interview you)? Recommended: Yes for rebuilds.`  
+- Options: `Yes` | `No`
 
-### Q5b follow-up (if yes)
+### Grill sees codebase?
 
-- Prompt: `Should grill agents see the codebase inventory?`  
-- Options: `No (recommended)` | `Yes`
+- Prompt: `Should grill agents see the codebase inventory? Recommended: No.`  
+- Options: `No` | `Yes`
 
-### Q6 Self-review spawn
+### Self-review shape
 
 - Prompt: `Test 5 self-review shape?`  
-- Options: `One agent` | `Focused specialists (security/quality/rules/clean-code)`
+- Options: `One agent` | `Focused specialists`
 
-### Q7 Run label
+### Run id
 
 - Prompt: `Run id?`  
 - Options: `Auto (date + repo + mode)` | `Something else (I will type it)`
 
-### Q8 Confirm
+### Confirm
 
 - Prompt: `Bootstrap this run?`  
 - Options: `Yes, bootstrap` | `Change an answer` | `Cancel`
@@ -84,9 +95,3 @@ Use these titles/options (adapt model lists from `MODEL-FAMILIES.json` for the d
 
 - Prompt: `What next?`  
 - Options: `Run full suite` | `Stop — I'll say run test N` | `Something else (I will type it)`
-
-## Freeform (chat is OK)
-
-- Absolute path to source codebase  
-- Grill seed paragraph  
-- Custom model id / custom rule pack labels for rules_duel

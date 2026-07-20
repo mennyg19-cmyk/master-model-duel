@@ -4,12 +4,10 @@ Ask **one group at a time**. Do not bootstrap until all answers are locked in `r
 
 ## How to ask (important)
 
-**Prefer the host’s question UI** so the user clicks instead of typing.
+**Cursor:** use **`AskQuestion`** for every fixed choice. **Never** “Reply A or B.” Details + ready-made options: `kickoff/ASK-UI.md`.  
+If AskQuestion is missing → **STOP** (do not continue kickoff in prose).
 
-1. Read `kickoff/ASK-UI.md`.  
-2. On **Cursor**: use the **`AskQuestion` tool** for every fixed-choice kickoff step (one question per message).  
-3. Only use freeform chat for paths, seeds, and “Something else”.  
-4. If AskQuestion is missing: short A/B/C prose (same options as ASK-UI).
+**OpenCode / generic:** short A/B/C in chat is OK.
 
 ---
 
