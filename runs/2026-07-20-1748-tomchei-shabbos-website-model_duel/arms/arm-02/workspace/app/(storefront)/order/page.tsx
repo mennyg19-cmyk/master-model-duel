@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
 import { getOpenSeason } from "@/lib/season";
 import { getSetting } from "@/lib/settings";
 import { getCustomerContext } from "@/lib/auth/customer-session";
 import { getBuilderCatalog, priceCart, cartSchema } from "@/lib/order-builder/cart";
 import { resolveDraftOwner, findActiveDraft } from "@/lib/order-builder/draft-store";
+import { getCustomerAddressBook } from "@/lib/addresses/book";
 import { OrderBuilder } from "@/components/builder/order-builder";
 
 /**
@@ -40,12 +40,7 @@ export default async function OrderPage() {
   const draft = await findActiveDraft(season.id, owner);
   const cart = draft ? cartSchema.parse(draft.cart) : null;
   const priced = cart ? await priceCart(season.id, cart) : null;
-  const addressBook = customer
-    ? await db.customerAddress.findMany({
-        where: { customerId: customer.id },
-        orderBy: { updatedAt: "desc" },
-      })
-    : [];
+  const addressBook = customer ? await getCustomerAddressBook(customer.id) : [];
 
   return (
     <main className="flex flex-1" data-store-state="open">

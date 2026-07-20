@@ -607,12 +607,15 @@ model OrderDraft {
   season         Season           @relation(fields: [seasonId], references: [id])
   customerId     String?
   customer       Customer?        @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  guestTokenHash String?          @unique
+  guestTokenHash String?
   cart           Json
   status         OrderDraftStatus @default(ACTIVE)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
+  // Drafts are season-scoped, so the guest token uniqueness is too: the same
+  // 14-day guest cookie may own one draft per season without colliding.
+  @@unique([seasonId, guestTokenHash])
   @@index([customerId, status])
 }
 

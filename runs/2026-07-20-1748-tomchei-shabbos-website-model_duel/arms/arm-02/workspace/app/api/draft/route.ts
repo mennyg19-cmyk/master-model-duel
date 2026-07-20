@@ -8,7 +8,7 @@ import {
   saveDraft,
   discardDraft,
 } from "@/lib/order-builder/draft-store";
-import { saveToAddressBook } from "@/lib/addresses/book";
+import { getCustomerAddressBook, saveToAddressBook } from "@/lib/addresses/book";
 
 // The draft endpoint never takes a draft id: the draft is whatever the
 // session/guest cookie owns (R-121 anti-enumeration).
@@ -17,11 +17,7 @@ import { saveToAddressBook } from "@/lib/addresses/book";
 // priced cart: auto-saved recipients (below) create book entries the client
 // hasn't seen yet, and the sidebar renders assignments by address id.
 async function ownerAddressBook(customerId: string | null) {
-  if (!customerId) return [];
-  return db.customerAddress.findMany({
-    where: { customerId },
-    orderBy: { updatedAt: "desc" },
-  });
+  return customerId ? getCustomerAddressBook(customerId) : [];
 }
 
 export async function GET() {

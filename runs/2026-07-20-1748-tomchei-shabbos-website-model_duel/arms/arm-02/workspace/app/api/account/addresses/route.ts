@@ -1,16 +1,11 @@
-import { db } from "@/lib/db";
 import { getCustomerContext } from "@/lib/auth/customer-session";
 import { addressInputSchema } from "@/lib/addresses/normalize";
-import { saveToAddressBook } from "@/lib/addresses/book";
+import { getCustomerAddressBook, saveToAddressBook } from "@/lib/addresses/book";
 
 export async function GET() {
   const customer = await getCustomerContext();
   if (!customer) return Response.json({ error: "Sign in to see your address book" }, { status: 401 });
-  const addresses = await db.customerAddress.findMany({
-    where: { customerId: customer.id },
-    orderBy: { updatedAt: "desc" },
-  });
-  return Response.json({ addresses });
+  return Response.json({ addresses: await getCustomerAddressBook(customer.id) });
 }
 
 export async function POST(request: Request) {

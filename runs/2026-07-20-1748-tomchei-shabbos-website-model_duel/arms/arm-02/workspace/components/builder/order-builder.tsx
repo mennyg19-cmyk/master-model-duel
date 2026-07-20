@@ -254,6 +254,11 @@ export function OrderBuilder({
         <AssignmentDialog
           current={assigningLine.assignment}
           onOrderRecipient={cart.onOrderRecipient}
+          otherOnOrderLineCount={
+            cart.lines.filter(
+              (line) => line.id !== assigningLine.id && line.assignment?.type === "onOrder"
+            ).length
+          }
           addressBook={addressBook}
           isSignedIn={isSignedIn}
           onAssign={(assignment, newOnOrderRecipient) =>

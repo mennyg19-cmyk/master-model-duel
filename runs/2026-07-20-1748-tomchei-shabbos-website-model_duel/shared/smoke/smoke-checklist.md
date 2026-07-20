@@ -30,11 +30,11 @@ See `shared/phases/PHASE-P3-EXPECTED.md`. Both arms P3 **gated**.
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Three-way assignment | ✓ | |
-| S2 | Draft persistence | ✓ | |
-| S3 | Address edit audit | ✓ | |
+| S1 | Three-way assignment | ✓ | ✓ |
+| S2 | Draft persistence | ✓ | ✓ |
+| S3 | Address edit audit | ✓ | ✓ |
 
-See `shared/phases/PHASE-P4-EXPECTED.md`. arm-01 P4 **gated**.
+See `shared/phases/PHASE-P4-EXPECTED.md`. Both arms P4 **gated**.
 
 ## P5
 
@@ -46,7 +46,7 @@ See `shared/phases/PHASE-P4-EXPECTED.md`. arm-01 P4 **gated**.
 | S4 | POS cash/check | ✓ | |
 | S5 | Order lifecycle | ✓ | |
 
-See `shared/phases/PHASE-P5-EXPECTED.md`. arm-01 P5 **gated**.
+See `shared/phases/PHASE-P5-EXPECTED.md`. arm-01 P5 **gated** · arm-02 P5 next.
 
 ## P6 (next)
 

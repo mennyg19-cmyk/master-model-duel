@@ -11,6 +11,18 @@ import type { Cart, SavedAddress } from "@/components/builder/types";
 type Assignment = NonNullable<Cart["lines"][number]["assignment"]>;
 type PickerTab = "onOrder" | "addressBook" | "newRecipient";
 
+function addressesDiffer(saved: AddressInput | null, draft: AddressInput): boolean {
+  if (!saved) return false;
+  return (
+    saved.recipient !== draft.recipient ||
+    saved.line1 !== draft.line1 ||
+    (saved.line2 ?? "") !== (draft.line2 ?? "") ||
+    saved.city !== draft.city ||
+    saved.state !== draft.state ||
+    saved.zip !== draft.zip
+  );
+}
+
 /**
  * The three-way recipient picker (UR-006, G-018): on this order / address
  * book / new recipient. Also hosts mid-order editing of saved addresses
@@ -19,6 +31,7 @@ type PickerTab = "onOrder" | "addressBook" | "newRecipient";
 export function AssignmentDialog({
   current,
   onOrderRecipient,
+  otherOnOrderLineCount,
   addressBook,
   isSignedIn,
   onAssign,
@@ -27,6 +40,8 @@ export function AssignmentDialog({
 }: {
   current: Assignment | null;
   onOrderRecipient: AddressInput | null;
+  /** How many OTHER lines already ship to the shared on-order address. */
+  otherOnOrderLineCount: number;
   addressBook: SavedAddress[];
   isSignedIn: boolean;
   onAssign: (assignment: Assignment, newOnOrderRecipient?: AddressInput) => void;
@@ -93,8 +108,19 @@ export function AssignmentDialog({
       {tab === "onOrder" && (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted">
-            Send this item to the address on this order — usually yourself.
+            Send this item to the address on this order — usually yourself. There is one
+            on-order address per order: every item marked &quot;on this order&quot; ships to it.
           </p>
+          {/* DECISION-P4-4: onOrderRecipient is a single per-draft address, so
+              editing it here re-addresses every already-assigned on-order line.
+              Say so before it happens instead of silently flipping them. */}
+          {otherOnOrderLineCount > 0 && addressesDiffer(onOrderRecipient, onOrderDraft) && (
+            <p className="rounded-md border border-accent bg-brand-soft p-2 text-xs" role="alert">
+              {otherOnOrderLineCount} other {otherOnOrderLineCount === 1 ? "item" : "items"} in your
+              cart already {otherOnOrderLineCount === 1 ? "ships" : "ship"} to the on-order address —
+              changing it here changes it for {otherOnOrderLineCount === 1 ? "that item" : "them"} too.
+            </p>
+          )}
           <AddressForm value={onOrderDraft} onChange={setOnOrderDraft} />
           <Button
             disabled={!isComplete(onOrderDraft)}

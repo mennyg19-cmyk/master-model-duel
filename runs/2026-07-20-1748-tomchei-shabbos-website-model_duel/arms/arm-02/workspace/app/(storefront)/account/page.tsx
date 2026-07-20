@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getCustomerContext } from "@/lib/auth/customer-session";
 import { getOpenSeason } from "@/lib/season";
 import { cartSchema } from "@/lib/order-builder/cart";
+import { findActiveDraft } from "@/lib/order-builder/draft-store";
 import { formatCents } from "@/lib/catalog";
 import { Card, CardTitle } from "@/components/ui/card";
 import { DraftActions, SignOutButton } from "@/components/account/draft-actions";
@@ -12,12 +13,7 @@ export default async function AccountDashboardPage() {
   const season = await getOpenSeason();
 
   const [activeDraft, recentOrders, addressCount] = await Promise.all([
-    season
-      ? db.orderDraft.findFirst({
-          where: { customerId: customer.id, seasonId: season.id, status: "ACTIVE" },
-          orderBy: { updatedAt: "desc" },
-        })
-      : null,
+    season ? findActiveDraft(season.id, { kind: "customer", customerId: customer.id }) : null,
     db.order.findMany({
       where: { customerId: customer.id, status: { not: "DISCARDED" } },
       orderBy: { createdAt: "desc" },

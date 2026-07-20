@@ -1,4 +1,5 @@
 import { createHmac, randomBytes } from "crypto";
+import { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
@@ -65,9 +66,23 @@ export async function saveDraft(seasonId: string, owner: DraftOwner, cart: Cart)
 
   const token = owner.kind === "guest" ? null : randomBytes(32).toString("hex");
   const tokenHash = owner.kind === "guest" ? owner.tokenHash : hashGuestToken(token!);
-  const draft = await db.orderDraft.create({
-    data: { seasonId, guestTokenHash: tokenHash, cart },
-  });
+  let draft;
+  try {
+    draft = await db.orderDraft.create({
+      data: { seasonId, guestTokenHash: tokenHash, cart },
+    });
+  } catch (error) {
+    // (seasonId, guestTokenHash) is unique: a concurrent first save (or a
+    // non-ACTIVE draft holding the hash) lands here. Recover by updating the
+    // row that won instead of surfacing a 500.
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+      throw error;
+    }
+    draft = await db.orderDraft.update({
+      where: { seasonId_guestTokenHash: { seasonId, guestTokenHash: tokenHash } },
+      data: { cart, status: "ACTIVE" },
+    });
+  }
   if (token) {
     const cookieStore = await cookies();
     cookieStore.set(GUEST_DRAFT_COOKIE, token, {
@@ -79,6 +94,16 @@ export async function saveDraft(seasonId: string, owner: DraftOwner, cart: Cart)
     });
   }
   return draft;
+}
+
+/**
+ * Drop the guest-draft cookie without touching any draft row. Called on
+ * login/register/logout so a guest draft from a shared device can never
+ * re-attach itself to (or leak addresses to) whoever uses the browser next.
+ */
+export async function clearGuestDraftCookie(): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.delete(GUEST_DRAFT_COOKIE);
 }
 
 /** Cancel the current draft (account "cancel draft" and builder "start over"). */

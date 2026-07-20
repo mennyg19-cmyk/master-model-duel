@@ -11,6 +11,13 @@ const envSchema = z
     CLERK_SECRET_KEY: z.string().optional(),
     // Media library target. Unset = local-disk fallback (.uploads/) for dev.
     BLOB_READ_WRITE_TOKEN: z.string().optional(),
+    // Set to "true" ONLY when serving behind a reverse proxy that appends the
+    // real client IP to X-Forwarded-For. Off by default: a direct-served node
+    // must never trust that header (spoofable rate-limit keys).
+    TRUST_PROXY: z
+      .string()
+      .optional()
+      .transform((value) => value === "true" || value === "1"),
   })
   .refine(
     (vars) => vars.AUTH_MODE !== "clerk" || (vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && vars.CLERK_SECRET_KEY),

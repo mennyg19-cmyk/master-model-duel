@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { hashPassword } from "@/lib/auth/passwords";
+import { hashPassword, verifyPassword } from "@/lib/auth/passwords";
 import { createCustomerSession } from "@/lib/auth/customer-session";
 import { findOrLinkCustomer } from "@/lib/customers";
+import { clearGuestDraftCookie } from "@/lib/order-builder/draft-store";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 const registerSchema = z.object({
@@ -26,15 +27,25 @@ export async function POST(request: Request) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
 
-  // Staff phone orders may already have created this customer — link, don't
-  // duplicate. But an account that already has a password is taken.
+  // Staff phone orders may already have created this customer — link by email
+  // only (never phone) and set the password. Anti-enumeration: the response is
+  // the same {ok:true} whether the email was fresh, passwordless, or already
+  // registered — no 409 confirming which emails have accounts.
   const customer = await findOrLinkCustomer({
     email: parsed.data.email,
     name: parsed.data.name,
     phone: parsed.data.phone,
   });
+
   if (customer.passwordHash) {
-    return Response.json({ error: "An account with this email already exists. Sign in instead." }, { status: 409 });
+    // Already registered. If the supplied password happens to be correct this
+    // is just a sign-in; otherwise return the generic success WITHOUT a
+    // session — the caller lands on the sign-in flow.
+    if (verifyPassword(parsed.data.password, customer.passwordHash)) {
+      await createCustomerSession(customer.id);
+      await clearGuestDraftCookie();
+    }
+    return Response.json({ ok: true }, { status: 200 });
   }
 
   await db.customer.update({
@@ -42,5 +53,7 @@ export async function POST(request: Request) {
     data: { passwordHash: hashPassword(parsed.data.password), name: parsed.data.name },
   });
   await createCustomerSession(customer.id);
-  return Response.json({ ok: true }, { status: 201 });
+  // A shared-device guest draft must not follow the new account (cookie leak).
+  await clearGuestDraftCookie();
+  return Response.json({ ok: true }, { status: 200 });
 }

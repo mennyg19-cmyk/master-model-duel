@@ -10,9 +10,10 @@ export function normalizePhone(phone: string | null | undefined): string | null 
 }
 
 // Links a customer record to a login identity (Clerk user id in clerk mode).
-// Matches by identity first, then by email, then by normalized phone, so an
-// existing customer created by staff (e.g. phone order) gets linked instead
-// of duplicated.
+// Matches by identity first, then by email. Phone is NEVER used for matching:
+// supplying someone else's phone number must not link you to (or let you set a
+// password on) their record — knowing a phone number proves nothing (B1 fix).
+// Phone dedupe for staff-entered orders stays a staff-side concern.
 export async function findOrLinkCustomer(identity: {
   email: string;
   name: string;
@@ -21,6 +22,11 @@ export async function findOrLinkCustomer(identity: {
 }) {
   const email = identity.email.toLowerCase();
   const phoneNormalized = normalizePhone(identity.phone);
+  // phoneNormalized is unique; a number already on another record is stored
+  // raw-only so an attacker can't crash registration (or claim the number).
+  const phoneOwner = phoneNormalized
+    ? await db.customer.findUnique({ where: { phoneNormalized } })
+    : null;
 
   if (identity.authUserId) {
     const byIdentity = await db.customer.findUnique({
@@ -29,15 +35,11 @@ export async function findOrLinkCustomer(identity: {
     if (byIdentity) return byIdentity;
   }
 
-  const existing =
-    (await db.customer.findUnique({ where: { email } })) ??
-    (phoneNormalized
-      ? await db.customer.findUnique({ where: { phoneNormalized } })
-      : null);
+  const existing = await db.customer.findUnique({ where: { email } });
   if (existing) {
     const patch: { clerkUserId?: string; phone?: string; phoneNormalized?: string } = {};
     if (identity.authUserId && !existing.clerkUserId) patch.clerkUserId = identity.authUserId;
-    if (phoneNormalized && !existing.phoneNormalized) {
+    if (phoneNormalized && !existing.phoneNormalized && !phoneOwner) {
       patch.phone = identity.phone;
       patch.phoneNormalized = phoneNormalized;
     }
@@ -52,7 +54,7 @@ export async function findOrLinkCustomer(identity: {
       email,
       name: identity.name,
       phone: identity.phone,
-      phoneNormalized,
+      phoneNormalized: phoneOwner ? null : phoneNormalized,
       clerkUserId: identity.authUserId,
     },
   });

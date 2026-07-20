@@ -2,8 +2,8 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
-import { addressInputSchema, normalizedAddressKey } from "@/lib/addresses/normalize";
-import { geocodeAddress } from "@/lib/addresses/geocode";
+import { addressInputSchema } from "@/lib/addresses/normalize";
+import { updateAddressBookEntry } from "@/lib/addresses/book";
 
 // Staff edit of a customer's address book (UR-014, G-019). Same validation and
 // dedupe as the customer path, plus an AuditLog row with the before/after
@@ -26,25 +26,11 @@ export async function PATCH(
     return Response.json({ error: "Address not found for this customer" }, { status: 404 });
   }
 
-  const coordinates = await geocodeAddress(parsed.data);
   try {
+    // Same write path as the customer edit (updateAddressBookEntry recomputes
+    // the dedupe key + geocode); the audit row is the only staff-only extra.
     const updated = await db.$transaction(async (tx) => {
-      const row = await tx.customerAddress.update({
-        where: { id: addressId },
-        data: {
-          normalizedKey: normalizedAddressKey(parsed.data),
-          label: parsed.data.label,
-          recipient: parsed.data.recipient,
-          line1: parsed.data.line1,
-          line2: parsed.data.line2,
-          city: parsed.data.city,
-          state: parsed.data.state,
-          zip: parsed.data.zip,
-          ...(coordinates
-            ? { ...coordinates, geocodedAt: new Date() }
-            : { latitude: null, longitude: null, geocodedAt: null }),
-        },
-      });
+      const row = await updateAddressBookEntry(addressId, parsed.data, tx);
       await writeAudit(
         gate.staff,
         {

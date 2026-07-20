@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { verifyPassword } from "@/lib/auth/passwords";
 import { createCustomerSession } from "@/lib/auth/customer-session";
+import { clearGuestDraftCookie } from "@/lib/order-builder/draft-store";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
@@ -41,5 +42,8 @@ export async function POST(request: Request) {
   }
 
   await createCustomerSession(customer.id);
+  // A guest draft from before sign-in must not linger on the device (it would
+  // resurface for the next user after sign-out).
+  await clearGuestDraftCookie();
   return Response.json({ ok: true });
 }

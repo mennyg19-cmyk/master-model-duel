@@ -1,13 +1,10 @@
-import { db } from "@/lib/db";
 import { getCustomerContext } from "@/lib/auth/customer-session";
+import { getCustomerAddressBook } from "@/lib/addresses/book";
 import { AddressesManager } from "@/components/account/addresses-manager";
 
 export default async function AccountAddressesPage() {
   const customer = (await getCustomerContext())!;
-  const addresses = await db.customerAddress.findMany({
-    where: { customerId: customer.id },
-    orderBy: { updatedAt: "desc" },
-  });
+  const addresses = await getCustomerAddressBook(customer.id);
 
   return (
     <div className="flex flex-col gap-4">
