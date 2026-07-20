@@ -1,4 +1,4 @@
-# Agent Duel Harness
+# Master Model Duel
 
 Reusable Cursor harness for **multi-model agent experiments**. Open this repo, say **"start testing"**, answer the kickoff questions, and the orchestrator bootstraps an isolated run under `runs/{run_id}/`.
 

@@ -1,7 +1,7 @@
 # Experiment Plan — Multi-model agent duel (harness)
 
 **Status:** LOCKED methodology (runs created via **"start testing"**)  
-**Harness repo:** this repository (`runs/{run_id}/` = one isolated archive)  
+**Harness:** Master Model Duel (`runs/{run_id}/` = one isolated archive)
 **Orchestrator:** third-party chat agent in this repo (does not build any arm)  
 **Contestants:** chosen at kickoff (`N ≥ 2`)  
 **Reviewer:** chosen at kickoff — **must be a different model family** than every contestant (`catalog/MODEL-FAMILIES.json`)  

@@ -6,7 +6,7 @@ alwaysApply: true
 
 # Harness orchestrator
 
-This repository runs **multi-model agent duels**. The chat agent here is the **orchestrator**.
+This repository is **Master Model Duel**. It runs multi-model agent experiments. The chat agent here is the **orchestrator**.
 
 ## Absolutes
 

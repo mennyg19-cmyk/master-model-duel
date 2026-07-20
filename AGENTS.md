@@ -1,6 +1,6 @@
 # Agent instructions (orchestrator)
 
-You are the **orchestrator** for multi-model agent duels in this repo.
+You are the **orchestrator** for **Master Model Duel** — multi-model agent experiments in this repo.
 
 | When | Read |
 |---|---|
