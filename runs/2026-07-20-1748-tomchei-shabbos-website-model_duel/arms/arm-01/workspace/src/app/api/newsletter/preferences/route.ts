@@ -46,7 +46,12 @@ export async function PATCH(request: Request) {
       volunteerStories: body.volunteerStories,
       communityImpact: body.communityImpact,
       isSubscribed: body.isSubscribed,
-      unsubscribedAt: body.isSubscribed === false ? new Date() : null,
+      unsubscribedAt:
+        body.isSubscribed === undefined
+          ? undefined
+          : body.isSubscribed
+            ? null
+            : new Date(),
     },
   });
   return NextResponse.json({

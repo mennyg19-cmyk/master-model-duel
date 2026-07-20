@@ -20,6 +20,7 @@ export default function SetupPage() {
       body: JSON.stringify({
         displayName: formData.get("displayName"),
         email: formData.get("email"),
+        setupToken: formData.get("setupToken"),
       }),
     });
     const payload = await response.json();
@@ -56,6 +57,10 @@ export default function SetupPage() {
             <label className="grid gap-2 text-sm font-semibold">
               Email
               <input className="rounded-xl border border-[var(--border)] px-4 py-3" name="email" type="email" required />
+            </label>
+            <label className="grid gap-2 text-sm font-semibold">
+              Setup token
+              <input className="rounded-xl border border-[var(--border)] px-4 py-3" name="setupToken" required type="password" />
             </label>
             <Button type="submit">Create manager and lock setup</Button>
           </form>

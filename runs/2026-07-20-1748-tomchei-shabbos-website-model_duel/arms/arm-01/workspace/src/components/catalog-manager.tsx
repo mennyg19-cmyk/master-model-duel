@@ -76,9 +76,12 @@ export function CatalogManager({
   }
 
   async function archiveProduct(product: ManagedProduct) {
-    const response = await fetch(`/api/admin/catalog?id=${product.id}`, {
+    const response = await fetch(
+      `/api/admin/catalog?id=${encodeURIComponent(product.id)}&version=${product.version}`,
+      {
       method: "DELETE",
-    });
+      },
+    );
     const payload = await response.json();
     if (!response.ok) {
       setMessage(payload.error);

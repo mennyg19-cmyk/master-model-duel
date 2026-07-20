@@ -25,8 +25,15 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     email?: string;
     displayName?: string;
+    setupToken?: string;
   };
   const { email, displayName } = body;
+  if (!process.env.SETUP_TOKEN || body.setupToken !== process.env.SETUP_TOKEN) {
+    return NextResponse.json(
+      { error: "A valid setup token is required." },
+      { status: 403 },
+    );
+  }
   if (!email || !displayName) {
     return NextResponse.json(
       { error: "Email and display name are required." },

@@ -1,36 +1,42 @@
 import { db } from "@/lib/db";
 import { requirePermissionPage } from "@/lib/auth/current-user";
-import { Card, CardTitle } from "@/components/ui/card";
+import { getSetting } from "@/lib/settings";
+import { SettingsHub } from "@/components/admin/settings-hub";
 
 export default async function SettingsPage() {
   await requirePermissionPage("settings.manage");
-  const settings = await db.setting.findMany({ orderBy: { key: "asc" } });
+
+  const [seasons, packageTypes, pickupLocations, followupDays, closedMessage, deliveryZips, shippingRates, shippingRules, emailFrom, emailReplyTo] =
+    await Promise.all([
+      db.season.findMany({ select: { id: true, name: true, status: true }, orderBy: { createdAt: "desc" } }),
+      db.packageType.findMany({ orderBy: { name: "asc" } }),
+      db.pickupLocation.findMany({ orderBy: { name: "asc" } }),
+      getSetting("orders.followup_days"),
+      getSetting("store.closed_message"),
+      getSetting("shipping.delivery_zips"),
+      getSetting("shipping.rates"),
+      getSetting("shipping.rules"),
+      getSetting("email.from_address"),
+      getSetting("email.reply_to"),
+    ]);
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-6">Settings</h1>
-      <Card>
-        <CardTitle>Organization settings</CardTitle>
-        <p className="text-sm text-muted mb-3">
-          Typed key-value store. Business settings tabs (orders, shipping, email) arrive with
-          their phases.
-        </p>
-        <table className="w-full text-sm">
-          <tbody>
-            {settings.map((setting) => (
-              <tr key={setting.key} className="border-b border-border">
-                <td className="py-2 pr-3 font-mono text-xs">{setting.key}</td>
-                <td className="py-2 font-mono text-xs">{JSON.stringify(setting.value)}</td>
-              </tr>
-            ))}
-            {settings.length === 0 && (
-              <tr>
-                <td className="py-4 text-muted">No settings stored yet.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+      <h1 className="mb-6 text-2xl font-semibold">Settings</h1>
+      <SettingsHub
+        data={{
+          seasons,
+          packageTypes,
+          pickupLocations,
+          followupDays,
+          closedMessage,
+          deliveryZips,
+          shippingRates,
+          shippingRules,
+          emailFrom,
+          emailReplyTo,
+        }}
+      />
     </div>
   );
 }

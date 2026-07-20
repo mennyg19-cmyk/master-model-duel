@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       );
     }
 
-    await db.$transaction([
+    const [impersonationSession] = await db.$transaction([
       db.impersonationSession.create({
         data: {
           actorStaffId: staffSession.actor.id,
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       impersonating: target.displayName,
     });
-    response.cookies.set("impersonate_staff_id", target.id, {
+    response.cookies.set("impersonation_session_id", impersonationSession.id, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
@@ -94,7 +94,7 @@ export async function DELETE() {
     });
 
     const response = NextResponse.json({ impersonating: null });
-    response.cookies.set("impersonate_staff_id", "", {
+    response.cookies.set("impersonation_session_id", "", {
       path: "/",
       maxAge: 0,
     });

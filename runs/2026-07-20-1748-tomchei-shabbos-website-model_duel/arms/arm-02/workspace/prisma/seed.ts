@@ -70,11 +70,13 @@ async function seedDomainCore(customerId: string) {
 
   const classicBasket = await db.product.upsert({
     where: { seasonId_slug: { seasonId: season.id, slug: "classic-basket" } },
-    update: {},
+    update: { category: "Baskets" },
     create: {
       seasonId: season.id,
       name: "Classic Basket",
       slug: "classic-basket",
+      category: "Baskets",
+      description: "Our signature basket: wine, hamantaschen, fruit, and chocolates.",
       basePriceCents: 3600,
       widthCm: 30,
       lengthCm: 30,
@@ -86,6 +88,8 @@ async function seedDomainCore(customerId: string) {
       },
     },
   });
+
+  await seedStorefrontCatalog(season.id);
 
   const wineAddOn = await db.addOn.upsert({
     where: { seasonId_name: { seasonId: season.id, name: "Extra hamantaschen" } },
@@ -138,6 +142,65 @@ async function seedDomainCore(customerId: string) {
   console.log(
     `Seed order ${finalized.draftReference} finalized as #${finalized.orderNumber} (wire: ${wireFormat(finalized.draftReference)})`
   );
+}
+
+// P3 seed: categories + a sold-out product for the storefront, and one closed
+// past season so the archive has something to browse.
+async function seedStorefrontCatalog(currentSeasonId: string) {
+  const catalog: {
+    slug: string;
+    name: string;
+    category: string;
+    description: string;
+    basePriceCents: number;
+    trackInventory?: boolean;
+    soldOut?: boolean;
+  }[] = [
+    { slug: "deluxe-basket", name: "Deluxe Basket", category: "Baskets", description: "The Classic, upgraded: premium wine, artisan chocolate, and a keepsake tray.", basePriceCents: 7200 },
+    { slug: "wine-duo", name: "Wine Duo", category: "Wine", description: "Two bottles of kosher wine in a gift sleeve.", basePriceCents: 5400 },
+    { slug: "kids-treat-box", name: "Kids Treat Box", category: "Kids", description: "Nosh, groggers, and a Purim mask — sized for little hands.", basePriceCents: 1800 },
+    { slug: "executive-basket", name: "Executive Basket", category: "Baskets", description: "Our largest arrangement. Limited quantity each season.", basePriceCents: 12000, trackInventory: true, soldOut: true },
+  ];
+
+  for (const item of catalog) {
+    const product = await db.product.upsert({
+      where: { seasonId_slug: { seasonId: currentSeasonId, slug: item.slug } },
+      update: {},
+      create: {
+        seasonId: currentSeasonId,
+        name: item.name,
+        slug: item.slug,
+        category: item.category,
+        description: item.description,
+        basePriceCents: item.basePriceCents,
+        trackInventory: item.trackInventory ?? false,
+      },
+    });
+    if (item.trackInventory) {
+      await db.inventoryItem.upsert({
+        where: { productId: product.id },
+        update: {},
+        create: { productId: product.id, quantityOnHand: item.soldOut ? 0 : 50 },
+      });
+    }
+  }
+
+  const pastSeason = await db.season.upsert({
+    where: { name: "Purim 2025" },
+    update: {},
+    create: { name: "Purim 2025", status: "CLOSED" },
+  });
+  const pastCatalog = [
+    { slug: "classic-basket-2025", name: "Classic Basket 2025", category: "Baskets", basePriceCents: 3400 },
+    { slug: "purim-wine-box", name: "Purim Wine Box", category: "Wine", basePriceCents: 5000 },
+  ];
+  for (const item of pastCatalog) {
+    await db.product.upsert({
+      where: { seasonId_slug: { seasonId: pastSeason.id, slug: item.slug } },
+      update: {},
+      create: { seasonId: pastSeason.id, ...item, description: "From the 2025 collection." },
+    });
+  }
 }
 
 main()

@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { auth } from "@clerk/nextjs/server";
 import { cookies, headers } from "next/headers";
 import { db } from "@/lib/db";
@@ -11,16 +12,48 @@ export class AccessDeniedError extends Error {
   }
 }
 
+export function createLocalTestAuthToken(userId: string, timestamp = Date.now()) {
+  const secret = process.env.TEST_AUTH_SECRET;
+  if (!secret) throw new Error("TEST_AUTH_SECRET is required for local test auth.");
+  const payload = `${userId}.${timestamp}`;
+  const signature = createHmac("sha256", secret).update(payload).digest("hex");
+  return `${timestamp}.${signature}`;
+}
+
 export async function getAuthenticatedClerkUserId() {
   if (isClerkConfigured()) {
     const clerkSession = await auth();
     return clerkSession.userId;
   }
 
-  if (process.env.ENABLE_TEST_AUTH !== "true") {
+  if (
+    process.env.NODE_ENV === "production" ||
+    process.env.ENABLE_TEST_AUTH !== "true"
+  ) {
     return null;
   }
-  return (await headers()).get("x-test-clerk-user-id") ?? "__local_manager__";
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("host")?.split(":")[0];
+  if (host !== "127.0.0.1" && host !== "localhost") return null;
+
+  const userId = requestHeaders.get("x-test-clerk-user-id");
+  const token = requestHeaders.get("x-test-auth-token");
+  const [timestampText, signature] = token?.split(".") ?? [];
+  const timestamp = Number(timestampText);
+  if (
+    !userId ||
+    !signature ||
+    !Number.isFinite(timestamp) ||
+    Math.abs(Date.now() - timestamp) > 5 * 60 * 1000
+  ) {
+    return null;
+  }
+  const expectedSignature = createLocalTestAuthToken(userId, timestamp).split(".")[1];
+  const supplied = Buffer.from(signature, "hex");
+  const expected = Buffer.from(expectedSignature, "hex");
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected)
+    ? userId
+    : null;
 }
 
 export async function getCurrentStaffUser() {
@@ -40,13 +73,21 @@ export async function getCurrentStaffUser() {
     return null;
   }
 
-  const impersonatedStaffId = (await cookies()).get("impersonate_staff_id")?.value;
-  if (!impersonatedStaffId) {
+  const impersonationSessionId = (await cookies()).get("impersonation_session_id")?.value;
+  if (!impersonationSessionId) {
     return { actor, effective: actor };
   }
 
+  const impersonationSession = await db.impersonationSession.findFirst({
+    where: {
+      id: impersonationSessionId,
+      actorStaffId: actor.id,
+      endedAt: null,
+    },
+  });
+  if (!impersonationSession) return { actor, effective: actor };
   const effective = await db.staffUser.findUnique({
-    where: { id: impersonatedStaffId },
+    where: { id: impersonationSession.targetStaffId },
   });
   if (!effective || effective.status !== "ACTIVE") {
     return { actor, effective: actor };

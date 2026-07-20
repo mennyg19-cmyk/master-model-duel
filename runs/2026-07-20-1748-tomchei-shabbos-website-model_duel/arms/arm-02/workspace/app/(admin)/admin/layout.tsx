@@ -8,6 +8,8 @@ import { StopImpersonationButton, LogoutButton } from "@/components/session-butt
 
 const NAV_ITEMS: { href: string; label: string; permission: Permission | null }[] = [
   { href: "/admin", label: "Dashboard", permission: null },
+  { href: "/admin/catalog", label: "Catalog", permission: "catalog.manage" },
+  { href: "/admin/media", label: "Media", permission: "media.manage" },
   { href: "/admin/staff", label: "Staff", permission: "staff.manage" },
   { href: "/admin/audit", label: "Audit log", permission: "audit.view" },
   { href: "/admin/settings", label: "Settings", permission: "settings.manage" },

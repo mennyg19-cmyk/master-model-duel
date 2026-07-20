@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatCurrency } from "@/lib/currency";
 
 export type CatalogProduct = {
@@ -32,6 +32,44 @@ export function CatalogExplorer({
   const [category, setCategory] = useState("All");
   const [sort, setSort] = useState("featured");
   const [quickViewProduct, setQuickViewProduct] = useState<CatalogProduct | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const quickViewTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!quickViewProduct) return;
+    const dialog = dialogRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialog?.querySelector<HTMLElement>("button, a[href]")?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setQuickViewProduct(null);
+        return;
+      }
+      if (event.key !== "Tab" || !dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>("button, a[href], [tabindex]:not([tabindex='-1'])"),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      quickViewTriggerRef.current?.focus();
+    };
+  }, [quickViewProduct]);
 
   const visibleProducts = useMemo(() => {
     const filteredProducts =
@@ -100,7 +138,10 @@ export function CatalogExplorer({
                 />
                 <button
                   className="absolute bottom-4 rounded-full bg-white px-5 py-2.5 text-sm font-bold opacity-0 shadow-lg transition group-hover:opacity-100 focus:opacity-100"
-                  onClick={() => setQuickViewProduct(product)}
+                  onClick={(event) => {
+                    quickViewTriggerRef.current = event.currentTarget;
+                    setQuickViewProduct(product);
+                  }}
                   type="button"
                 >
                   Quick view
@@ -136,9 +177,12 @@ export function CatalogExplorer({
           aria-label={`Quick view ${quickViewProduct.name}`}
           aria-modal="true"
           className="fixed inset-0 z-50 grid place-items-center bg-[var(--ink)]/60 p-5"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setQuickViewProduct(null);
+          }}
           role="dialog"
         >
-          <div className="relative grid max-h-[90vh] w-full max-w-3xl overflow-auto rounded-[2rem] bg-white md:grid-cols-2">
+          <div ref={dialogRef} className="relative grid max-h-[90vh] w-full max-w-3xl overflow-auto rounded-[2rem] bg-white md:grid-cols-2">
             <button
               aria-label="Close quick view"
               className="absolute right-4 top-4 z-10 grid size-10 place-items-center rounded-full bg-white shadow"

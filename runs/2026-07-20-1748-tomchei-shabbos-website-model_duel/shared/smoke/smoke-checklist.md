@@ -14,14 +14,24 @@ Ports: arm-01 web **3101** db **4101** | arm-02 web **3102** db **4102**
 
 See `shared/phases/PHASE-P2-EXPECTED.md`. Both arms P2 **gated**.
 
-## P3 (next)
+## P3
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | `GET /` → 200 | ✓ | ✓ |
-| S2 | `GET /api/health` → DB ok | ✓ | ✓ |
-| S3 | Unauthorized staff → 403 | ✓ | ✓ |
-| S4 | Setup bootstrap + lock | ✓ | ✓ |
-| S5 | Audit log entries | ✓ | ✓ |
+| S1 | Storefront UX | ✓ | |
+| S2 | Season gate | ✓ | |
+| S3 | Newsletter round-trip | ✓ | |
+| S4 | Media + catalog | ✓ | |
+| S5 | Delivery ZIP | ✓ | |
 
-See `shared/phases/PHASE-P1-EXPECTED.md` for full must-be-true list.
+See `shared/phases/PHASE-P3-EXPECTED.md`. arm-01 P3 **gated**.
+
+## P4 (next)
+
+| # | Check | arm-01 | arm-02 |
+|---|---|---|---|
+| S1 | Three-way assignment | | |
+| S2 | Draft persistence | | |
+| S3 | Address edit audit | | |
+
+See `shared/phases/PHASE-P4-EXPECTED.md`.

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { createNewsletterToken } from "@/lib/newsletter";
 import { normalizeEmail } from "@/lib/normalize";
 
 export async function POST(request: Request) {
@@ -13,7 +12,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const subscriber = await db.newsletterSubscriber.upsert({
+  await db.newsletterSubscriber.upsert({
     where: { email },
     create: { email },
     update: {
@@ -21,9 +20,7 @@ export async function POST(request: Request) {
       unsubscribedAt: null,
     },
   });
-  const token = createNewsletterToken(subscriber.id);
   return NextResponse.json({
     message: "You’re on the list. Check your inbox for preference controls.",
-    preferencesUrl: `/newsletter/preferences?token=${encodeURIComponent(token)}`,
   });
 }

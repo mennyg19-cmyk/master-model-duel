@@ -93,6 +93,9 @@ export async function PATCH(request: Request) {
     if (body.priceCents !== undefined && (!Number.isInteger(body.priceCents) || body.priceCents < 0)) {
       return NextResponse.json({ error: "Price must be a non-negative whole number of cents." }, { status: 400 });
     }
+    if (body.name !== undefined && !body.name.trim()) {
+      return NextResponse.json({ error: "Product name cannot be blank." }, { status: 400 });
+    }
 
     const product = await db.$transaction(async (transaction) => {
       const updateCount = await transaction.product.updateMany({
@@ -134,20 +137,47 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const staffSession = await requirePermission("settings:manage");
-    const id = new URL(request.url).searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "Product ID is required." }, { status: 400 });
+    const searchParams = new URL(request.url).searchParams;
+    const id = searchParams.get("id");
+    const version = Number(searchParams.get("version"));
+    if (!id || !Number.isInteger(version) || version < 1) {
+      return NextResponse.json(
+        { error: "Product ID and version are required." },
+        { status: 400 },
+      );
+    }
 
-    await db.$transaction([
-      db.product.update({ where: { id }, data: { isActive: false, version: { increment: 1 } } }),
-      db.auditLog.create({
+    const result = await db.$transaction(async (transaction) => {
+      const updateCount = await transaction.product.updateMany({
+        where: { id, version },
+        data: { isActive: false, version: { increment: 1 } },
+      });
+      if (updateCount.count !== 1) {
+        const existing = await transaction.product.findUnique({
+          where: { id },
+          select: { id: true },
+        });
+        return existing ? "conflict" : "missing";
+      }
+      await transaction.auditLog.create({
         data: {
           actorStaffId: staffSession.actor.id,
           action: "catalog.product_archived",
           targetType: "Product",
           targetId: id,
         },
-      }),
-    ]);
+      });
+      return "archived";
+    });
+    if (result === "missing") {
+      return NextResponse.json({ error: "Product not found." }, { status: 404 });
+    }
+    if (result === "conflict") {
+      return NextResponse.json(
+        { error: "This product changed. Reload before archiving it." },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ archived: true });
   } catch (error) {
     return handleCatalogError(error);
