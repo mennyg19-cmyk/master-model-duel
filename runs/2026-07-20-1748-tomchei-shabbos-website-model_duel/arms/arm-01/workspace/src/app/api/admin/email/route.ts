@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   enqueueTransactionalEmail,
-  ensureMessagingConfiguration,
   queueCampaign,
   queueCampaignTest,
 } from "@/domain/messaging";
+import { loadEmailHubState } from "@/domain/messaging-hub";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize";
@@ -41,31 +41,7 @@ function apiError(error: unknown) {
 export async function GET() {
   try {
     await requirePermission("settings:manage");
-    await ensureMessagingConfiguration(db);
-    const [lists, templates, campaigns, recentMessages] = await Promise.all([
-      db.emailList.findMany({ orderBy: { name: "asc" } }),
-      db.emailTemplate.findMany({ orderBy: { name: "asc" } }),
-      db.emailCampaign.findMany({
-        include: { emailList: true },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-      }),
-      db.messageOutbox.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 30,
-        select: {
-          id: true,
-          eventKey: true,
-          recipient: true,
-          channel: true,
-          status: true,
-          attempts: true,
-          lastError: true,
-          createdAt: true,
-        },
-      }),
-    ]);
-    return NextResponse.json({ lists, templates, campaigns, recentMessages });
+    return NextResponse.json(await loadEmailHubState(db));
   } catch (error) {
     return apiError(error);
   }

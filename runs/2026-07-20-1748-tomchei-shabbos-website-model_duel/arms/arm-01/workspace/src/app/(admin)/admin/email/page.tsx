@@ -1,5 +1,5 @@
 import { EmailHub } from "@/components/email-hub";
-import { ensureMessagingConfiguration } from "@/domain/messaging";
+import { loadEmailHubState } from "@/domain/messaging-hub";
 import { requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -7,29 +7,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminEmailPage() {
   await requirePermission("settings:manage");
-  await ensureMessagingConfiguration(db);
-  const [lists, templates, campaigns, messages] = await Promise.all([
-    db.emailList.findMany({ orderBy: { name: "asc" } }),
-    db.emailTemplate.findMany({ orderBy: { name: "asc" } }),
-    db.emailCampaign.findMany({
-      include: { emailList: true },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-    db.messageOutbox.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 30,
-      select: {
-        id: true,
-        eventKey: true,
-        recipient: true,
-        channel: true,
-        status: true,
-        attempts: true,
-        lastError: true,
-      },
-    }),
-  ]);
+  const { lists, templates, campaigns, recentMessages } =
+    await loadEmailHubState(db);
   return (
     <EmailHub
       initialCampaigns={campaigns.map((campaign) => ({
@@ -40,7 +19,7 @@ export default async function AdminEmailPage() {
         emailList: { name: campaign.emailList.name },
         sentAt: campaign.sentAt?.toISOString() ?? null,
       }))}
-      initialMessages={messages}
+      initialMessages={recentMessages}
       initialTemplates={templates.map((template) => ({
         key: template.key,
         name: template.name,

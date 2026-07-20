@@ -1,12 +1,12 @@
 import { PaymentIntentStatus, PaymentMethod, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
+import { enqueueRefundEmail } from "@/domain/billing-notifications";
 import {
   CheckoutConflictError,
   commitStripePayment,
   recalculatePaymentStatus,
 } from "@/domain/checkout";
-import { enqueueTransactionalEmail } from "@/domain/messaging";
 import { db } from "@/lib/db";
 import { constructStripeEvent, getStripe } from "@/lib/stripe";
 
@@ -144,17 +144,15 @@ async function processRefund(event: Stripe.ChargeRefundedEvent) {
         where: { id: storedIntent.orderId },
         include: { customer: true },
       });
-      await enqueueTransactionalEmail(transaction, {
-        idempotencyKey: `refund:${payment.id}:${payment.refundedCents}:${refundedCents - payment.refundedCents}`,
-        templateKey: "order.refund",
-        recipient: order.customer.email,
-        variables: {
-          orderNumber: order.orderNumber ?? order.draftReference,
-          refundAmount: `$${((refundedCents - payment.refundedCents) / 100).toFixed(2)}`,
-        },
-        customerId: order.customer.id,
-        orderId: order.id,
-      });
+      const newlyRefundedCents = refundedCents - payment.refundedCents;
+      if (newlyRefundedCents > 0) {
+        await enqueueRefundEmail(
+          transaction,
+          order,
+          payment,
+          newlyRefundedCents,
+        );
+      }
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );

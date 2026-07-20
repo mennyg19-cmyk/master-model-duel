@@ -101,14 +101,26 @@ See `shared/phases/PHASE-P9-EXPECTED.md`. arm-01 P9 **gated**.
 
 See `shared/phases/PHASE-P10-EXPECTED.md`. arm-01 P10 **gated**.
 
-## P11 (next)
+## P11
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Preferences + tokens | | |
-| S2 | Campaign flow | | |
-| S3 | Transactional + failure | | |
-| S4 | Cron auth + overlap | | |
-| S5 | Purge + test mode | | |
+| S1 | Preferences + tokens | ✓ | |
+| S2 | Campaign flow | ✓ | |
+| S3 | Transactional + failure | ✓ | |
+| S4 | Cron auth + overlap | ✓ | |
+| S5 | Purge + test mode | ✓ | |
 
-See `shared/phases/PHASE-P11-EXPECTED.md`.
+See `shared/phases/PHASE-P11-EXPECTED.md`. arm-01 P11 **gated**.
+
+## P12 (next)
+
+| # | Check | arm-01 | arm-02 |
+|---|---|---|---|
+| S1 | Reports + margin | | |
+| S2 | Exports + reconciliation | | |
+| S3 | Legacy import | | |
+| S4 | Imported repeat | | |
+| S5 | Dress rehearsal | | |
+
+See `shared/phases/PHASE-P12-EXPECTED.md`.

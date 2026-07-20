@@ -4,7 +4,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 
 | Arm | 1a /7 | 1b /8 | 2 /15 | 3 /20 | 4 /20 | 5 /15 | 6 /15 | Total /100 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| arm-01 | 5 | 8 | 14 | | 15.0 | | | 42.0 |
+| arm-01 | 5 | 8 | 14 | | 16.5 | | | 43.5 |
 | arm-02 | 7 | 8 | 14 | | 9.0 | | | 38.0 |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
@@ -45,7 +45,8 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **P8 arm-01:** **1.5/20** → **12.0/20** ([fix notes](arms/arm-01/results/P8-FIX-NOTES.md); B1–B3 + M1–M6; S1–S3 pass)
 - **P9 arm-01:** **1.5/20** → **13.5/20** ([fix notes](arms/arm-01/results/P9-FIX-NOTES.md); B1 + A-H1/A-H3–A-H5; S1–S5 pass)
 - **P10 arm-01:** **1.5/20** → **15.0/20** ([fix notes](arms/arm-01/results/P10-FIX-NOTES.md); B1 + A-H1/H2/H3 + A-M2/M3/M5/M6/M7; S1–S3 pass)
-- **Next:** P11 arm-01 · P7 arm-02 — [PHASE-P11-EXPECTED.md](../shared/phases/PHASE-P11-EXPECTED.md) · [PHASE-P7-EXPECTED.md](../shared/phases/PHASE-P7-EXPECTED.md)
+- **P11 arm-01:** **1.5/20** → **16.5/20** ([fix notes](arms/arm-01/results/P11-FIX-NOTES.md); A-H1–A-H6 + A-M1/M2/M3/M5/M6/M7; S1–S5 pass)
+- **Next:** P12 arm-01 · P7 arm-02 — [PHASE-P12-EXPECTED.md](../shared/phases/PHASE-P12-EXPECTED.md) · [PHASE-P7-EXPECTED.md](../shared/phases/PHASE-P7-EXPECTED.md)
 
 ## Test 2 notes
 

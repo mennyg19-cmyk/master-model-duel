@@ -1,4 +1,4 @@
-import { sendPaymentReminders } from "@/domain/delivery";
+import { sendPaymentReminders } from "@/domain/billing-notifications";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { db } from "@/lib/db";
 

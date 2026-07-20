@@ -379,6 +379,7 @@ model MessageOutbox {
   attempts          Int            @default(0)
   nextAttemptAt     DateTime       @default(now())
   lockedAt          DateTime?
+  lockedUntil       DateTime?
   lockedBy          String?
   providerMessageId String?
   lastError         String?
@@ -388,6 +389,7 @@ model MessageOutbox {
   attemptLog        MessageAttempt[]
 
   @@index([status, nextAttemptAt])
+  @@index([status, lockedUntil])
   @@index([campaignId, status])
   @@index([customerId, createdAt])
   @@index([orderId, createdAt])

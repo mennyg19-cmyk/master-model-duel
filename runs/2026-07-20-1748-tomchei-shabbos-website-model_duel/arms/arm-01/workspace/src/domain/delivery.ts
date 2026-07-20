@@ -1,7 +1,11 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { PackageStage, Prisma, type PrismaClient } from "@prisma/client";
+import {
+  MessageChannel,
+  PackageStage,
+  Prisma,
+  type PrismaClient,
+} from "@prisma/client";
 import { captureCustomerNotification, captureEmailAndSms } from "@/domain/delivery-notifications";
-import { enqueueTransactionalEmail } from "@/domain/messaging";
 import { voidPackageLabel } from "@/domain/shipping";
 import type { ShippingProvider } from "@/lib/shippo";
 
@@ -290,9 +294,13 @@ export async function startDeliveryRoute(
         customerId: customer.id,
         packageId: stop.package.id,
         eventKey: `route-start:${route.id}:${stop.package.id}`,
-        channel: "EMAIL",
+        channel: MessageChannel.EMAIL,
         destination: customer.email,
-        payload: { routeId: route.id, type: "DAY_OF_DELIVERY" },
+        payload: {
+          routeId: route.id,
+          type: "DAY_OF_DELIVERY",
+          recipientName: stop.package.recipientName,
+        },
       });
     }
     return route;
@@ -523,6 +531,10 @@ export async function markPickupReady(
     return !orderLine.product.tracksInventory || Boolean(inventory && inventory.onHand - inventory.reserved >= quantity);
   });
   if (!isAvailable) throw new Error("Pickup inventory is not yet available.");
+  const pickupLocation = await prisma.pickupLocation.findUniqueOrThrow({
+    where: { id: pickupLocationId },
+    select: { name: true },
+  });
   return prisma.$transaction(async (transaction) => {
     const readyAt = packageRecord.pickupReadyAt ?? new Date();
     const updated = await transaction.package.update({
@@ -538,9 +550,13 @@ export async function markPickupReady(
       customerId: packageRecord.order.customer.id,
       packageId,
       eventKey: `pickup-ready:${packageId}`,
-      channel: "EMAIL",
+      channel: MessageChannel.EMAIL,
       destination: packageRecord.order.customer.email,
-      payload: { type: "PICKUP_READY", pickupLocationId },
+      payload: {
+        type: "PICKUP_READY",
+        pickupLocationId,
+        pickupLocation: pickupLocation.name,
+      },
     });
     return updated;
   });
@@ -599,7 +615,12 @@ export async function scheduleBulkDelivery(
     eventKey: `bulk-scheduled:${packageId}:${start.toISOString()}`,
     email: customer.email,
     phone: customer.phone,
-    payload: { type: "BULK_DELIVERY_SCHEDULED", start, end },
+    payload: {
+      type: "BULK_DELIVERY_SCHEDULED",
+      start: start.toISOString(),
+      end: end.toISOString(),
+      deliveryWindow: `${start.toLocaleString()}–${end.toLocaleString()}`,
+    },
   });
 }
 
@@ -628,30 +649,4 @@ export async function expireUnclaimedPickups(prisma: PrismaClient, now = new Dat
     });
   }
   return expiredCount;
-}
-
-export async function sendPaymentReminders(prisma: PrismaClient) {
-  const orders = await prisma.order.findMany({
-    where: {
-      status: "FINALIZED",
-      cachedPaymentStatus: { in: ["UNPAID", "PARTIALLY_PAID"] },
-      customer: { email: { not: null } },
-    },
-    include: { customer: true },
-    take: 500,
-  });
-  for (const order of orders) {
-    await enqueueTransactionalEmail(prisma, {
-      idempotencyKey: `payment-reminder:${order.id}:${new Date().toISOString().slice(0, 10)}`,
-      templateKey: "order.payment_link",
-      recipient: order.customer.email,
-      customerId: order.customer.id,
-      orderId: order.id,
-      variables: {
-        orderNumber: order.orderNumber ?? order.draftReference,
-        paymentUrl: `${process.env.APP_URL ?? "http://127.0.0.1:3101"}/account/orders/${order.id}`,
-      },
-    });
-  }
-  return orders.length;
 }
