@@ -108,11 +108,12 @@ Then:
 
 - Union only; tag `SHARED` / `UNIQUE-TO-{arm_id}`.  
 - **No invented IDs.** Every ID needs an evidence path in the source tree.  
-- Deduplicate by meaning + path, not by wording alone.
+- Deduplicate by meaning + path, not by wording alone.  
+- Tags are **attribution** (who contributed the ID). If one arm’s coarser row covers another’s granular row, fold and tag `SHARED` — do not leave peer-covered behavior as UNIQUE.
 
 **Grader scores:**
 
-- **Recall** vs reconciled (and orchestrator may spot-check code features).  
+- **Recall** vs **the full reconciled inventory** (every ID is in the denominator for every arm). `UNIQUE-TO-*` does **not** shrink scope.  
 - **Precision** — junk / hallucinated IDs penalized.  
 Verbosity without evidence does not win.
 
@@ -226,8 +227,8 @@ Same reviewer model for all arms. Fresh context every spawn. Labels `arm-{id}` o
 
 ### Inventory / plan integrity
 
-10. Reconciler: union only, evidence paths, no invented IDs, UNIQUE-TO tags.  
-11. Inventory grade = recall + precision (junk IDs hurt).  
+10. Reconciler: union only, evidence paths, no invented IDs, UNIQUE-TO tags for attribution; fold overlaps to SHARED.  
+11. Inventory grade = recall + precision vs **full** reconciled list (junk IDs hurt). Never exclude UNIQUE-TO-peer rows from an arm’s denominator.
 11b. Grill track: different questions across models are expected; grade turn **quality** + inventory fidelity; efficiency = same quality / fewer necessary turns (`GRILL-INVENTORY.md`).  
 11c. After dual inventory, user must see `INVENTORY-COMPARISON.md` before Test 2; default plan input is `USER-RESOLVED-INVENTORY.md`.  
 12. Chooser merge cites source arm per decision; no silent invention past plan union.  
