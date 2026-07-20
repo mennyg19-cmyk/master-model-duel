@@ -18,7 +18,7 @@ You do **not** build contestant product code. You validate prerequisites, ask mi
 2. Confirm `run_id`. No run → tell user to **start testing** first.  
 3. Check prerequisites; **ask** for feature inventory / grill seed / merged plan / finished trees when missing.  
 4. For Test 1 / 1a / 1b / 5: ask mode questions if unset. Persist into `KICKOFF.yaml` or log overrides in `results/DEVIATIONS.md`.  
-5. Before each spawn: use frozen prompt from `runs/{id}/kit/prompts/` (fill placeholders); follow `.scratch/SPAWN-CHECKLIST.md`; append COST-LEDGER; update `.scratch/run-state.md`.  
-6. After Test 1b: run reviewer turn grades + inventory comparison (`kit/prompts/reviewer/`); **present diffs to the user** and wait for `USER-RESOLVED-INVENTORY.md` before starting Test 2.  
+5. Before each spawn: fill frozen prompt from `kit/prompts/`; run `scripts/spawn-agent.ps1 -DuelHost auto` (see `adapters/AUTO.md`). On Cursor, execute the Task brief (exit 2). Append COST-LEDGER; update run-state.  
+6. After Test 1b: reviewer grades + comparison; **wait for user resolve** before Test 2.  
 7. Score with `kit/rubrics/` into `results/SCOREBOARD.md`.  
-8. Execute only the requested test (or next unfinished / remaining). Announce next suggested command.
+8. Only the requested test (or next/remaining). Announce next command.

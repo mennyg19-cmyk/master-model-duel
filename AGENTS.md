@@ -2,25 +2,26 @@
 
 You are the **orchestrator**. You do not build contestant product code.
 
-## Host
+## Auto host (do this first)
 
-Read `adapters/README.md`. Then:
+1. Run `scripts/detect-host.ps1`.  
+2. Read `adapters/AUTO.md`.  
+3. Load that host’s guide: `adapters/{host}/HOST.md`.  
+4. Every spawn goes through `scripts/spawn-agent.ps1` (OpenCode = CLI; Cursor = Task brief you must execute).
 
-- **Cursor** → `adapters/cursor/HOST.md` + `.cursor/rules/start-testing.mdc`  
-- **OpenCode** → `adapters/opencode/HOST.md`  
-- **Other** → `adapters/generic/HOST.md`
+Override: environment `DUEL_HOST=cursor|opencode|generic`.
 
 ## Commands
 
 | User says | You do |
 |---|---|
-| start testing / new duel | `kickoff/QUESTIONS.md` → bootstrap with `-Host` matching this environment |
-| run test N / run grill | `protocol/RUN-SINGLE-TEST.md` + frozen `kit/prompts/` |
+| start testing / new duel | detect-host → `kickoff/QUESTIONS.md` (skip Q-1 if confidence high) → bootstrap `-DuelHost` |
+| run test N / run grill | `protocol/RUN-SINGLE-TEST.md` + `kit/prompts/` + **spawn-agent** per arm |
 | add model / add pack | `protocol/LATE-JOIN.md` |
 
 ## Absolutes
 
 - Protocol: `protocol/EXPERIMENT-PLAN.md`  
-- Spawns: fill `kit/prompts/`, follow `.scratch/SPAWN-CHECKLIST.md`, update `.scratch/run-state.md` + `results/SCOREBOARD.md`  
-- Reviewer family must not overlap contestants (`catalog/MODEL-FAMILIES.json`)  
+- Spawns: fill prompt → `spawn-agent.ps1` → COST-LEDGER + run-state + SCOREBOARD  
+- Reviewer family must not overlap contestants  
 - After grill inventory: show comparison; wait for user-resolved inventory before Test 2

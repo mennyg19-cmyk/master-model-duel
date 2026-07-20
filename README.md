@@ -1,8 +1,6 @@
 # Master Model Duel
 
-A **multi-model agent experiment** you can run in **Cursor**, **OpenCode**, or another multi-model tool.
-
-The tests, prompts, and scorecards are the same everywhere. Only *how* you start models and attach rules changes — see [`adapters/README.md`](adapters/README.md).
+A **multi-model agent experiment**. It **detects** whether you’re in Cursor or OpenCode (or falls back to generic) and uses that host’s spawn path — see [`adapters/AUTO.md`](adapters/AUTO.md).
 
 | Mode | Compare |
 |---|---|
@@ -13,28 +11,17 @@ The tests, prompts, and scorecards are the same everywhere. Only *how* you start
 
 ## Quick start
 
-### Cursor
+1. Open this repo in **Cursor** or **OpenCode**.  
+2. Say **start testing** — orchestrator runs `detect-host`, then kickoff.  
+3. Bootstrap uses the detected `-DuelHost`.  
+4. Spawns go through `scripts/spawn-agent.ps1`:
+   - **OpenCode** → `opencode run` in the arm folder (CLI)  
+   - **Cursor** → Task brief the orchestrator must spawn  
+   - **Generic** → manual brief  
 
-1. Open this repo in Cursor.  
-2. Say **start testing**.  
-3. Bootstrap uses `-DuelHost cursor` (default).  
-4. Details: [`adapters/cursor/HOST.md`](adapters/cursor/HOST.md).
+Override detection: set env `DUEL_HOST=opencode` (or `cursor` / `generic`).
 
-### OpenCode
-
-1. Open this repo in OpenCode (root [`AGENTS.md`](AGENTS.md) is the orchestrator).  
-2. Say **start testing**; set host to **opencode**; use OpenCode model ids.  
-3. Bootstrap:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-run.ps1 -KickoffYaml "runs/{id}/KICKOFF.yaml" -DuelHost opencode
-```
-
-4. For each spawn: new session in `arms/arm-0N/` with that arm’s model — full steps in [`adapters/opencode/HOST.md`](adapters/opencode/HOST.md).
-
-### Something else
-
-Use `-DuelHost generic` and [`adapters/generic/HOST.md`](adapters/generic/HOST.md).
+Host details: [`adapters/README.md`](adapters/README.md).
 
 ---
 

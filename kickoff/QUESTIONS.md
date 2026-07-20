@@ -2,17 +2,27 @@
 
 Ask **one group at a time**. Do not bootstrap until all answers are locked in `runs/{run_id}/KICKOFF.yaml`.
 
-## Q-1 — Host tool
+## Q-1 — Host tool (auto-detect first)
 
-**Ask:** Where are you running this duel?
+**Before asking:** run:
 
-| Answer | Record `host` | Notes |
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/detect-host.ps1
+```
+
+| Confidence | What you do |
+|---|---|
+| **high** | Do **not** ask. Record `host` from detection. Tell the user: “Detected **X** — using that harness.” |
+| **medium** | Show detection + evidence. Ask: “Use this host?” Default = detected. |
+| **low** | Ask which host (table below). Suggest setting `DUEL_HOST` next time. |
+
+| Answer | Record `host` | Spawn path |
 |---|---|---|
-| Cursor | `cursor` | Default; `.cursor/rules` |
-| OpenCode | `opencode` | `AGENTS.md` + `rules/*.md` — see `adapters/opencode/HOST.md` |
-| Other multi-model tool | `generic` | Plain `rules/*.md` — see `adapters/generic/HOST.md` |
+| Cursor | `cursor` | Cursor Task via `scripts/spawn-agent.ps1` brief |
+| OpenCode | `opencode` | `opencode run` via `scripts/spawn-agent.ps1` |
+| Other | `generic` | Manual brief from spawn-agent |
 
-Model ids must exist for that host in `catalog/MODEL-FAMILIES.json` (`slugs` / `hosts.cursor` for Cursor; `hosts.opencode` for OpenCode).
+Full rules: `adapters/AUTO.md`. Model ids must match that host in `catalog/MODEL-FAMILIES.json`.
 
 ---
 

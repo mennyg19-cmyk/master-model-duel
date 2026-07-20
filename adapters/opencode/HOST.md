@@ -29,17 +29,15 @@ Each arm gets:
 | `workspace/` | Build tree |
 | `results/` | Arm deliverables |
 
-## How to spawn (you are the orchestrator)
+## How to spawn (orchestrator)
 
-OpenCode does not use Cursor’s Task tool. For each spawn:
+Prefer **`scripts/spawn-agent.ps1 -DuelHost auto`** (see `adapters/AUTO.md`). That runs:
 
-1. Fill placeholders in `runs/{id}/kit/prompts/…`.  
-2. Start a **new** OpenCode session (or subagent) with:
-   - **Working directory** = `runs/{id}/arms/{arm_id}/` (so `AGENTS.md` applies)  
-   - **Model** = that arm’s model from mapping  
-3. Paste the frozen prompt.  
-4. For reviewer roles: same, but use `reviewer_model` and usually deny edits if your OpenCode agent permissions allow.  
-5. Append cost to `COST-LEDGER.csv` from OpenCode usage if shown; else estimate/leave blank and note it.
+```text
+opencode run --model <id> --file <filled-prompt.md> "…"
+```
+
+inside the arm directory. Interactive sessions are optional for debugging only.
 
 ### Focused specialists / grill interleave
 

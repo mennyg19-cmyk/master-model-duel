@@ -1,13 +1,12 @@
 # Spawn checklist (orchestrator)
 
-Before each spawn:
-
-1. [ ] Correct model slug (contestant vs reviewer family check already done at kickoff)  
-2. [ ] Frozen prompt from `template/prompts/` (or run copy under `runs/.../kit/prompts/`) with placeholders filled  
-3. [ ] Arm workspace / rules present  
+0. [ ] `detect-host.ps1` run; host locked  
+1. [ ] Correct model id for that host  
+2. [ ] Frozen prompt filled  
+3. [ ] `spawn-agent.ps1` invoked (OpenCode CLI or Cursor Task brief executed)  
 4. [ ] Blind: reviewer does not see model names  
-5. [ ] COST-LEDGER row reserved / will append after  
-6. [ ] RUN-STATE.md `next_action` matches this spawn  
+5. [ ] COST-LEDGER row appended  
+6. [ ] RUN-STATE.md updated  
 
 ## Test 1b interleave
 

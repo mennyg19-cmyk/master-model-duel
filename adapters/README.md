@@ -11,7 +11,14 @@ A **host** is the tool that deals the cards (starts models, loads rules, reports
 
 **Claude Code alone** is a bad *host for the whole duel* (one model family). Claude can still be one *contestant* inside Cursor or OpenCode.
 
-## What every host must do
+## Auto-detect (preferred)
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/detect-host.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/spawn-agent.ps1 -ArmDir "…" -Model "…" -PromptFile "…" -DuelHost auto
+```
+
+Details: [`AUTO.md`](AUTO.md). Override with env `DUEL_HOST`.
 
 1. Open **this repo** as the orchestrator workspace.  
 2. Run kickoff → bootstrap with `-DuelHost` matching your tool.  
