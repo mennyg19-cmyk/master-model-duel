@@ -21,7 +21,11 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- arm-01 P10 review panel: spawning 4 specialists
+- arm-01 P10 review panel:
+  - [arm-01 P10 security review](c1cca41a-147f-4708-a9c2-f7473871d7b5)
+  - [arm-01 P10 quality review](03906512-cf10-4fa5-9dff-5d16252c0488)
+  - [arm-01 P10 rules review](9798ddc9-9508-4cd0-a3d5-927b0a644d02)
+  - [arm-01 P10 clean-code review](a2b32fa7-617b-4e90-a8b9-c285921aa3cd)
 - arm-02 P6: [arm-02 P6 aggregate review](d65ac17b-8542-42ca-8c49-eb6e3630b47a)
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)
