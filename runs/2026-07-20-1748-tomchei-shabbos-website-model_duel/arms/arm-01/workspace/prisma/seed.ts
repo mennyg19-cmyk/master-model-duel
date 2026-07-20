@@ -286,6 +286,35 @@ async function seed() {
     },
   });
 
+  await prisma.customerAccount.upsert({
+    where: { clerkUserId: "seed_customer" },
+    update: { customerId: customer.id },
+    create: {
+      clerkUserId: "seed_customer",
+      email: "seed.customer@example.test",
+      customerId: customer.id,
+    },
+  });
+
+  const otherCustomer = await prisma.customer.upsert({
+    where: { emailNormalized: "other.customer@example.test" },
+    update: {},
+    create: {
+      displayName: "Other Customer",
+      email: "other.customer@example.test",
+      emailNormalized: "other.customer@example.test",
+    },
+  });
+  await prisma.customerAccount.upsert({
+    where: { clerkUserId: "other_customer" },
+    update: { customerId: otherCustomer.id },
+    create: {
+      clerkUserId: "other_customer",
+      email: "other.customer@example.test",
+      customerId: otherCustomer.id,
+    },
+  });
+
   await prisma.customerAddress.upsert({
     where: {
       customerId_normalizedKey: {

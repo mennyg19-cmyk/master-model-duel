@@ -2,7 +2,7 @@
 
 Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
-**UTC snapshot:** 2026-07-20T20:25:00Z (approx)
+**UTC snapshot:** 2026-07-20T20:05:00Z (approx)
 
 ## Status
 
@@ -16,11 +16,12 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 | Arm | P1 | P2 | P3 | P4 |
 |---|---|---|---|---|
-| arm-01 | ✓ | ✓ | ✓ | building |
-| arm-02 | ✓ | ✓ | ✓ gated | next |
+| arm-01 | ✓ | ✓ | ✓ | build done · review **3/4** |
+| arm-02 | ✓ | ✓ | ✓ | building |
 
-## Next
+## In flight
 
-Both arms: P4 build → review → fix → gate. arm-02 P4 spawn when arm-01 P4 lands or in parallel.
+- arm-01 P4: security review pending → aggregate → fix → gate
+- arm-02 P4: [arm-02 Test4 P4 build](b86bea98-c701-49ea-9cc4-402ddbd24c27)
 
-See [SCOREBOARD.md](./SCOREBOARD.md) for rubric detail.
+See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)

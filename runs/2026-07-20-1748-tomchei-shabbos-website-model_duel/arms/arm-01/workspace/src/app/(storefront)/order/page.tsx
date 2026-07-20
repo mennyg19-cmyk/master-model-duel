@@ -1,21 +1,67 @@
 import Link from "next/link";
+import { OrderBuilder } from "@/components/order-builder";
+import { getAuthenticatedCustomer } from "@/lib/customer-access";
+import { db } from "@/lib/db";
 import { getDeliveryZips } from "@/lib/store-settings";
-import { getCurrentSeason } from "@/lib/storefront";
+import { getAvailableQuantity, getCurrentSeason } from "@/lib/storefront";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrderGatePage({
   searchParams,
 }: {
-  searchParams: Promise<{ zip?: string }>;
+  searchParams: Promise<{ zip?: string; draft?: string }>;
 }) {
-  const [{ zip }, season, deliveryZips] = await Promise.all([
+  const [{ zip, draft }, season, deliveryZips, account] = await Promise.all([
     searchParams,
     getCurrentSeason(),
     getDeliveryZips(),
+    getAuthenticatedCustomer(),
   ]);
   const isOpen = season?.status === "OPEN";
   const isDeliveryZipAllowed = !zip || deliveryZips.includes(zip.trim());
+
+  if (isOpen && isDeliveryZipAllowed && season) {
+    const addresses = account?.customerId
+      ? await db.customerAddress.findMany({
+          where: { customerId: account.customerId },
+          orderBy: [{ label: "asc" }, { recipientName: "asc" }],
+        })
+      : [];
+    return (
+      <main className="bg-[var(--cream)]">
+        <OrderBuilder
+          initialDraftId={draft}
+          initialAddresses={addresses}
+          isAuthenticated={Boolean(account?.customerId)}
+          products={season.products.map((product) => ({
+            id: product.id,
+            name: product.name,
+            description: product.description,
+            category: product.category,
+            imageUrl: product.imageUrl,
+            priceCents: product.priceCents,
+            availableQuantity: getAvailableQuantity(product),
+            options: product.options.map((option) => ({
+              id: option.id,
+              value: option.value,
+              priceAdjustmentCents: option.priceAdjustmentCents,
+              isDefault: option.isDefault,
+            })),
+            addOns: product.allowedAddOns.map(({ addOn }) => ({
+              id: addOn.id,
+              name: addOn.name,
+              priceCents: addOn.priceCents,
+              availableQuantity: getAvailableQuantity({
+                tracksInventory: addOn.tracksInventory,
+                inventoryItem: addOn.addOnInventoryItem,
+              }),
+            })),
+          }))}
+        />
+      </main>
+    );
+  }
 
   return (
     <main className="grid min-h-[60vh] place-items-center bg-[var(--cream)] px-5 py-20">
@@ -39,15 +85,7 @@ export default async function OrderGatePage({
               uses the latest staff settings.
             </p>
           </>
-        ) : (
-          <>
-            <h1 className="mt-4 text-3xl font-black">Your gift is ready to build</h1>
-            <p className="mt-4 leading-7 text-[var(--muted)]">
-              The season and delivery area are open. The cart-first order builder
-              arrives in the next release.
-            </p>
-          </>
-        )}
+        ) : null}
         <Link
           className="mt-7 inline-block rounded-full bg-[var(--ink)] px-6 py-3 font-bold text-white"
           href={isOpen ? "/catalog" : "/collections"}

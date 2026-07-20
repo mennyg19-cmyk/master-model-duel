@@ -17,7 +17,13 @@ export async function getCurrentSeason() {
       products: {
         where: { kind: "PACKAGE", isActive: true },
         orderBy: { name: "asc" },
-        include: { options: { where: { isActive: true } }, inventoryItem: true },
+        include: {
+          options: { where: { isActive: true } },
+          inventoryItem: true,
+          allowedAddOns: {
+            include: { addOn: { include: { addOnInventoryItem: true } } },
+          },
+        },
       },
     },
   });

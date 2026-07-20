@@ -7,6 +7,7 @@ import { brand } from "@/lib/brand";
 const navigation = [
   { href: "/catalog", label: "Purim gifts" },
   { href: "/collections", label: "Past collections" },
+  { href: "/account", label: "My account" },
   { href: "/#how-it-works", label: "How it works" },
   { href: "/#impact", label: "Our impact" },
 ];
@@ -45,9 +46,9 @@ export function StorefrontHeader({ isOpen }: { isOpen: boolean }) {
           <div className="hidden items-center gap-3 sm:flex">
             <Link
               className="rounded-full px-4 py-2 text-sm font-semibold text-[var(--ink)] hover:bg-[var(--surface)]"
-              href="/admin"
+              href="/account"
             >
-              Staff
+              Account
             </Link>
             <Link
               className="rounded-full bg-[var(--brand)] px-5 py-2.5 text-sm font-bold text-white"

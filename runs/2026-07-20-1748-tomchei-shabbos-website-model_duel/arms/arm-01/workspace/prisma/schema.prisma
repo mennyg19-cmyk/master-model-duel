@@ -36,6 +36,12 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum RecipientAssignmentSource {
+  ON_ORDER
+  ADDRESS_BOOK
+  NEW_RECIPIENT
+}
+
 enum CachedPaymentStatus {
   UNPAID
   PARTIALLY_PAID
@@ -310,9 +316,11 @@ model CustomerAddress {
   longitude       Decimal?  @db.Decimal(9, 6)
   geocodedAt      DateTime?
   geocodeProvider String?
+  version         Int       @default(1)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   packages        Package[]
+  orderLines      OrderLine[]
 
   @@unique([customerId, normalizedKey])
 }
@@ -326,6 +334,8 @@ model Order {
   status              OrderStatus           @default(DRAFT)
   orderNumber         Int?
   draftReference      String                @unique
+  guestAccessTokenHash String?               @unique
+  guestAccessExpiresAt DateTime?
   wireFormatVersion   Int                   @default(1)
   cachedPaymentStatus CachedPaymentStatus   @default(UNPAID)
   subtotalCents       Int                   @default(0)
@@ -353,6 +363,10 @@ model OrderLine {
   product                Product          @relation(fields: [productId], references: [id])
   productOptionId        String?
   productOption          ProductOption?   @relation(fields: [productOptionId], references: [id])
+  recipientAddressId     String?
+  recipientAddress       CustomerAddress? @relation(fields: [recipientAddressId], references: [id])
+  recipientSource        RecipientAssignmentSource?
+  recipientNameSnapshot  String?
   productNameSnapshot    String
   skuSnapshot            String
   unitPriceCentsSnapshot Int
@@ -361,6 +375,7 @@ model OrderLine {
   packageLines           PackageLine[]
 
   @@index([orderId])
+  @@index([recipientAddressId])
 }
 
 model OrderLineAddOn {

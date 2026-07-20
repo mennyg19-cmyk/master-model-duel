@@ -5,7 +5,11 @@
 2026-07-20T19:34:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P3,review_clean_code,glm-5.2-high,ed1b33bb-90b8-4d06-b6d0-fb90761a00ac,,,,,,,13 findings
 2026-07-20T19:36:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P3,review_aggregate,glm-5.2-high,d4f15308-37c3-4978-95ec-5370f5e5e0ed,,,,,,,1 blocker 20 major 42 total
 2026-07-20T19:40:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P3,fix,gpt-5.6-sol-medium,0d5776c0-3fc9-42e8-9347-9af87eb443b4,,,,,,,B1 A1-A8 m7 fixed S1-S5 pass
-2026-07-20T19:52:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,build,gpt-5.6-sol-medium,2ce3c9d1-0bce-43cb-b7f9-4193b7833db7,,,,,,,pending
+2026-07-20T19:52:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,build,gpt-5.6-sol-medium,2ce3c9d1-0bce-43cb-b7f9-4193b7833db7,,,,,,,S1-S3 CI build pass
+2026-07-20T20:30:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,review_security,glm-5.2-high,844faee6-72a5-4a47-b03d-2a32d12b81d2,,,,,,,pending
+2026-07-20T20:30:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,review_quality,glm-5.2-high,8656511e-6c3e-41a9-9f9b-8414a296d9b5,,,,,,,11 findings (3 high)
+2026-07-20T20:30:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,review_rules,glm-5.2-high,ae1c1d06-fbbe-44e2-88c2-49479b31051a,,,,,,,11 findings
+2026-07-20T20:30:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-01,P4,review_clean_code,glm-5.2-high,d5d48ef1-86c7-4c1e-9753-24d3f0ac48f5,,,,,,,9 findings
 2026-07-20T20:05:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-02,P3,build,claude-fable-5-thinking-medium,29e80416-50c3-4ebc-9422-6a5f1786bdd6,,,,,,,S1-S5 36 checks 27 tests
 2026-07-20T20:06:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-02,P3,review_security,glm-5.2-high,e47d913f-3da6-43d4-8b05-c2783cd4dc32,,,,,,,9 findings (1 med newsletter token)
 2026-07-20T20:06:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-02,P3,review_quality,glm-5.2-high,c1caca27-0533-4004-97e4-f79db6c2162b,,,,,,,9 findings

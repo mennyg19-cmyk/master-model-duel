@@ -6,6 +6,8 @@ trail. P2 adds the schema-first domain core for seasons, catalog, customers,
 orders, packages, payments, shipping records, inventory, and assembly.
 P3 adds the public marketing site, current and archived catalogs, newsletter
 preferences, catalog and media administration, and storefront settings.
+P4 adds the cart-first order builder, saved-recipient workflow, protected
+authenticated and guest drafts, and customer account pages.
 
 ## Local development
 
@@ -58,3 +60,15 @@ and native `node:test` through `tsx` for unit tests.
   add-on/replacement shells, restricted media uploads, and live store settings.
 - Production media uses Vercel Blob through `BLOB_READ_WRITE_TOKEN`. Local smoke
   mode stores validated image payloads in the media table when test auth is on.
+
+## P4 cart and customer account
+
+- `/order` provides inventory-aware product cards, options, restricted add-ons,
+  autosave, three-way recipient assignment, desktop cart sidebar, and mobile FAB.
+- New recipients are validated and deduplicated into one customer address book;
+  customer edits enforce ownership and staff edits write an audit event.
+- Authenticated drafts are scoped to the linked customer. Guest drafts use an
+  expiring random access token and return 404 without the matching token.
+- `/account`, `/account/orders/[orderId]`, `/account/profile`, and
+  `/account/addresses` expose ownership-enforced customer account views.
+- P4 stops before payment capture and fulfillment commitment.
