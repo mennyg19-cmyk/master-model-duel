@@ -18,13 +18,13 @@ See `shared/phases/PHASE-P2-EXPECTED.md`. Both arms P2 **gated**.
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Storefront UX | ✓ | |
-| S2 | Season gate | ✓ | |
-| S3 | Newsletter round-trip | ✓ | |
-| S4 | Media + catalog | ✓ | |
-| S5 | Delivery ZIP | ✓ | |
+| S1 | Storefront UX | ✓ | ✓ |
+| S2 | Season gate | ✓ | ✓ |
+| S3 | Newsletter round-trip | ✓ | ✓ |
+| S4 | Media + catalog | ✓ | ✓ |
+| S5 | Delivery ZIP | ✓ | ✓ |
 
-See `shared/phases/PHASE-P3-EXPECTED.md`. arm-01 P3 **gated**.
+See `shared/phases/PHASE-P3-EXPECTED.md`. Both arms P3 **gated**.
 
 ## P4 (next)
 

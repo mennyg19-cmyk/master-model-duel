@@ -3,6 +3,11 @@ import { getSetting } from "@/lib/settings";
 import { SiteHeader } from "@/components/storefront/site-header";
 import { SiteFooter } from "@/components/storefront/site-footer";
 
+// Every storefront page reflects live DB state (season gate, catalog, settings).
+// Prisma reads aren't request-time APIs, so without this Next would cache the
+// pages statically and admin changes (close store, edit ZIPs) would not apply.
+export const dynamic = "force-dynamic";
+
 export default async function StorefrontLayout({ children }: { children: React.ReactNode }) {
   const openSeason = await getOpenSeason();
   const closedMessage = openSeason ? null : await getSetting("store.closed_message");

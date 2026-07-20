@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 export function NewsletterSignup() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const [manageUrl, setManageUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function subscribe(event: FormEvent) {
@@ -26,7 +25,6 @@ export function NewsletterSignup() {
         return;
       }
       setMessage("You're on the list! We'll email you when the store opens.");
-      setManageUrl(body.manageUrl ?? null);
       setEmail("");
     } finally {
       setBusy(false);
@@ -50,11 +48,6 @@ export function NewsletterSignup() {
         </Button>
       </div>
       {message && <p className="text-xs text-muted">{message}</p>}
-      {manageUrl && (
-        <a href={manageUrl} className="text-xs text-brand hover:underline">
-          Manage your preferences
-        </a>
-      )}
     </form>
   );
 }

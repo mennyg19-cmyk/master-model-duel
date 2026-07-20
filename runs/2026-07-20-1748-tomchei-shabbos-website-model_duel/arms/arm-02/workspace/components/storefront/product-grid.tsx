@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { CatalogProduct } from "@/lib/catalog";
 import { formatCents } from "@/lib/catalog";
@@ -24,6 +24,46 @@ function ProductImage({ product, className }: { product: CatalogProduct; classNa
 export function ProductGrid({ products, canOrder }: { products: CatalogProduct[]; canOrder: boolean }) {
   const [quickViewId, setQuickViewId] = useState<string | null>(null);
   const quickViewProduct = products.find((product) => product.id === quickViewId) ?? null;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  // Modal behavior: Escape closes, Tab is trapped inside, body scroll is
+  // locked, and focus returns to the triggering button on close.
+  useEffect(() => {
+    if (!quickViewProduct) return;
+    const dialog = dialogRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialog?.querySelector<HTMLElement>("button")?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setQuickViewId(null);
+        return;
+      }
+      if (event.key !== "Tab" || !dialog) return;
+      const focusable = dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      triggerRef.current?.focus();
+    };
+  }, [quickViewProduct]);
 
   return (
     <>
@@ -49,7 +89,10 @@ export function ProductGrid({ products, canOrder }: { products: CatalogProduct[]
                 {product.soldOut && <Badge tone="danger">Sold out</Badge>}
                 <button
                   type="button"
-                  onClick={() => setQuickViewId(product.id)}
+                  onClick={(event) => {
+                    triggerRef.current = event.currentTarget;
+                    setQuickViewId(product.id);
+                  }}
                   className="ml-auto rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-brand-soft"
                 >
                   Quick view
@@ -69,6 +112,7 @@ export function ProductGrid({ products, canOrder }: { products: CatalogProduct[]
           onClick={() => setQuickViewId(null)}
         >
           <div
+            ref={dialogRef}
             className="w-full max-w-md rounded-lg bg-surface p-5 shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >

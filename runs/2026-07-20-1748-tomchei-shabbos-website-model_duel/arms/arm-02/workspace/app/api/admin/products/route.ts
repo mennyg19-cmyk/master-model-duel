@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
+import { validateSeasonExists } from "@/lib/catalog-validation";
 
 export async function GET(request: Request) {
   const gate = await requirePermissionApi("catalog.manage");
@@ -36,6 +37,9 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
+
+  const seasonError = await validateSeasonExists(parsed.data.seasonId);
+  if (seasonError) return Response.json({ error: seasonError }, { status: 404 });
 
   const duplicate = await db.product.findUnique({
     where: { seasonId_slug: { seasonId: parsed.data.seasonId, slug: parsed.data.slug } },

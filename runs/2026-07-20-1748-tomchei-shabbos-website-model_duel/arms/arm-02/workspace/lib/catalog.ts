@@ -13,10 +13,19 @@ export type CatalogProduct = {
 };
 
 /**
- * Active products for one season with the storefront's availability view.
  * Sold-out (R-016) = tracked inventory with nothing left after reservations;
  * untracked products never sell out.
  */
+export function isSoldOut(product: {
+  trackInventory: boolean;
+  inventoryItem: { quantityOnHand: number; reserved: number } | null;
+}): boolean {
+  return product.trackInventory && product.inventoryItem
+    ? product.inventoryItem.quantityOnHand - product.inventoryItem.reserved <= 0
+    : false;
+}
+
+/** Active products for one season with the storefront's availability view. */
 export async function getCatalogProducts(seasonId: string): Promise<CatalogProduct[]> {
   const products = await db.product.findMany({
     where: { seasonId, isActive: true },
@@ -31,10 +40,7 @@ export async function getCatalogProducts(seasonId: string): Promise<CatalogProdu
     description: product.description,
     basePriceCents: product.basePriceCents,
     imageUrl: product.image?.url ?? null,
-    soldOut:
-      product.trackInventory && product.inventoryItem
-        ? product.inventoryItem.quantityOnHand - product.inventoryItem.reserved <= 0
-        : false,
+    soldOut: isSoldOut(product),
     options: product.options.map((option) => ({
       id: option.id,
       name: option.name,

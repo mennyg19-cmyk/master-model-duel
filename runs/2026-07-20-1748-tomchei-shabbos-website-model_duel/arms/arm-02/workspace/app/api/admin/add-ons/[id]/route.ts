@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
+import { validateRestrictedProductIds } from "@/lib/catalog-validation";
 
 const updateAddOnSchema = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -24,6 +25,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!addOn) return Response.json({ error: "Add-on not found" }, { status: 404 });
 
   const { restrictedToProductIds, ...fields } = parsed.data;
+  if (restrictedToProductIds) {
+    const restrictionError = await validateRestrictedProductIds(restrictedToProductIds, addOn.seasonId);
+    if (restrictionError) return Response.json({ error: restrictionError }, { status: 400 });
+  }
   await db.$transaction(async (tx) => {
     await tx.addOn.update({ where: { id }, data: fields });
     if (restrictedToProductIds) {

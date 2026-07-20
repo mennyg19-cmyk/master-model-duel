@@ -30,6 +30,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const product = await db.product.findUnique({ where: { id } });
   if (!product) return Response.json({ error: "Product not found" }, { status: 404 });
 
+  if (parsed.data.imageId) {
+    const image = await db.mediaAsset.findUnique({ where: { id: parsed.data.imageId }, select: { id: true } });
+    if (!image) return Response.json({ error: "Image not found" }, { status: 400 });
+  }
+  if (parsed.data.replacementId) {
+    const replacement = await db.product.findUnique({
+      where: { id: parsed.data.replacementId },
+      select: { seasonId: true, isActive: true },
+    });
+    if (!replacement) return Response.json({ error: "Replacement product not found" }, { status: 400 });
+    // R-148: replacement links must stay within the season and point at a sellable product.
+    if (replacement.seasonId !== product.seasonId) {
+      return Response.json({ error: "Replacement must belong to the same season" }, { status: 400 });
+    }
+    if (!replacement.isActive) {
+      return Response.json({ error: "Replacement must be an active product" }, { status: 400 });
+    }
+  }
+
   await db.$transaction(async (tx) => {
     await tx.product.update({ where: { id }, data: parsed.data });
     await writeAudit(

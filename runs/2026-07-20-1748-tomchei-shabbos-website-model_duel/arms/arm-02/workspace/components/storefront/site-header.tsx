@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/cn";
@@ -14,9 +14,37 @@ const NAV_LINKS = [
 export function SiteHeader({ storeOpen }: { storeOpen: boolean }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Dismiss the user menu (click-outside) and both menus (Escape).
+  useEffect(() => {
+    if (!mobileOpen && !userMenuOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (userMenuOpen && userMenuRef.current && !userMenuRef.current.contains(target)) {
+        setUserMenuOpen(false);
+      }
+      if (mobileOpen && headerRef.current && !headerRef.current.contains(target)) {
+        setMobileOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setUserMenuOpen(false);
+        setMobileOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mobileOpen, userMenuOpen]);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur">
+    <header ref={headerRef} className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <Link href="/" className="font-bold text-brand-strong">
           {BRAND.shortName}
@@ -40,7 +68,7 @@ export function SiteHeader({ storeOpen }: { storeOpen: boolean }) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <div className="relative">
+          <div ref={userMenuRef} className="relative">
             <button
               type="button"
               aria-label="Account menu"

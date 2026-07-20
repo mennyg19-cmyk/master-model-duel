@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
-import { createNewsletterToken } from "@/lib/newsletter-token";
 
 const subscribeSchema = z.object({
   email: z.string().email().max(254),
@@ -25,8 +24,8 @@ export async function POST(request: Request) {
     create: { email, name: parsed.data.name },
   });
 
-  // No email provider until the Email phase, so the preferences link is
-  // returned to the subscriber directly instead of being emailed.
-  const token = createNewsletterToken(email);
-  return Response.json({ ok: true, manageUrl: `/newsletter/preferences?token=${token}` });
+  // The tokenized manage/unsubscribe link is only ever delivered by email
+  // (Email phase). Returning it here would let anyone mint a management
+  // token for an arbitrary address, so the response stays token-free.
+  return Response.json({ ok: true });
 }

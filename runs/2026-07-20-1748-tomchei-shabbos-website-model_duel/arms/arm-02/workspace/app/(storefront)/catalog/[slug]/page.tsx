@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { getOpenSeason } from "@/lib/season";
-import { formatCents } from "@/lib/catalog";
+import { formatCents, isSoldOut } from "@/lib/catalog";
 import { OptionPricing } from "@/components/storefront/option-pricing";
 import { Badge } from "@/components/ui/badge";
 
@@ -17,10 +17,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   });
   if (!product || !product.isActive) notFound();
 
-  const soldOut =
-    product.trackInventory && product.inventoryItem
-      ? product.inventoryItem.quantityOnHand - product.inventoryItem.reserved <= 0
-      : false;
+  const soldOut = isSoldOut(product);
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10 sm:px-6">
