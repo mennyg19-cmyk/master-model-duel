@@ -17,7 +17,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 | Arm | P9/P5 | P10/P6 | Next |
 |---|---|---|---|
 | arm-01 | P9 ✓ | P10 building | review after build |
-| arm-02 | P5 ✓ | P6 build done · review running | aggregate after 4/4 |
+| arm-02 | P5 ✓ | P6 build done · review **3/4** (security pending) | aggregate after 4/4 |
 
 ## In flight
 
