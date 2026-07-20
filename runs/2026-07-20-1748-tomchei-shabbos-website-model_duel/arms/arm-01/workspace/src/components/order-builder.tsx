@@ -10,6 +10,7 @@ import {
   RecipientAddressDialog,
 } from "@/components/recipient-address-dialog";
 import { formatCurrency } from "@/lib/currency";
+import { getOrderDraftStorageKey } from "@/lib/order-draft-storage";
 
 export type BuilderAddress = {
   id: string;
@@ -56,18 +57,38 @@ type BuilderLine = {
   recipientSource: "ON_ORDER" | "ADDRESS_BOOK" | "NEW_RECIPIENT" | null;
 };
 
-const STORAGE_KEY = "tomchei-p4-draft";
+function toBuilderLines(lines: {
+  id: string;
+  productId: string;
+  productOptionId: string | null;
+  quantity: number;
+  recipientAddressId: string | null;
+  recipientSource: BuilderLine["recipientSource"];
+  addOns: { addOnProductId: string }[];
+}[]) {
+  return lines.map((line) => ({
+    clientId: line.id,
+    productId: line.productId,
+    productOptionId: line.productOptionId,
+    quantity: line.quantity,
+    recipientAddressId: line.recipientAddressId,
+    recipientSource: line.recipientSource,
+    addOnIds: line.addOns.map((addOn) => addOn.addOnProductId),
+  }));
+}
 
 export function OrderBuilder({
   products,
   initialAddresses,
   isAuthenticated,
+  storageOwnerKey,
   initialDraftId = null,
   mode = "storefront",
 }: {
   products: BuilderProduct[];
   initialAddresses: BuilderAddress[];
   isAuthenticated: boolean;
+  storageOwnerKey: string;
   initialDraftId?: string | null;
   mode?: "storefront" | "pos";
 }) {
@@ -81,61 +102,63 @@ export function OrderBuilder({
   const [addressDialog, setAddressDialog] = useState<{
     lineId: string;
     address: BuilderAddress | null;
+    draftId: string | null;
   } | null>(null);
   const draftCreationRef = useRef<Promise<string> | null>(null);
   const draftVersionRef = useRef(1);
   const hasLoadedRef = useRef(false);
+  const storageKey = getOrderDraftStorageKey(storageOwnerKey);
 
   useEffect(() => {
-    const restoreTimer = window.setTimeout(() => {
-      const persisted = window.localStorage.getItem(STORAGE_KEY);
-      if (persisted && !initialDraftId) {
-        const parsed = JSON.parse(persisted) as {
-          draftId: string | null;
-          draftVersion: number;
-          lines: BuilderLine[];
-        };
-        setDraftId(parsed.draftId);
-        setDraftVersion(parsed.draftVersion);
-        draftVersionRef.current = parsed.draftVersion;
+    const restoreTimer = window.setTimeout(async () => {
+      window.localStorage.removeItem("tomchei-p4-draft");
+      const persisted = !initialDraftId
+        ? window.localStorage.getItem(storageKey)
+        : null;
+      let parsed: {
+        draftId: string | null;
+        draftVersion: number;
+        lines: BuilderLine[];
+      } | null = null;
+      try {
+        parsed = persisted ? JSON.parse(persisted) : null;
+      } catch {
+        window.localStorage.removeItem(storageKey);
+      }
+
+      const restoreDraftId = initialDraftId ?? parsed?.draftId;
+      if (restoreDraftId) {
+        try {
+          const response = await fetch(`/api/order/drafts/${restoreDraftId}`);
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error ?? "Draft could not be restored.");
+          }
+          setDraftId(restoreDraftId);
+          setDraftVersion(payload.order.version);
+          draftVersionRef.current = payload.order.version;
+          setLines(toBuilderLines(payload.order.lines));
+          const addressResponse = await fetch(
+            `/api/account/addresses?draftId=${encodeURIComponent(restoreDraftId)}`,
+          );
+          if (addressResponse.ok) {
+            const addressPayload = await addressResponse.json();
+            setAddresses(addressPayload.addresses);
+          }
+          setSaveState("Draft restored");
+        } catch (error) {
+          if (persisted) window.localStorage.removeItem(storageKey);
+          setSaveState(
+            error instanceof Error ? error.message : "Draft could not be restored.",
+          );
+        }
+      } else if (parsed) {
         setLines(parsed.lines);
       }
       hasLoadedRef.current = true;
     }, 0);
-    if (initialDraftId) {
-      void fetch(`/api/order/drafts/${initialDraftId}`)
-        .then(async (response) => {
-          const payload = await response.json();
-          if (!response.ok) throw new Error(payload.error ?? "Draft could not be restored.");
-          setDraftVersion(payload.order.version);
-          draftVersionRef.current = payload.order.version;
-          setLines(
-            payload.order.lines.map(
-              (line: {
-                id: string;
-                productId: string;
-                productOptionId: string | null;
-                quantity: number;
-                recipientAddressId: string | null;
-                recipientSource: BuilderLine["recipientSource"];
-                addOns: { addOnProductId: string }[];
-              }) => ({
-                clientId: line.id,
-                productId: line.productId,
-                productOptionId: line.productOptionId,
-                quantity: line.quantity,
-                recipientAddressId: line.recipientAddressId,
-                recipientSource: line.recipientSource,
-                addOnIds: line.addOns.map((addOn) => addOn.addOnProductId),
-              }),
-            ),
-          );
-          setSaveState("Draft restored");
-        })
-        .catch((error: Error) => setSaveState(error.message));
-    }
     return () => window.clearTimeout(restoreTimer);
-  }, [initialDraftId]);
+  }, [initialDraftId, storageKey]);
 
   async function ensureDraft() {
     if (draftId) return draftId;
@@ -164,11 +187,23 @@ export function OrderBuilder({
     setSaveState("Saving…");
     try {
       const currentDraftId = await ensureDraft();
-      const response = await fetch(`/api/order/drafts/${currentDraftId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ lines: nextLines, version: draftVersionRef.current }),
-      });
+      const sendUpdate = (version: number) =>
+        fetch(`/api/order/drafts/${currentDraftId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ lines: nextLines, version }),
+        });
+      let response = await sendUpdate(draftVersionRef.current);
+      if (response.status === 409) {
+        const latestResponse = await fetch(`/api/order/drafts/${currentDraftId}`);
+        const latestPayload = await latestResponse.json();
+        if (!latestResponse.ok) {
+          throw new Error(latestPayload.error ?? "Draft could not be refreshed.");
+        }
+        draftVersionRef.current = latestPayload.order.version;
+        setDraftVersion(latestPayload.order.version);
+        response = await sendUpdate(latestPayload.order.version);
+      }
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Draft could not be saved.");
       setDraftVersion(payload.order.version);
@@ -182,7 +217,7 @@ export function OrderBuilder({
   useEffect(() => {
     if (!hasLoadedRef.current) return;
     window.localStorage.setItem(
-      STORAGE_KEY,
+      storageKey,
       JSON.stringify({ draftId, draftVersion, lines }),
     );
     if (lines.length === 0) return;
@@ -372,8 +407,12 @@ export function OrderBuilder({
                       onChange={(event) => {
                         const source = event.target.value as BuilderLine["recipientSource"];
                         if (source === "NEW_RECIPIENT") {
-                          void ensureDraft().then(() =>
-                            setAddressDialog({ lineId: line.clientId, address: null }),
+                          void ensureDraft().then((createdDraftId) =>
+                            setAddressDialog({
+                              lineId: line.clientId,
+                              address: null,
+                              draftId: createdDraftId,
+                            }),
                           );
                         } else {
                           updateLine(line.clientId, {
@@ -390,16 +429,26 @@ export function OrderBuilder({
                       <option value="NEW_RECIPIENT">Add a new recipient</option>
                     </select>
                     {line.recipientSource === "ON_ORDER" && (
-                      <AddressPicker
-                        addresses={onOrderAddresses.length ? onOrderAddresses : addresses.slice(0, 1)}
-                        onChange={(recipientAddressId) =>
-                          updateLine(line.clientId, { recipientAddressId })
-                        }
-                        onEdit={(address) =>
-                          setAddressDialog({ lineId: line.clientId, address })
-                        }
-                        value={line.recipientAddressId}
-                      />
+                      onOrderAddresses.length ? (
+                        <AddressPicker
+                          addresses={onOrderAddresses}
+                          onChange={(recipientAddressId) =>
+                            updateLine(line.clientId, { recipientAddressId })
+                          }
+                          onEdit={(address) =>
+                            setAddressDialog({
+                              lineId: line.clientId,
+                              address,
+                              draftId,
+                            })
+                          }
+                          value={line.recipientAddressId}
+                        />
+                      ) : (
+                        <p className="mt-2 text-sm text-[var(--muted)]">
+                          Assign another item to a recipient first.
+                        </p>
+                      )
                     )}
                     {line.recipientSource === "ADDRESS_BOOK" && (
                       <AddressPicker
@@ -408,7 +457,11 @@ export function OrderBuilder({
                           updateLine(line.clientId, { recipientAddressId })
                         }
                         onEdit={(address) =>
-                          setAddressDialog({ lineId: line.clientId, address })
+                          setAddressDialog({
+                            lineId: line.clientId,
+                            address,
+                            draftId,
+                          })
                         }
                         value={line.recipientAddressId}
                       />
@@ -447,7 +500,7 @@ export function OrderBuilder({
       {addressDialog && (
         <RecipientAddressDialog
           address={addressDialog.address}
-          draftId={draftId}
+          draftId={addressDialog.draftId}
           onClose={() => setAddressDialog(null)}
           onSaved={(address) => {
             setAddresses((currentAddresses) => {

@@ -1,12 +1,43 @@
-import { randomInt } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
+import { formatDraftReference } from "@/domain/order-engine";
 import {
   createGuestDraftAccess,
   getAuthenticatedCustomer,
+  getDraftAccessToken,
+  hashDraftAccessToken,
 } from "@/lib/customer-access";
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize";
 import { getCurrentSeason } from "@/lib/storefront";
+
+const GUEST_DRAFT_LIMIT_PER_MINUTE = 10;
+
+async function enforceGuestDraftLimit(request: Request) {
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const source = forwardedFor || request.headers.get("x-real-ip") || "unknown";
+  const key = createHash("sha256").update(source).digest("hex");
+  const windowStartedAt = new Date(Date.now() - 60_000);
+  const rows = await db.$queryRaw<{ attempts: number }[]>`
+    INSERT INTO "GuestDraftThrottle" ("key", "windowStartedAt", "attempts", "updatedAt")
+    VALUES (${key}, CURRENT_TIMESTAMP, 1, CURRENT_TIMESTAMP)
+    ON CONFLICT ("key") DO UPDATE SET
+      "attempts" = CASE
+        WHEN "GuestDraftThrottle"."windowStartedAt" < ${windowStartedAt} THEN 1
+        ELSE "GuestDraftThrottle"."attempts" + 1
+      END,
+      "windowStartedAt" = CASE
+        WHEN "GuestDraftThrottle"."windowStartedAt" < ${windowStartedAt}
+          THEN CURRENT_TIMESTAMP
+        ELSE "GuestDraftThrottle"."windowStartedAt"
+      END,
+      "updatedAt" = CURRENT_TIMESTAMP
+    RETURNING "attempts"
+  `;
+  if ((rows[0]?.attempts ?? GUEST_DRAFT_LIMIT_PER_MINUTE + 1) > GUEST_DRAFT_LIMIT_PER_MINUTE) {
+    throw new Error("GUEST_DRAFT_RATE_LIMIT");
+  }
+}
 
 export async function POST(request: Request) {
   const season = await getCurrentSeason();
@@ -23,6 +54,31 @@ export async function POST(request: Request) {
   let guestAccess: ReturnType<typeof createGuestDraftAccess> | null = null;
 
   if (!customerId) {
+    const existingToken = getDraftAccessToken(request);
+    if (existingToken) {
+      const existingOrder = await db.order.findFirst({
+        where: {
+          seasonId: season.id,
+          status: "DRAFT",
+          guestAccessTokenHash: hashDraftAccessToken(existingToken),
+          guestAccessExpiresAt: { gt: new Date() },
+        },
+      });
+      if (existingOrder) {
+        return NextResponse.json({ order: existingOrder });
+      }
+    }
+    try {
+      await enforceGuestDraftLimit(request);
+    } catch (error) {
+      if (error instanceof Error && error.message === "GUEST_DRAFT_RATE_LIMIT") {
+        return NextResponse.json(
+          { error: "Too many guest drafts were started. Try again in a minute." },
+          { status: 429 },
+        );
+      }
+      throw error;
+    }
     guestAccess = createGuestDraftAccess();
     const guestCustomer = await db.customer.create({
       data: {
@@ -38,13 +94,13 @@ export async function POST(request: Request) {
     data: {
       seasonId: season.id,
       customerId,
-      draftReference: `D-${randomInt(1, 100_000_000).toString().padStart(8, "0")}`,
+      draftReference: formatDraftReference(randomInt(1, 100_000_000)),
       guestAccessTokenHash: guestAccess?.tokenHash,
       guestAccessExpiresAt: guestAccess?.expiresAt,
     },
   });
   const response = NextResponse.json(
-    { order, accessToken: guestAccess?.token ?? null },
+    { order },
     { status: 201 },
   );
   if (guestAccess) {

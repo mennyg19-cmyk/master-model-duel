@@ -161,16 +161,31 @@ async function runSmoke() {
   });
   assert.equal(forbiddenDraft.status, 404);
 
-  const guestDraftPayload = await readJson(
+  const guestDraftResponse = await fetch(`${baseUrl}/api/order/drafts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ displayName: "Smoke Guest" }),
+  });
+  const guestCookie = guestDraftResponse.headers
+    .get("set-cookie")
+    ?.match(/draft_access_token=([^;]+)/)?.[1];
+  assert.ok(guestCookie, "Guest draft must set an httpOnly access cookie.");
+  const guestDraftPayload = await readJson(guestDraftResponse);
+  assert.equal("accessToken" in guestDraftPayload, false);
+  const guestAuthorization = {
+    cookie: `draft_access_token=${guestCookie}`,
+  };
+  const dedupedGuestDraft = await readJson(
     await fetch(`${baseUrl}/api/order/drafts`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Smoke Guest" }),
+      headers: {
+        "content-type": "application/json",
+        ...guestAuthorization,
+      },
+      body: "{}",
     }),
   );
-  const guestAuthorization = {
-    authorization: `Bearer ${guestDraftPayload.accessToken}`,
-  };
+  assert.equal(dedupedGuestDraft.order.id, guestDraftPayload.order.id);
   assert.equal(
     (
       await fetch(`${baseUrl}/api/order/drafts/${guestDraftPayload.order.id}`, {
@@ -178,6 +193,35 @@ async function runSmoke() {
       })
     ).status,
     200,
+  );
+  const guestAddress = await readJson(
+    await fetch(`${baseUrl}/api/account/addresses`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...guestAuthorization,
+      },
+      body: JSON.stringify({
+        draftId: guestDraftPayload.order.id,
+        label: "Guest refresh",
+        recipientName: "Guest Recipient",
+        line1: "40 Smoke Lane",
+        city: "Lakewood",
+        region: "NJ",
+        postalCode: "08701",
+      }),
+    }),
+  );
+  const guestAddresses = await readJson(
+    await fetch(
+      `${baseUrl}/api/account/addresses?draftId=${guestDraftPayload.order.id}`,
+      { headers: guestAuthorization },
+    ),
+  );
+  assert.ok(
+    guestAddresses.addresses.some(
+      (address: { id: string }) => address.id === guestAddress.address.id,
+    ),
   );
   assert.equal(
     (await fetch(`${baseUrl}/api/order/drafts/${guestDraftPayload.order.id}`)).status,
@@ -268,6 +312,7 @@ async function runSmoke() {
       S2: {
         authenticatedRestore: true,
         guestRestore: true,
+        guestAddressRehydrated: true,
         crossCustomerStatus: 404,
         guestTokenRevokedAfterSuccess: true,
       },

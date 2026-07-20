@@ -34,6 +34,7 @@ export default async function OrderGatePage({
           initialDraftId={draft}
           initialAddresses={addresses}
           isAuthenticated={Boolean(account?.customerId)}
+          storageOwnerKey={account?.customerId ?? "guest"}
           products={season.products.map((product) => ({
             id: product.id,
             name: product.name,

@@ -17,10 +17,6 @@ export function createGuestDraftAccess() {
 }
 
 export function getDraftAccessToken(request: Request) {
-  const authorization = request.headers.get("authorization");
-  if (authorization?.startsWith("Bearer ")) {
-    return authorization.slice("Bearer ".length);
-  }
   const cookie = request.headers
     .get("cookie")
     ?.split(";")

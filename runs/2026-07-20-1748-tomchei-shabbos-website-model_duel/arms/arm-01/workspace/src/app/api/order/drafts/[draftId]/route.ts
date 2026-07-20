@@ -1,4 +1,4 @@
-import { RecipientAssignmentSource } from "@prisma/client";
+import { Prisma, RecipientAssignmentSource } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { discardDraft } from "@/domain/order-engine";
 import { findAccessibleDraft } from "@/lib/customer-access";
@@ -83,6 +83,16 @@ export async function PATCH(
     },
   });
   const productsById = new Map(products.map((product) => [product.id, product]));
+  const inventoryItemIds = [
+    ...new Set(
+      products.flatMap((product) => [
+        ...(product.inventoryItem ? [product.inventoryItem.id] : []),
+        ...product.allowedAddOns.flatMap(({ addOn }) =>
+          addOn.addOnInventoryItem ? [addOn.addOnInventoryItem.id] : [],
+        ),
+      ]),
+    ),
+  ];
   const addressIds = [
     ...new Set(
       body.lines
@@ -139,6 +149,49 @@ export async function PATCH(
     return { line, product, option, addOns, recipientAddress, unitPriceCents };
     });
     const order = await db.$transaction(async (transaction) => {
+      if (inventoryItemIds.length > 0) {
+        await transaction.$queryRaw`
+          SELECT "id"
+          FROM "InventoryItem"
+          WHERE "id" IN (${Prisma.join(inventoryItemIds)})
+          FOR UPDATE
+        `;
+        const currentInventory = await transaction.inventoryItem.findMany({
+          where: { id: { in: inventoryItemIds } },
+        });
+        const inventoryById = new Map(
+          currentInventory.map((inventoryItem) => [inventoryItem.id, inventoryItem]),
+        );
+        for (const preparedLine of preparedLines) {
+          const productInventory = preparedLine.product.inventoryItem
+            ? inventoryById.get(preparedLine.product.inventoryItem.id)
+            : null;
+          const productAvailable = preparedLine.product.tracksInventory
+            ? (productInventory?.onHand ?? 0) - (productInventory?.reserved ?? 0)
+            : null;
+          if (
+            productAvailable !== null &&
+            preparedLine.line.quantity > productAvailable
+          ) {
+            throw new Error(
+              `${preparedLine.product.name} has only ${Math.max(0, productAvailable)} available.`,
+            );
+          }
+          for (const addOn of preparedLine.addOns) {
+            if (!addOn.tracksInventory) continue;
+            const addOnInventory = addOn.addOnInventoryItem
+              ? inventoryById.get(addOn.addOnInventoryItem.id)
+              : null;
+            const addOnAvailable =
+              (addOnInventory?.onHand ?? 0) - (addOnInventory?.reserved ?? 0);
+            if (preparedLine.line.quantity > addOnAvailable) {
+              throw new Error(
+                `${addOn.name} has only ${Math.max(0, addOnAvailable)} available.`,
+              );
+            }
+          }
+        }
+      }
       const updated = await transaction.order.updateMany({
         where: { id: accessibleDraft.id, version: body.version, status: "DRAFT" },
         data: {

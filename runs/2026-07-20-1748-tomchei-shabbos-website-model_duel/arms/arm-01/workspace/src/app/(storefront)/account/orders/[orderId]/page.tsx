@@ -63,7 +63,10 @@ export default async function AccountOrderDetailPage({
           >
             Continue and pay
           </Link>
-          <CancelDraftButton draftId={order.id} />
+          <CancelDraftButton
+            draftId={order.id}
+            storageOwnerKey={account.customerId}
+          />
         </div>
       )}
     </div>

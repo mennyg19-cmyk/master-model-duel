@@ -591,6 +591,13 @@ model CronRun {
   @@index([jobName, startedAt])
 }
 
+model GuestDraftThrottle {
+  key             String   @id
+  windowStartedAt DateTime
+  attempts        Int
+  updatedAt       DateTime @updatedAt
+}
+
 model Ingredient {
   id        String              @id @default(cuid())
   sku       String              @unique

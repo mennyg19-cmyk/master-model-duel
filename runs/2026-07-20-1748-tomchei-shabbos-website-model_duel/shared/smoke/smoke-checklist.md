@@ -26,12 +26,24 @@ See `shared/phases/PHASE-P2-EXPECTED.md`. Both arms P2 **gated**.
 
 See `shared/phases/PHASE-P3-EXPECTED.md`. Both arms P3 **gated**.
 
-## P4 (next)
+## P4
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Three-way assignment | | |
-| S2 | Draft persistence | | |
-| S3 | Address edit audit | | |
+| S1 | Three-way assignment | ✓ | |
+| S2 | Draft persistence | ✓ | |
+| S3 | Address edit audit | ✓ | |
 
-See `shared/phases/PHASE-P4-EXPECTED.md`.
+See `shared/phases/PHASE-P4-EXPECTED.md`. arm-01 P4 **gated**.
+
+## P5 (next)
+
+| # | Check | arm-01 | arm-02 |
+|---|---|---|---|
+| S1 | Stripe web checkout | | |
+| S2 | Delivery fees + zip block | | |
+| S3 | Stale price/stock | | |
+| S4 | POS cash/check | | |
+| S5 | Order lifecycle | | |
+
+See `shared/phases/PHASE-P5-EXPECTED.md`.

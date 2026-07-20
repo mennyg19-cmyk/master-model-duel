@@ -2,8 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { getOrderDraftStorageKey } from "@/lib/order-draft-storage";
 
-export function CancelDraftButton({ draftId }: { draftId: string }) {
+export function CancelDraftButton({
+  draftId,
+  storageOwnerKey,
+}: {
+  draftId: string;
+  storageOwnerKey: string;
+}) {
   const router = useRouter();
   const [error, setError] = useState("");
 
@@ -14,7 +21,7 @@ export function CancelDraftButton({ draftId }: { draftId: string }) {
       setError(payload.error ?? "Draft could not be cancelled.");
       return;
     }
-    window.localStorage.removeItem("tomchei-p4-draft");
+    window.localStorage.removeItem(getOrderDraftStorageKey(storageOwnerKey));
     router.push("/account");
     router.refresh();
   }

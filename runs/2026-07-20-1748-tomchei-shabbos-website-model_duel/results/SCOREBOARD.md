@@ -4,7 +4,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 
 | Arm | 1a /7 | 1b /8 | 2 /15 | 3 /20 | 4 /20 | 5 /15 | 6 /15 | Total /100 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| arm-01 | 5 | 8 | 14 | | 4.5 | | | 31.5 |
+| arm-01 | 5 | 8 | 14 | | 6.0 | | | 33.0 |
 | arm-02 | 7 | 8 | 14 | | 4.5 | | | 33.5 |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
@@ -31,14 +31,13 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 | Solo commit (1+2+5 renorm) | | |
 | Best interviewer (1b) | arm-02 (tie 8/8; wins efficiency tie-break on turn quality 2.00 vs 1.98) | |
 
-## Test 4 notes (partial — both arms P3 gated; P4 in progress)
+## Test 4 notes (partial — arm-01 P4 gated; arm-02 P4 in progress)
 
 - **Mode:** with_review — one fix pass per phase
-- **P1:** arm-01 **1.5/20**, arm-02 **1.5/20**
-- **P2:** both **1.5/20** phase → **3.0/20** cumulative
-- **P3 arm-01:** **1.5/20** → **4.5/20** ([fix notes](arms/arm-01/results/P3-FIX-NOTES.md); B1 + A1–A8 + m7; 13/13 tests)
-- **P3 arm-02:** **1.5/20** → **4.5/20** ([fix notes](arms/arm-02/results/P3-FIX-NOTES.md); MAJ-1..5 + MIN-9/11/16; smoke 40/40)
-- **Next:** P4 builds — [PHASE-P4-EXPECTED.md](../shared/phases/PHASE-P4-EXPECTED.md)
+- **P1–P3:** both **4.5/20** cumulative
+- **P4 arm-01:** **1.5/20** → **6.0/20** ([fix notes](arms/arm-01/results/P4-FIX-NOTES.md); 3 blockers + priority majors; S1–S3 pass)
+- **P4 arm-02:** building
+- **Next:** P5 — [PHASE-P5-EXPECTED.md](../shared/phases/PHASE-P5-EXPECTED.md)
 
 ## Test 2 notes
 
