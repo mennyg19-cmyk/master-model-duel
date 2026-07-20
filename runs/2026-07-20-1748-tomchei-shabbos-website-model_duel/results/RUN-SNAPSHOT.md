@@ -2,7 +2,7 @@
 
 Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
-**UTC snapshot:** 2026-07-21T03:05:00Z (approx)
+**UTC snapshot:** 2026-07-21T03:15:00Z (approx)
 
 ## Status
 
@@ -16,7 +16,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 | Arm | P11/P6 | P12/P7 | Next |
 |---|---|---|---|
-| arm-01 | P11 ✓ | P12 build done · review running | aggregate → fix → gate (+1.5 → **18.0/20**) |
+| arm-01 | P11 ✓ | P12 review **3/4** | rules pending → aggregate |
 | arm-02 | P6 ✓ | P7 fix running | gate (+1.5 → **10.5/20**) |
 
 ## In flight
