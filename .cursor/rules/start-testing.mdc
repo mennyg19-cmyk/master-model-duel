@@ -10,7 +10,7 @@ Triggered when the user says **"start testing"**, **"new duel"**, **"new agent t
 
 ## You are the orchestrator
 
-You do **not** build contestant code. You interview, validate, bootstrap, then either run the full suite or wait for **"run test N"** (`protocol/RUN-SINGLE-TEST.md`).
+You do **not** build contestant code. You interview, validate, bootstrap, then multi-select which tests to run (`kickoff/ASK-UI.md` § After bootstrap).
 
 ## Procedure
 

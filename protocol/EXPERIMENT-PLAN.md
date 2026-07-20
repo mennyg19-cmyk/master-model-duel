@@ -326,5 +326,5 @@ Cost ledger row per spawn. Snapshots per gate. All paths under `runs/{run_id}/`.
 
 1. User says **"start testing"** in this repo.  
 2. Orchestrator runs `kickoff/QUESTIONS.md` → writes `KICKOFF.yaml` → `scripts/bootstrap-run.ps1`.  
-3. Either run the full suite, or stop and use **"run test N"** / aliases per `protocol/RUN-SINGLE-TEST.md` (ask for missing inventories/plans when needed).  
+3. After bootstrap: **multi-select** which tests to run (`kickoff/ASK-UI.md` — Full suite and/or 1a–6 with short descriptions). Record `tests_selected`; run that set in order. Still can say **"run test N"** later per `protocol/RUN-SINGLE-TEST.md` (ask for missing inventories/plans when needed).
 4. **"continue testing"** / **"run remaining"** advances unfinished tests.
