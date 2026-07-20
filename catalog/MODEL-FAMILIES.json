@@ -1,0 +1,18 @@
+{
+  "version": "2026-07-20",
+  "note": "Family IDs used to enforce: reviewer family must not appear in the contestant set. Update when Cursor slugs change.",
+  "families": {
+    "composer": { "label": "Composer", "slugs": ["composer-2.5", "composer-2.5-fast"] },
+    "gpt-sol": { "label": "GPT Sol", "slugs": ["gpt-5.6-sol-high", "gpt-5.6-sol-medium"] },
+    "gpt-terra": { "label": "GPT Terra", "slugs": ["gpt-5.6-terra-high", "gpt-5.6-terra-medium"] },
+    "gpt-codex": { "label": "GPT/Codex", "slugs": ["gpt-5.2-codex"] },
+    "gemini": { "label": "Gemini", "slugs": ["gemini-3.1-pro"] },
+    "grok": { "label": "Grok", "slugs": ["cursor-grok-4.5-high", "cursor-grok-4.5-high-fast"] },
+    "claude-sonnet": { "label": "Claude Sonnet", "slugs": ["claude-4.6-sonnet-medium-thinking", "claude-sonnet-5-thinking-high", "claude-4.6-sonnet-thinking-high"] },
+    "claude-fable": { "label": "Claude Fable", "slugs": ["claude-fable-5-thinking-high", "claude-fable-5-thinking-medium"] },
+    "glm": { "label": "GLM", "slugs": ["glm-5.2-high", "glm-5.2"] },
+    "kimi": { "label": "Kimi", "slugs": ["kimi-k2.7-code"] }
+  },
+  "reviewer_defaults": ["glm-5.2-high", "cursor-grok-4.5-high", "gemini-3.1-pro"],
+  "forbidden_reviewer_overlap": true
+}

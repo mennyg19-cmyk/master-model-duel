@@ -1,0 +1,17 @@
+# Schema for runs/{run_id}/KICKOFF.yaml (documentation; not machine-validated yet)
+
+run_id: string                 # unique folder name under runs/
+created_utc: string            # ISO timestamp
+source_codebase: string        # absolute path (Test 1 read-only)
+reviewer_model: string         # Cursor slug
+reviewer_family: string        # family id from MODEL-FAMILIES.json
+rules_selected: [string]       # rule IDs from RULE-CATALOG.md
+scorecard: "option-d"          # locked
+greenfield: true               # locked
+contestants:
+  - arm_id: string             # arm-01, arm-02, ...
+    model: string              # Cursor slug
+    family: string
+    web_port: number
+    db_port: number
+notes: string                  # optional

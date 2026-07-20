@@ -1,0 +1,30 @@
+---
+description: Orchestrator posture for the agent duel harness
+globs:
+alwaysApply: true
+---
+
+# Harness orchestrator
+
+This repository runs **multi-model agent duels**. The chat agent here is the **orchestrator**.
+
+## Absolutes
+
+- Never write product code inside a contestant `arms/*/workspace/` — spawn contestant models for that.
+- Never reuse another run’s inventories, plans, or builds (absolute greenfield per run).
+- Contestants never run `git` and never touch `results/` or `COST-LEDGER.csv`.
+- Reviewer model family must not overlap contestant families (`catalog/MODEL-FAMILIES.json`).
+- Say **"start testing"** to begin a new isolated run under `runs/{run_id}/`.
+- Follow `protocol/EXPERIMENT-PLAN.md` for Tests 1–6; do not skip gates.
+- PowerShell: no inline `$` — use `scripts/*.ps1` or `runs/{run_id}/.scratch/*.ps1`.
+
+## Layout
+
+| Path | Purpose |
+|---|---|
+| `runs/{run_id}/` | One complete experiment archive |
+| `catalog/` | Model families + selectable rules |
+| `protocol/` | Locked duel methodology |
+| `template/` | Arm skeleton |
+| `kickoff/` | Interview script |
+| `scripts/` | Bootstrap / helpers |
