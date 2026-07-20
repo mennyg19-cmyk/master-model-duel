@@ -61,8 +61,10 @@ if ($RequireUsage) {
   $blank = @()
   foreach ($r in $csv) {
     if ($r.role -eq "orchestrate" -and $r.model -eq "orchestrator") { continue }
-    $hasTokens = ($r.total_tokens -and $r.total_tokens.Trim() -ne "")
-    $hasCost = ($r.cost_usd -and $r.cost_usd.Trim() -ne "")
+    $tok = [string]$r.total_tokens
+    $cost = [string]$r.cost_usd
+    $hasTokens = ($tok -match '^\d+$')
+    $hasCost = ($cost -match '^\d+(\.\d+)?$')
     if (-not $hasTokens -and -not $hasCost) {
       $blank += "$($r.test)/$($r.arm_id)/$($r.role)/$($r.timestamp_utc)"
     }
@@ -71,7 +73,7 @@ if ($RequireUsage) {
   if ($blank.Count -gt 0) {
     Write-Output "ok=false"
     Write-Output "missing=usage_tokens_or_cost"
-    Write-Output "hint=Pass -TotalTokens/-CostUsd on append, or run scripts/backfill-cost-ledger.ps1 after Cursor usage CSV export"
+    Write-Output "hint=Pass numeric -TotalTokens/-CostUsd on append, or run scripts/backfill-cost-ledger.ps1 after Cursor usage CSV export. Non-numeric cost_usd (e.g. notes shifted into the cost column) does not count."
     Write-Output ("blank_sample=" + (($blank | Select-Object -First 5) -join " | "))
     exit 1
   }
