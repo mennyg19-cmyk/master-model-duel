@@ -22,7 +22,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 ## In flight
 
 - arm-01 P12: [arm-01 Test4 P12 build](ed07a22a-d80f-4031-9531-c3826e6b9528)
-- arm-02 P7 aggregate: pending spawn
+- arm-02 P7 aggregate: [arm-02 P7 aggregate review](8ae24766-e29f-4f1c-bfae-361b52831cc8)
 
 ## P7 review panel (arm-02) — complete
 
