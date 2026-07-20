@@ -1,0 +1,569 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  MANAGER
+  STAFF
+  DRIVER
+}
+
+enum StaffStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum OverrideEffect {
+  GRANT
+  DENY
+}
+
+// Staff identities are completely separate from customers (resolution 8a).
+model StaffUser {
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  name                String
+  role                StaffRole
+  status              StaffStatus          @default(ACTIVE)
+  // Dev-mode credential. When Clerk is enabled, clerkUserId is the identity link instead.
+  passwordHash        String?
+  clerkUserId         String?              @unique
+  createdAt           DateTime             @default(now())
+  lastLoginAt         DateTime?
+  permissionOverrides PermissionOverride[]
+  sessions            Session[]
+}
+
+model PermissionOverride {
+  id          String         @id @default(cuid())
+  staffUserId String
+  staffUser   StaffUser      @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  permission  String
+  effect      OverrideEffect
+
+  @@unique([staffUserId, permission])
+}
+
+// Customers are accounts, never staff rows.
+// Email is stored lowercased; phoneNormalized is digits-only for dedupe (R-144).
+model Customer {
+  id              String            @id @default(cuid())
+  email           String            @unique
+  name            String
+  phone           String?
+  phoneNormalized String?           @unique
+  clerkUserId     String?           @unique
+  createdAt       DateTime          @default(now())
+  addresses       CustomerAddress[]
+  orders          Order[]
+}
+
+// Saved address book with geocode fields (R-145). Geocoding is filled lazily
+// by the geocode cache, so lat/lng stay null until a lookup happens.
+model CustomerAddress {
+  id         String    @id @default(cuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label      String?
+  recipient  String
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  zip        String
+  latitude   Float?
+  longitude  Float?
+  geocodedAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+// DB-backed sessions so revocation and impersonation take effect on the next request.
+model Session {
+  id                  String    @id @default(cuid())
+  tokenHash           String    @unique
+  staffUserId         String
+  staffUser           StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  impersonatedStaffId String?
+  expiresAt           DateTime
+  createdAt           DateTime  @default(now())
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorStaffId String?
+  actorEmail   String
+  action       String
+  targetType   String?
+  targetId     String?
+  detail       Json?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// Typed key-value settings store (R-161).
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// Fixture for the versioned-update concurrency smoke (G-024 groundwork).
+model ConcurrencyFixture {
+  id      String @id @default(cuid())
+  name    String @unique
+  counter Int    @default(0)
+  version Int    @default(0)
+}
+
+// ---------------------------------------------------------------------------
+// P2 — domain core. All money is integer cents; all dims are cm / grams.
+// ---------------------------------------------------------------------------
+
+enum SeasonStatus {
+  OPEN
+  CLOSED
+}
+
+// A selling season (UR-008). opensAt/closesAt are optional scheduled auto-flips
+// executed by a cron job (logged in CronRunLog); status is the manual switch.
+// orderCounter backs sequential per-season order numbers (R-151) — incremented
+// atomically inside the finalize transaction.
+model Season {
+  id           String       @id @default(cuid())
+  name         String       @unique
+  status       SeasonStatus @default(CLOSED)
+  opensAt      DateTime?
+  closesAt     DateTime?
+  orderCounter Int          @default(0)
+  createdAt    DateTime     @default(now())
+  products     Product[]
+  addOns       AddOn[]
+  orders       Order[]
+  packages     Package[]
+}
+
+enum ProductKind {
+  STANDARD
+  BUILD_YOUR_OWN
+  GIFT_CARD
+}
+
+model Product {
+  id                String             @id @default(cuid())
+  seasonId          String
+  season            Season             @relation(fields: [seasonId], references: [id])
+  name              String
+  slug              String
+  description       String?
+  // Free-text storefront category ("Baskets", "Wine", ...) used by catalog filters (R-003).
+  category          String?
+  kind              ProductKind        @default(STANDARD)
+  basePriceCents    Int
+  widthCm           Float?
+  lengthCm          Float?
+  heightCm          Float?
+  weightGrams       Int?
+  trackInventory    Boolean            @default(false)
+  isActive          Boolean            @default(true)
+  imageId           String?
+  image             MediaAsset?        @relation(fields: [imageId], references: [id])
+  // Replacement link (R-148): when this product is retired, repeat orders map
+  // to the replacement in a later season.
+  replacementId     String?
+  replacement       Product?           @relation("ProductReplacement", fields: [replacementId], references: [id])
+  replacedBy        Product[]          @relation("ProductReplacement")
+  options           ProductOption[]
+  addOnRestrictions AddOnRestriction[]
+  orderLines        OrderLine[]
+  inventoryItem     InventoryItem?
+  bomLines          BomLine[]
+  assemblyBatches   AssemblyBatch[]
+  createdAt         DateTime           @default(now())
+
+  @@unique([seasonId, slug])
+}
+
+// Options with price adjustments (R-146), e.g. "ribbon color" or "wine upgrade".
+model ProductOption {
+  id                   String            @id @default(cuid())
+  productId            String
+  product              Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name                 String
+  priceAdjustmentCents Int               @default(0)
+  isActive             Boolean           @default(true)
+  orderLineOptions     OrderLineOption[]
+
+  @@unique([productId, name])
+}
+
+model AddOn {
+  id              String             @id @default(cuid())
+  seasonId        String
+  season          Season             @relation(fields: [seasonId], references: [id])
+  name            String
+  priceCents      Int
+  trackInventory  Boolean            @default(false)
+  isActive        Boolean            @default(true)
+  restrictions    AddOnRestriction[]
+  orderLineAddOns OrderLineAddOn[]
+  inventoryItem   InventoryItem?
+
+  @@unique([seasonId, name])
+}
+
+// Restricted add-ons (R-147): a row means the add-on is allowed ONLY on the
+// listed products. An add-on with no rows is unrestricted.
+model AddOnRestriction {
+  addOnId   String
+  addOn     AddOn   @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([addOnId, productId])
+}
+
+// Fulfillment methods are data-driven rows, not an enum (R-153, R-154), so
+// managers can add methods without a code change.
+model FulfillmentMethod {
+  id         String      @id @default(cuid())
+  code       String      @unique
+  name       String
+  isActive   Boolean     @default(true)
+  sortOrder  Int         @default(0)
+  orderLines OrderLine[]
+  packages   Package[]
+}
+
+enum OrderStatus {
+  DRAFT
+  FINALIZED
+  DISCARDED
+}
+
+enum OrderPaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  COMPED
+}
+
+// draftReference is the customer-facing handle before finalize (R-047);
+// orderNumber is assigned sequentially per season at finalize (R-151).
+// paymentStatus is a cache recomputed from posted payments (R-152).
+model Order {
+  id             String                @id @default(cuid())
+  seasonId       String
+  season         Season                @relation(fields: [seasonId], references: [id])
+  customerId     String
+  customer       Customer              @relation(fields: [customerId], references: [id])
+  status         OrderStatus           @default(DRAFT)
+  draftReference String                @unique
+  orderNumber    Int?
+  totalCents     Int                   @default(0)
+  paymentStatus  OrderPaymentStatus    @default(UNPAID)
+  finalizedAt    DateTime?
+  discardedAt    DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  lines          OrderLine[]
+  payments       Payment[]
+  paymentIntents StripePaymentIntent[]
+  shippingQuotes ShippingQuote[]
+
+  @@unique([seasonId, orderNumber])
+}
+
+// One line = one product going to one recipient. Recipient/address/greeting are
+// snapshots (not FK to the address book) so later edits to saved addresses
+// can't mutate a finalized order. unitPriceCents is the price snapshot (R-149).
+model OrderLine {
+  id                  String            @id @default(cuid())
+  orderId             String
+  order               Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId           String
+  product             Product           @relation(fields: [productId], references: [id])
+  quantity            Int               @default(1)
+  unitPriceCents      Int
+  recipientName       String
+  addressLine1        String
+  addressLine2        String?
+  city                String
+  state               String
+  zip                 String
+  fulfillmentMethodId String
+  fulfillmentMethod   FulfillmentMethod @relation(fields: [fulfillmentMethodId], references: [id])
+  greeting            String            @default("")
+  packageId           String?
+  package             Package?          @relation(fields: [packageId], references: [id])
+  options             OrderLineOption[]
+  addOns              OrderLineAddOn[]
+}
+
+model OrderLineOption {
+  id                   String        @id @default(cuid())
+  orderLineId          String
+  orderLine            OrderLine     @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  productOptionId      String
+  productOption        ProductOption @relation(fields: [productOptionId], references: [id])
+  priceAdjustmentCents Int
+
+  @@unique([orderLineId, productOptionId])
+}
+
+model OrderLineAddOn {
+  id             String    @id @default(cuid())
+  orderLineId    String
+  orderLine      OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  addOnId        String
+  addOn          AddOn     @relation(fields: [addOnId], references: [id])
+  quantity       Int       @default(1)
+  unitPriceCents Int
+
+  @@unique([orderLineId, addOnId])
+}
+
+enum PackageStage {
+  NEW
+  PRINTED
+  PACKED
+  SENT
+  PICKED_UP
+}
+
+// The keystone entity (UR-001). groupingKey is the normalized hash of
+// recipient/address/method/greeting; lines sharing it merge into one package.
+// version backs optimistic locking on stage mutations.
+model Package {
+  id                  String            @id @default(cuid())
+  seasonId            String
+  season              Season            @relation(fields: [seasonId], references: [id])
+  groupingKey         String
+  recipientName       String
+  addressLine1        String
+  addressLine2        String?
+  city                String
+  state               String
+  zip                 String
+  fulfillmentMethodId String
+  fulfillmentMethod   FulfillmentMethod @relation(fields: [fulfillmentMethodId], references: [id])
+  greeting            String            @default("")
+  stage               PackageStage      @default(NEW)
+  version             Int               @default(0)
+  createdAt           DateTime          @default(now())
+  lines               OrderLine[]
+  auditEntries        PackageAudit[]
+  shippingQuotes      ShippingQuote[]
+
+  @@index([seasonId, groupingKey])
+}
+
+model PackageAudit {
+  id           String   @id @default(cuid())
+  packageId    String
+  package      Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  actorStaffId String?
+  action       String
+  detail       Json?
+  createdAt    DateTime @default(now())
+
+  @@index([packageId, createdAt])
+}
+
+enum PaymentMethod {
+  STRIPE
+  CASH
+  CHECK
+  COMP
+}
+
+enum PaymentState {
+  POSTED
+  VOIDED
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  orderId     String
+  order       Order         @relation(fields: [orderId], references: [id])
+  method      PaymentMethod
+  state       PaymentState  @default(POSTED)
+  amountCents Int
+  note        String?
+  receivedAt  DateTime      @default(now())
+  voidedAt    DateTime?
+}
+
+model StripePaymentIntent {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id])
+  stripeIntentId String   @unique
+  status         String
+  amountCents    Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Shipping quotes expire (R-155): a quote holds carrier options that are only
+// valid until expiresAt.
+model ShippingQuote {
+  id        String                @id @default(cuid())
+  orderId   String?
+  order     Order?                @relation(fields: [orderId], references: [id])
+  packageId String?
+  package   Package?              @relation(fields: [packageId], references: [id])
+  provider  String
+  quotedAt  DateTime              @default(now())
+  expiresAt DateTime
+  options   ShippingQuoteOption[]
+}
+
+model ShippingQuoteOption {
+  id            String        @id @default(cuid())
+  quoteId       String
+  quote         ShippingQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  carrier       String
+  service       String
+  amountCents   Int
+  estimatedDays Int?
+}
+
+model PickupLocation {
+  id       String  @id @default(cuid())
+  name     String
+  line1    String
+  city     String
+  state    String
+  zip      String
+  isActive Boolean @default(true)
+}
+
+// Package types (R-157): what a finished package is packed into.
+model PackageType {
+  id          String @id @default(cuid())
+  name        String @unique
+  widthCm     Float?
+  lengthCm    Float?
+  heightCm    Float?
+  weightGrams Int?
+}
+
+// Shipment boxes (R-157): outer boxes used for carrier shipping.
+model ShipmentBox {
+  id          String @id @default(cuid())
+  name        String @unique
+  widthCm     Float?
+  lengthCm    Float?
+  heightCm    Float?
+  weightGrams Int?
+}
+
+// Unified versioned inventory (R-158). Exactly one of productId / addOnId is
+// set — enforced by a DB CHECK constraint (R-139, added in the migration SQL
+// because Prisma cannot express CHECK constraints). Reservations decrement
+// available atomically; version backs optimistic writes.
+model InventoryItem {
+  id             String   @id @default(cuid())
+  productId      String?  @unique
+  product        Product? @relation(fields: [productId], references: [id])
+  addOnId        String?  @unique
+  addOn          AddOn?   @relation(fields: [addOnId], references: [id])
+  quantityOnHand Int      @default(0)
+  reserved       Int      @default(0)
+  version        Int      @default(0)
+}
+
+// Geocode results cache with TTL (R-162), keyed by the normalized address.
+model GeocodeCache {
+  id          String   @id @default(cuid())
+  addressHash String   @unique
+  latitude    Float
+  longitude   Float
+  provider    String
+  fetchedAt   DateTime @default(now())
+  expiresAt   DateTime
+}
+
+// Cron run log (R-163): every scheduled job records start/finish/outcome.
+model CronRunLog {
+  id         String    @id @default(cuid())
+  jobName    String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  status     String    @default("running")
+  detail     Json?
+
+  @@index([jobName, startedAt])
+}
+
+// BOM / assembly tables (UR-016, G-009) — schema only, no UI at launch.
+model Ingredient {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  unit     String
+  bomLines BomLine[]
+}
+
+model BomLine {
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  quantity     Float
+
+  @@id([productId, ingredientId])
+}
+
+// ---------------------------------------------------------------------------
+// P3 — storefront: media library + newsletter.
+// ---------------------------------------------------------------------------
+
+// One uploaded file in the media library (R-067). storage says where the bytes
+// live: "vercel-blob" when BLOB_READ_WRITE_TOKEN is set, "local" otherwise
+// (bytes under .uploads/, served by /media/[id]).
+model MediaAsset {
+  id           String    @id @default(cuid())
+  filename     String
+  contentType  String
+  sizeBytes    Int
+  storage      String
+  url          String
+  uploadedById String?
+  createdAt    DateTime  @default(now())
+  products     Product[]
+}
+
+enum NewsletterStatus {
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+// Newsletter list (R-009). Preference flags are what the subscriber wants to
+// hear about; unsubscribe flips status without deleting the row so a
+// re-subscribe keeps history.
+model NewsletterSubscriber {
+  id                  String           @id @default(cuid())
+  email               String           @unique
+  name                String?
+  status              NewsletterStatus @default(SUBSCRIBED)
+  wantsSeasonOpening  Boolean          @default(true)
+  wantsPurimReminders Boolean          @default(true)
+  subscribedAt        DateTime         @default(now())
+  unsubscribedAt      DateTime?
+  updatedAt           DateTime         @updatedAt
+}
+
+model AssemblyBatch {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  quantity    Int
+  assembledAt DateTime @default(now())
+  note        String?
+}

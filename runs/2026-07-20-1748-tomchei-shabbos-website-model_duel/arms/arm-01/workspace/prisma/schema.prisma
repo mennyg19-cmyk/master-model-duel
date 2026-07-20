@@ -1,0 +1,623 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  MANAGER
+  STAFF
+  DRIVER
+}
+
+enum StaffStatus {
+  INVITED
+  ACTIVE
+  REVOKED
+}
+
+enum SeasonStatus {
+  OPEN
+  CLOSED
+}
+
+enum ProductKind {
+  PACKAGE
+  ADD_ON
+  DONATION
+}
+
+enum OrderStatus {
+  DRAFT
+  FINALIZED
+  CANCELLED
+}
+
+enum CachedPaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  REFUNDED
+}
+
+enum PackageStage {
+  NEW
+  PRINTED
+  PACKED
+  SENT
+  PICKED_UP
+}
+
+enum PaymentMethod {
+  STRIPE
+  CASH
+  CHECK
+  COMP
+}
+
+enum PaymentStatus {
+  POSTED
+  VOIDED
+}
+
+enum PaymentIntentStatus {
+  CREATED
+  PROCESSING
+  SUCCEEDED
+  CANCELLED
+  REFUNDED
+}
+
+enum InventoryTargetKind {
+  PRODUCT
+  ADD_ON
+}
+
+enum AssemblyBatchStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model StaffUser {
+  id               String         @id @default(cuid())
+  clerkUserId      String?        @unique
+  email            String         @unique
+  displayName      String
+  role             StaffRole
+  status           StaffStatus    @default(INVITED)
+  grantPermissions String[]       @default([])
+  denyPermissions  String[]       @default([])
+  version          Int            @default(1)
+  confirmedAt      DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  invitations      StaffInvite[]
+  sessions         SessionStamp[]
+
+  @@index([status, role])
+}
+
+model CustomerAccount {
+  id          String    @id @default(cuid())
+  clerkUserId String    @unique
+  email       String
+  customerId  String?   @unique
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model StaffInvite {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique
+  email       String
+  role        StaffRole
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  invitedById String
+  invitedBy   StaffUser @relation(fields: [invitedById], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model BootstrapState {
+  key            String   @id
+  managerStaffId String
+  managerClerkId String   @unique
+  completedAt    DateTime @default(now())
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  actorStaffId   String?
+  action         String
+  targetType     String
+  targetId       String
+  metadata       Json?
+  occurredAt     DateTime @default(now())
+  requestId      String?
+  impersonatorId String?
+
+  @@index([targetType, targetId, occurredAt])
+  @@index([actorStaffId, occurredAt])
+}
+
+model ImpersonationSession {
+  id            String    @id @default(cuid())
+  actorStaffId  String
+  targetStaffId String
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+}
+
+model SessionStamp {
+  id             String    @id @default(cuid())
+  staffUserId    String
+  staffUser      StaffUser @relation(fields: [staffUserId], references: [id])
+  clerkSessionId String    @unique
+  lastSeenAt     DateTime  @default(now())
+  ipHash         String?
+
+  @@index([staffUserId, lastSeenAt])
+}
+
+model Season {
+  id                 String              @id @default(cuid())
+  name               String
+  year               Int                 @unique
+  status             SeasonStatus        @default(CLOSED)
+  scheduledStatus    SeasonStatus?
+  scheduledStatusAt  DateTime?
+  nextOrderNumber    Int                 @default(1)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  products           Product[]
+  orders             Order[]
+  fulfillmentMethods FulfillmentMethod[]
+  pickupLocations    PickupLocation[]
+  packageTypes       PackageType[]
+  assemblyBatches    AssemblyBatch[]
+
+  @@index([status, scheduledStatusAt])
+}
+
+model Product {
+  id                   String                @id @default(cuid())
+  seasonId             String
+  season               Season                @relation(fields: [seasonId], references: [id])
+  sku                  String
+  name                 String
+  description          String?
+  category             String                @default("Gifts")
+  imageUrl             String?
+  kind                 ProductKind
+  priceCents           Int
+  widthMm              Int?
+  heightMm             Int?
+  depthMm              Int?
+  weightGrams          Int?
+  tracksInventory      Boolean               @default(true)
+  isFinishedPackage    Boolean               @default(false)
+  isActive             Boolean               @default(true)
+  replacementProductId String?
+  replacementProduct   Product?              @relation("ProductReplacement", fields: [replacementProductId], references: [id])
+  replacedProducts     Product[]             @relation("ProductReplacement")
+  version              Int                   @default(1)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  options              ProductOption[]
+  allowedAddOns        ProductAllowedAddOn[] @relation("BaseProductAddOns")
+  allowedForProducts   ProductAllowedAddOn[] @relation("AllowedAddOn")
+  orderLines           OrderLine[]
+  inventoryItem        InventoryItem?        @relation("ProductInventory")
+  addOnInventoryItem   InventoryItem?        @relation("AddOnInventory")
+  orderLineAddOns      OrderLineAddOn[]
+  ingredients          ProductIngredient[]
+
+  @@unique([seasonId, sku])
+  @@index([seasonId, kind, isActive])
+}
+
+model NewsletterSubscriber {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  productUpdates     Boolean  @default(true)
+  volunteerStories   Boolean  @default(true)
+  communityImpact    Boolean  @default(true)
+  isSubscribed       Boolean  @default(true)
+  subscribedAt       DateTime @default(now())
+  unsubscribedAt     DateTime?
+  updatedAt          DateTime @updatedAt
+}
+
+model MediaAsset {
+  id          String   @id @default(cuid())
+  pathname    String   @unique
+  url         String
+  contentType String
+  sizeBytes   Int
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model ProductOption {
+  id                   String      @id @default(cuid())
+  productId            String
+  product              Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name                 String
+  value                String
+  priceAdjustmentCents Int         @default(0)
+  isDefault            Boolean     @default(false)
+  isActive             Boolean     @default(true)
+  orderLines           OrderLine[]
+
+  @@unique([productId, name, value])
+}
+
+model ProductAllowedAddOn {
+  productId String
+  addOnId   String
+  product   Product @relation("BaseProductAddOns", fields: [productId], references: [id], onDelete: Cascade)
+  addOn     Product @relation("AllowedAddOn", fields: [addOnId], references: [id], onDelete: Cascade)
+
+  @@id([productId, addOnId])
+}
+
+model Customer {
+  id              String            @id @default(cuid())
+  displayName     String
+  email           String?
+  emailNormalized String?           @unique
+  phone           String?
+  phoneNormalized String?           @unique
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  accounts        CustomerAccount[]
+  addresses       CustomerAddress[]
+  orders          Order[]
+
+  @@index([displayName])
+}
+
+model CustomerAddress {
+  id              String    @id @default(cuid())
+  customerId      String
+  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label           String?
+  recipientName   String
+  line1           String
+  line2           String?
+  city            String
+  region          String
+  postalCode      String
+  countryCode     String    @default("US")
+  normalizedKey   String
+  latitude        Decimal?  @db.Decimal(9, 6)
+  longitude       Decimal?  @db.Decimal(9, 6)
+  geocodedAt      DateTime?
+  geocodeProvider String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  packages        Package[]
+
+  @@unique([customerId, normalizedKey])
+}
+
+model Order {
+  id                  String                @id @default(cuid())
+  seasonId            String
+  season              Season                @relation(fields: [seasonId], references: [id])
+  customerId          String
+  customer            Customer              @relation(fields: [customerId], references: [id])
+  status              OrderStatus           @default(DRAFT)
+  orderNumber         Int?
+  draftReference      String                @unique
+  wireFormatVersion   Int                   @default(1)
+  cachedPaymentStatus CachedPaymentStatus   @default(UNPAID)
+  subtotalCents       Int                   @default(0)
+  totalCents          Int                   @default(0)
+  finalizedAt         DateTime?
+  discardedAt         DateTime?
+  version             Int                   @default(1)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  lines               OrderLine[]
+  packages            Package[]
+  payments            Payment[]
+  paymentIntents      StripePaymentIntent[]
+
+  @@unique([seasonId, orderNumber])
+  @@index([customerId, createdAt])
+  @@index([seasonId, status])
+}
+
+model OrderLine {
+  id                     String           @id @default(cuid())
+  orderId                String
+  order                  Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId              String
+  product                Product          @relation(fields: [productId], references: [id])
+  productOptionId        String?
+  productOption          ProductOption?   @relation(fields: [productOptionId], references: [id])
+  productNameSnapshot    String
+  skuSnapshot            String
+  unitPriceCentsSnapshot Int
+  quantity               Int
+  addOns                 OrderLineAddOn[]
+  packageLines           PackageLine[]
+
+  @@index([orderId])
+}
+
+model OrderLineAddOn {
+  id                     String    @id @default(cuid())
+  orderLineId            String
+  orderLine              OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  addOnProductId         String
+  addOnProduct           Product   @relation(fields: [addOnProductId], references: [id])
+  addOnNameSnapshot      String
+  unitPriceCentsSnapshot Int
+  quantity               Int
+
+  @@index([orderLineId])
+}
+
+model FulfillmentMethod {
+  id              String    @id @default(cuid())
+  seasonId        String
+  season          Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  code            String
+  displayName     String
+  requiresAddress Boolean   @default(true)
+  isPickup        Boolean   @default(false)
+  isShipping      Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  sortOrder       Int       @default(0)
+  packages        Package[]
+
+  @@unique([seasonId, code])
+}
+
+model Package {
+  id                  String            @id @default(cuid())
+  orderId             String
+  order               Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  recipientAddressId  String?
+  recipientAddress    CustomerAddress?  @relation(fields: [recipientAddressId], references: [id])
+  fulfillmentMethodId String
+  fulfillmentMethod   FulfillmentMethod @relation(fields: [fulfillmentMethodId], references: [id])
+  recipientName       String
+  addressSnapshot     Json?
+  greetingSnapshot    String
+  groupingKey         String
+  stage               PackageStage      @default(NEW)
+  version             Int               @default(1)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  lines               PackageLine[]
+  audits              PackageAudit[]
+  shippingQuotes      ShippingQuote[]
+  shipmentBoxes       ShipmentBox[]
+
+  @@unique([orderId, groupingKey])
+  @@index([stage, updatedAt])
+}
+
+model PackageLine {
+  id          String    @id @default(cuid())
+  packageId   String
+  package     Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   OrderLine @relation(fields: [orderLineId], references: [id])
+  quantity    Int
+
+  @@unique([packageId, orderLineId])
+}
+
+model PackageAudit {
+  id           String        @id @default(cuid())
+  packageId    String
+  package      Package       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  actorStaffId String?
+  action       String
+  fromStage    PackageStage?
+  toStage      PackageStage?
+  metadata     Json?
+  occurredAt   DateTime      @default(now())
+
+  @@index([packageId, occurredAt])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  orderId         String
+  order           Order         @relation(fields: [orderId], references: [id])
+  method          PaymentMethod
+  status          PaymentStatus @default(POSTED)
+  amountCents     Int
+  reference       String?
+  postedByStaffId String?
+  postedAt        DateTime      @default(now())
+  voidedAt        DateTime?
+  voidedByStaffId String?
+  createdAt       DateTime      @default(now())
+
+  @@index([orderId, status])
+}
+
+model StripePaymentIntent {
+  id                    String              @id @default(cuid())
+  orderId               String
+  order                 Order               @relation(fields: [orderId], references: [id])
+  stripePaymentIntentId String              @unique
+  idempotencyKey        String              @unique
+  status                PaymentIntentStatus
+  amountCents           Int
+  currency              String              @default("usd")
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([orderId, status])
+}
+
+model ShippingQuote {
+  id              String    @id @default(cuid())
+  packageId       String
+  package         Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  provider        String
+  serviceCode     String
+  serviceName     String
+  amountCents     Int
+  currency        String    @default("usd")
+  providerQuoteId String?
+  expiresAt       DateTime
+  selectedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([packageId, expiresAt])
+}
+
+model PickupLocation {
+  id           String  @id @default(cuid())
+  seasonId     String
+  season       Season  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  name         String
+  address      Json
+  instructions String?
+  isActive     Boolean @default(true)
+
+  @@unique([seasonId, name])
+}
+
+model PackageType {
+  id             String        @id @default(cuid())
+  seasonId       String
+  season         Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  name           String
+  innerWidthMm   Int
+  innerHeightMm  Int
+  innerDepthMm   Int
+  maxWeightGrams Int?
+  isActive       Boolean       @default(true)
+  shipmentBoxes  ShipmentBox[]
+
+  @@unique([seasonId, name])
+}
+
+model ShipmentBox {
+  id            String      @id @default(cuid())
+  packageId     String
+  package       Package     @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageTypeId String
+  packageType   PackageType @relation(fields: [packageTypeId], references: [id])
+  sequence      Int
+  weightGrams   Int?
+  createdAt     DateTime    @default(now())
+
+  @@unique([packageId, sequence])
+}
+
+model InventoryItem {
+  id         String              @id @default(cuid())
+  targetKind InventoryTargetKind
+  productId  String?             @unique
+  product    Product?            @relation("ProductInventory", fields: [productId], references: [id], onDelete: Cascade)
+  addOnId    String?             @unique
+  addOn      Product?            @relation("AddOnInventory", fields: [addOnId], references: [id], onDelete: Cascade)
+  onHand     Int                 @default(0)
+  reserved   Int                 @default(0)
+  version    Int                 @default(1)
+  updatedAt  DateTime            @updatedAt
+
+  @@index([targetKind])
+}
+
+model GeocodeCache {
+  id               String   @id @default(cuid())
+  normalizedKey    String   @unique
+  provider         String
+  latitude         Decimal? @db.Decimal(9, 6)
+  longitude        Decimal? @db.Decimal(9, 6)
+  formattedAddress String?
+  failureCode      String?
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+model CronRun {
+  id           String    @id @default(cuid())
+  jobName      String
+  runKey       String    @unique
+  status       String
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  claimed      Int       @default(0)
+  succeeded    Int       @default(0)
+  failed       Int       @default(0)
+  errorSummary String?
+
+  @@index([jobName, startedAt])
+}
+
+model Ingredient {
+  id        String              @id @default(cuid())
+  sku       String              @unique
+  name      String
+  unit      String
+  onHand    Decimal             @default(0) @db.Decimal(12, 3)
+  version   Int                 @default(1)
+  products  ProductIngredient[]
+  batchUses AssemblyBatchUse[]
+}
+
+model ProductIngredient {
+  productId    String
+  ingredientId String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  quantity     Decimal    @db.Decimal(12, 3)
+
+  @@id([productId, ingredientId])
+}
+
+model AssemblyBatch {
+  id          String              @id @default(cuid())
+  seasonId    String
+  season      Season              @relation(fields: [seasonId], references: [id])
+  reference   String
+  status      AssemblyBatchStatus @default(PLANNED)
+  plannedFor  DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime            @default(now())
+  uses        AssemblyBatchUse[]
+
+  @@unique([seasonId, reference])
+}
+
+model AssemblyBatchUse {
+  assemblyBatchId String
+  ingredientId    String
+  assemblyBatch   AssemblyBatch @relation(fields: [assemblyBatchId], references: [id], onDelete: Cascade)
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+  quantity        Decimal       @db.Decimal(12, 3)
+
+  @@id([assemblyBatchId, ingredientId])
+}

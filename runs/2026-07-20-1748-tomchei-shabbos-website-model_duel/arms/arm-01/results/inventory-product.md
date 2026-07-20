@@ -1,0 +1,93 @@
+# Codebase inventory — arm-01 (product)
+
+## Proof-of-read
+- Rules files read: 23 (`AGENTS.md` plus all 22 `.cursor/rules/*.mdc` files).
+- Top-level dirs sampled: `src/app`, `src/features`, `src/components`, `prisma`, `scripts`, `tests`, `e2e`, `public`, `docs`.
+- Product surfaces sampled: storefront, customer account, admin operations, fulfillment/routes, messenger, email, reports, settings, and test-mode tooling.
+- Structural note: CodeGraph reported “Not initialized”; because the supplied source is read-only, it was not initialized. Tracked-file manifests and direct source reads were used instead.
+
+## Features
+| ID | Name | Evidence path(s) | Notes |
+|---|---|---|---|
+| F-001 | Mission-led storefront homepage | `src/app/(storefront)/page.tsx` | Hero, mission, process, testimonials, impact bar, current-season products, and order CTAs. |
+| F-002 | Store-open-aware homepage CTAs | `src/app/(storefront)/page.tsx`; `src/features/storefront/server/storeStatus.ts` | Changes ordering CTAs to browse-only behavior when ordering is closed. |
+| F-003 | Current-season package catalog | `src/app/(storefront)/packages/page.tsx`; `src/app/(storefront)/packages/packages-grid.tsx` | Lists active packages, options, prices, categories, stock state, and closed-season messaging. |
+| F-004 | Package detail and option pricing | `src/app/(storefront)/packages/[id]/page.tsx` | Shows image, description, price, option adjustments, and a deep link into ordering. |
+| F-005 | Public past-collections archive | `src/app/(storefront)/past-collections/page.tsx` | Read-only, year-by-year catalog of discontinued prior-season offerings. |
+| F-006 | Store closure enforcement | `src/app/(storefront)/order/page.tsx`; `src/app/(storefront)/checkout/page.tsx` | Blocks order building and checkout while preserving catalog browsing. |
+| F-007 | Multi-recipient order builder | `src/app/(storefront)/order/order-builder.tsx`; `src/features/order-builder/orderDraftReducer.ts` | Builds one order across multiple recipients and product lines. |
+| F-008 | Inventory-aware package selection | `src/app/(storefront)/order/page.tsx`; `src/features/order-builder/catalog.ts` | Passes live available quantities and product kinds into the builder. |
+| F-009 | Product options and restricted add-ons | `src/app/(storefront)/order/page.tsx`; `src/features/order-builder/orderDraftReducer.ts` | Supports option price adjustments and include/exclude add-on restrictions. |
+| F-010 | Save and resume web drafts | `src/app/(storefront)/order/page.tsx`; `src/features/orders/server/saveDraft.ts`; `src/features/orders/server/loadDraft.ts` | Resumes an explicit draft or the signed-in customer’s latest web draft. |
+| F-011 | Guest checkout access tokens | `src/app/(storefront)/checkout/page.tsx`; `src/features/checkout/server/checkoutToken.ts`; `src/features/orders/server/orderAccess.ts` | Allows owner-authorized checkout without requiring an account. |
+| F-012 | Saved-address reuse in ordering | `src/app/(storefront)/order/page.tsx`; `src/features/customers/server/savedAddresses.ts` | Loads customer addresses and a default “myself” address into the builder. |
+| F-013 | Fulfillment and shipping selection | `src/features/checkout/server/shipping.ts`; `src/features/shipping/server/rateResolution.ts`; `src/features/shipping/server/ruleEngine.ts` | Resolves pickup, local-delivery, and carrier choices with configured rates/rules. |
+| F-014 | Card and offline checkout | `src/app/(storefront)/checkout/page.tsx`; `src/app/api/checkout/route.ts`; `src/app/api/checkout/offline/route.ts` | Card is always available; enabled cash/check methods are offered conditionally. |
+| F-015 | Checkout stock and price validation | `src/app/(storefront)/checkout/page.tsx`; `src/features/checkout/server/checkoutValidation.ts` | Snapshots prices and surfaces availability or price-drift issues before payment. |
+| F-016 | Checkout success experience | `src/app/(storefront)/checkout/success/page.tsx` | Dedicated post-checkout confirmation route. |
+| F-017 | Customer sign-in and sign-up | `src/app/(auth)/sign-in/[[...sign-in]]/page.tsx`; `src/app/(auth)/sign-up/[[...sign-up]]/page.tsx` | Clerk-backed customer and staff identity entry points. |
+| F-018 | Customer order history | `src/app/(storefront)/account/orders/page.tsx` | Lists orders and drafts with recipients, totals, status, payment state, and continuation links. |
+| F-019 | Customer-owned order detail | `src/app/(storefront)/account/orders/[id]/page.tsx` | Ownership-gated recipients, lines, totals, payments, fulfillment status, and tracking. |
+| F-020 | Continue, pay, or cancel a draft | `src/app/(storefront)/account/orders/[id]/page.tsx`; `src/features/orders/server/cancelOwnDraft.ts` | Gives customers draft lifecycle actions from order detail. |
+| F-021 | Repeat a prior customer order | `src/app/(storefront)/account/orders/[id]/repeat/page.tsx`; `src/features/orders/server/repeat/repeatOrder.ts` | Rebuilds an order against the current catalog and replacement mappings. |
+| F-022 | Customer profile management | `src/app/(storefront)/account/profile/page.tsx`; `src/app/(storefront)/account/profile/profile-form.tsx`; `src/app/api/account/profile/route.ts` | Displays and updates customer profile details. |
+| F-023 | Saved-address account view | `src/app/(storefront)/account/addresses/page.tsx` | Lists saved recipient addresses and defaults for reuse. |
+| F-024 | Newsletter subscription and preferences | `src/components/storefront/email-subscribe.tsx`; `src/app/api/subscribe/route.ts`; `src/app/(storefront)/unsubscribe/page.tsx` | Public subscribe flow plus tokenized unsubscribe/preference management. |
+| F-025 | Permission-aware admin dashboard | `src/app/(admin)/admin/page.tsx` | Displays operational stats, recent orders, and role-filtered shortcuts. |
+| F-026 | Daily operations work queue | `src/app/(admin)/admin/today/page.tsx`; `src/features/today/server/workQueue.ts` | Prioritizes drafts, pickups, labels, deliveries, active routes, production, calls, and alerts. |
+| F-027 | Role and per-user permission enforcement | `src/config/permissions.ts`; `src/features/auth/server/requirePermission.ts`; `src/app/(admin)/admin/layout.tsx` | Gates pages, navigation, and actions by staff role and overrides. |
+| F-028 | Searchable, filterable order list | `src/app/(admin)/admin/orders/page.tsx`; `src/app/(admin)/admin/orders/orders-search-bar.tsx` | Search, status/payment presets, alerts, pagination, and responsive list views. |
+| F-029 | Full admin order detail | `src/app/(admin)/admin/orders/[id]/page.tsx` | Customer, recipients, lines, totals, payment ledger, follow-up state, and staff notes. |
+| F-030 | Manual payments, refunds, and cancellation | `src/app/(admin)/admin/orders/[id]/order-money-actions.tsx`; `src/features/orders/server/adminPayments.ts` | Permission-gated cash/check/comp recording, refunds, and order cancellation. |
+| F-031 | Carrier label creation and voiding | `src/app/(admin)/admin/orders/[id]/shipment-actions.tsx`; `src/features/fulfillment/server/shipmentActions.ts` | Buys/prints and cancels carrier labels when Shippo is configured. |
+| F-032 | Printable order packing slips | `src/app/(admin)/admin/orders/[id]/packing-slip/page.tsx` | Dedicated print view for order packing. |
+| F-033 | Staff repeat-order workflow | `src/app/(admin)/admin/orders/[id]/repeat/page.tsx`; `src/features/orders/server/repeat/buildRepeatPlan.ts` | Repeats placed orders into the POS flow with current-catalog matching. |
+| F-034 | Bulk repeat of customer history | `src/app/(admin)/admin/orders/repeat-bulk/page.tsx`; `src/app/(admin)/admin/orders/repeat-bulk/bulk-repeat-form.tsx` | Lets staff select and repeat multiple eligible past orders. |
+| F-035 | Staff point of sale | `src/app/(admin)/admin/pos/page.tsx`; `src/app/(admin)/admin/pos/pos-builder.tsx` | Full-screen phone/counter order creation with products, add-ons, customers, and drafts. |
+| F-036 | POS customer lookup and preselection | `src/app/(admin)/admin/pos/page.tsx`; `src/app/api/customers/search/route.ts`; `src/app/api/customers/find-or-create/route.ts` | Searches customers on demand and supports preselected or newly created customers. |
+| F-037 | POS checkout | `src/app/(admin)/admin/pos/checkout/[orderId]/page.tsx` | Staff-facing checkout route for a POS-created order. |
+| F-038 | Customer directory and search | `src/app/(admin)/admin/customers/page.tsx`; `src/app/(admin)/admin/customers/customer-search.tsx` | Search by name/email/phone with pagination, order count, and lifetime spend. |
+| F-039 | Add and CSV-import customers | `src/app/(admin)/admin/customers/add-customer-dialog.tsx`; `src/features/imports/server/actions.ts` | Manual customer creation and validated bulk import. |
+| F-040 | Customer detail and history | `src/app/(admin)/admin/customers/[id]/page.tsx`; `src/app/(admin)/admin/customers/[id]/customer-detail-client.tsx` | Contact details, notes, addresses, orders, duplicate handling, and new-order actions. |
+| F-041 | Current and historical product catalogs | `src/app/(admin)/admin/products/page.tsx` | Season switcher, search, status, sales, revenue, inventory, and read-only past seasons. |
+| F-042 | Product create/edit/import | `src/app/(admin)/admin/products/new/page.tsx`; `src/app/(admin)/admin/products/[id]/edit/page.tsx`; `src/features/imports/server/actions.ts` | Product forms and current-season CSV import. |
+| F-043 | Rich product detail | `src/app/(admin)/admin/products/[id]/page.tsx` | Image, options, add-ons, dimensions, weight, status, sales, production, and inventory summary. |
+| F-044 | Cross-season product replacement chain | `src/app/(admin)/admin/products/[id]/replacement-editor.tsx`; `src/features/orders/server/repeat/replacementChain.ts` | Links prior products to current replacements for reports and repeat orders. |
+| F-045 | Add-on catalog management | `src/app/(admin)/admin/addons/page.tsx`; `src/app/(admin)/admin/addons/addon-actions.tsx` | CRUD/import, pricing, product restrictions, kitchen flag, inventory target, and status. |
+| F-046 | Media library and photo assignment | `src/app/(admin)/admin/media/page.tsx`; `src/app/(admin)/admin/media/media-actions.tsx`; `src/app/(admin)/admin/media/needs-photos-panel.tsx` | Upload/search/delete images, usage counts, and assign photos to products missing them. |
+| F-047 | Inventory overview | `src/app/(admin)/admin/inventory/page.tsx`; `src/app/(admin)/admin/inventory/overview-tab.tsx` | Season goals, sold/produced/remaining totals, and product/add-on stock tables. |
+| F-048 | Production batch planning and history | `src/app/(admin)/admin/inventory/production-tab.tsx`; `src/app/(admin)/admin/inventory/daily-batch-dialog.tsx`; `src/features/inventory/server/production.ts` | Logs deficit-sorted daily batches, receives purchased stock, shows history, and supports undo. |
+| F-049 | Inventory adjustments and write-offs | `src/app/(admin)/admin/inventory/inventory-controls.tsx`; `src/features/inventory/server/actions.ts`; `src/features/inventory/server/writeoff.ts` | Staff controls for stock corrections and write-off accounting. |
+| F-050 | Fulfillment channel dashboard | `src/app/(admin)/admin/fulfillment/page.tsx`; `src/features/fulfillment/server/fulfillmentPool.ts` | Separates pickups, local deliveries, and carrier shipments with readiness/status breakdowns. |
+| F-051 | Bulk fulfillment status actions | `src/app/(admin)/admin/fulfillment/channel-action-button.tsx`; `src/features/fulfillment/server/fulfillmentActions.ts` | Marks open channel work picked up, delivered, or shipped. |
+| F-052 | Delivery route builder | `src/app/(admin)/admin/fulfillment/build-route/page.tsx`; `src/app/(admin)/admin/fulfillment/build-route/route-builder.tsx` | Selects unassigned local stops, maps them when Mapbox is available, and assigns a messenger. |
+| F-053 | Route administration | `src/app/(admin)/admin/routes/page.tsx`; `src/app/(admin)/admin/routes/[id]/page.tsx` | Active/finished route lists, route detail, stops, driver, schedule, and progress. |
+| F-054 | Route printing, greeting cards, and reassignment | `src/app/(admin)/admin/routes/[id]/print/page.tsx`; `src/app/(admin)/admin/routes/[id]/greeting-cards/page.tsx`; `src/app/(admin)/admin/routes/[id]/reassign-button.tsx` | Operational print views and driver reassignment. |
+| F-055 | Driver route list | `src/app/(messenger)/messenger/page.tsx` | Phone-first assigned/in-progress/completed routes with progress; managers can view all. |
+| F-056 | Driver stop cards | `src/app/(messenger)/messenger/routes/[id]/page.tsx` | Ordered stops with tap-to-call, tap-to-map, items, add-ons, greetings, and office notes. |
+| F-057 | Route start and delivery completion | `src/app/(messenger)/messenger/routes/[id]/start-route-button.tsx`; `src/app/(messenger)/messenger/routes/[id]/deliver-button.tsx`; `src/features/fulfillment/server/markDelivered.ts` | Starts assigned routes and marks individual stops delivered, completing route progress. |
+| F-058 | Follow-up call center | `src/app/(admin)/admin/follow-up/page.tsx`; `src/app/(admin)/admin/follow-up/follow-up-list.tsx` | Unpaid, overdue-pickup, and lapsed-customer queues with filters, snoozes, exemptions, and notes. |
+| F-059 | Automated payment and pickup follow-up | `src/app/api/cron/payment-reminders/route.ts`; `src/app/api/cron/pickup-expiry/route.ts` | Scheduled reminders and configured expiry/auto-cancel policies. |
+| F-060 | Marketing campaign builder and send | `src/app/(admin)/admin/email/campaign-builder.tsx`; `src/features/email/server/marketingActions.ts`; `src/features/email/server/campaignSend.ts` | Builds, previews, saves, targets, and sends email campaigns. |
+| F-061 | Subscriber and mailing-list management | `src/app/(admin)/admin/email/subscribers-tab.tsx`; `src/app/(admin)/admin/email/lists-tab.tsx`; `src/features/email/server/marketingActions.ts` | Manages active subscribers, email preferences, lists, and list membership. |
+| F-062 | Email branding and triggered templates | `src/app/(admin)/admin/email/templates-tab.tsx`; `src/app/(admin)/admin/email/triggered-tab.tsx`; `src/features/email/server/triggeredEmailDefaults.ts` | Branding templates plus editable defaults/overrides for transactional emails. |
+| F-063 | Unsubscribe token handling | `src/app/api/unsubscribe/route.ts`; `src/features/email/server/unsubscribeToken.ts` | Secure email preference and unsubscribe processing. |
+| F-064 | Store, payment, pickup, and follow-up settings | `src/app/(admin)/admin/settings/orders-tab.tsx`; `src/app/(admin)/admin/settings/store-status-card.tsx`; `src/app/(admin)/admin/settings/pickup-locations-card.tsx`; `src/app/(admin)/admin/settings/follow-up-settings.tsx` | Controls opening state/message, cash/check, pickup locations, and reminder/expiry policy. |
+| F-065 | Shipping configuration and rules | `src/app/(admin)/admin/settings/shipping-tab.tsx`; `src/app/(admin)/admin/settings/delivery-zips-card.tsx`; `src/app/(admin)/admin/settings/shipping-rates-card.tsx`; `src/app/(admin)/admin/settings/shipping-rules-card.tsx` | Configures boxes, rates, free-shipping threshold, delivery ZIPs, ordered rules, and carrier fallback. |
+| F-066 | New-season setup wizard | `src/app/(admin)/admin/settings/new-season-wizard.tsx`; `src/features/settings/server/actions.ts` | Creates/configures a new selling season from admin settings. |
+| F-067 | Email provider configuration view | `src/app/(admin)/admin/settings/email-tab.tsx`; `src/app/(admin)/admin/settings/page.tsx` | Shows sender settings and whether Resend is configured. |
+| F-068 | Multi-season performance reports | `src/app/(admin)/admin/reports/page.tsx`; `src/features/reports/server/seasonReports.ts` | Year metrics, prior-year averages, item winners/losers, replacement-aware sales, and lapsed customers. |
+| F-069 | CSV export center and audit history | `src/app/(admin)/admin/export/page.tsx`; `src/app/api/export/deliveries/route.ts`; `src/app/api/export/year-end/route.ts`; `src/app/api/export/year-metrics/route.ts`; `src/app/api/export/item-sales/route.ts`; `src/app/api/export/lapsed-customers/route.ts` | Five downloadable operational/accounting reports and the last 25 export events. |
+| F-070 | Stripe payment reconciliation | `src/app/(admin)/admin/reconciliation/page.tsx`; `src/features/reconciliation/server/runReconciliation.ts`; `src/app/api/cron/reconcile-stripe/route.ts` | Manual/monthly report-only comparison of Stripe charges/refunds to local records. |
+| F-071 | Staff account and permission management | `src/app/(admin)/admin/users/page.tsx`; `src/app/(admin)/admin/users/users-client.tsx`; `src/app/(admin)/admin/users/permission-overrides-dialog.tsx` | Adds staff, confirms pending accounts, assigns roles/driver access, and applies permission overrides. |
+| F-072 | Staff impersonation | `src/app/(admin)/admin/impersonate/page.tsx`; `src/features/auth/server/impersonation.ts`; `src/components/admin/impersonation-bar.tsx` | Developer can view the app as another staff user; actions remain attributed in audit history. |
+| F-073 | Administrative activity log | `src/app/(admin)/admin/audit-log/page.tsx`; `src/app/(admin)/admin/audit-log/audit-table.tsx`; `src/features/auth/server/audit.ts` | Last 200 system actions with staff/impersonation attribution, sorting, and filtering. |
+| F-074 | Test-environment operations tools | `src/app/(admin)/admin/test-mode/page.tsx`; `src/features/testdata/server/testModeActions.ts` | Captured-email preview/clear plus developer-only reset, demo seeding, and test-data wipe. |
+| F-075 | Staff help center and guided tours | `src/app/(admin)/admin/help/page.tsx`; `src/features/tours/tours.ts`; `src/features/tours/run-driver.ts` | In-app training content and environment-specific guided tours. |
+| F-076 | Test/live environment switch | `src/app/(admin)/admin/env-switch/route.ts`; `src/app/(admin)/admin/admin-shell.tsx` | One-click navigation between sister deployments for staff training and live work. |
+
+## Blocked or intentionally excluded
+- Runtime verification was blocked by the read-only source plus absent environment/database credentials; this is a static source inventory.
+- CodeGraph was not initialized and could not be initialized without modifying the read-only source.
+- Disabled or explicitly “coming soon” controls were excluded as features, including order-list CSV, order deletion, follow-up exemption/snooze controls on order detail, and the fulfillment-level Print Labels button.
+- `FEATURE-INVENTORY.md` and `REBUILD-PLAN.md` describe the migration subsystem, not the current product feature surface, so product IDs above rely on current source evidence.

@@ -1,0 +1,26 @@
+﻿run_mode: model_duel
+contestants:
+  - arm_id: arm-01
+    model: gpt-5.6-sol-medium
+    family: gpt-sol
+    pack_id: default
+    web_port: 3101
+    db_port: 4101
+    rules:
+      - ponytail
+      - clean-code
+      - workflow
+      - vocabulary
+      - codegraph
+  - arm_id: arm-02
+    model: claude-fable-5-thinking-medium
+    family: claude-fable
+    pack_id: default
+    web_port: 3102
+    db_port: 4102
+    rules:
+      - ponytail
+      - clean-code
+      - workflow
+      - vocabulary
+      - codegraph

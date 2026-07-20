@@ -1,0 +1,6 @@
+# Vague symptoms (publish to contestants for Test 6 fix)
+
+Copy to `shared/VAGUE-SYMPTOMS.md` — **no file paths, no line numbers**.
+
+1. …
+2. …
