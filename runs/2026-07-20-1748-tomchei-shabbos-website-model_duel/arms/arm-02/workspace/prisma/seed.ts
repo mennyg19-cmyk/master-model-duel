@@ -2,6 +2,8 @@ import { PrismaClient } from "@prisma/client";
 import { findOrLinkCustomer } from "../lib/customers";
 import { finalizeOrder } from "../lib/domain/finalize";
 import { newDraftReference, wireFormat } from "../lib/domain/draft-reference";
+import { hashPassword } from "../lib/auth/passwords";
+import { normalizedAddressKey } from "../lib/addresses/normalize";
 
 const db = new PrismaClient();
 
@@ -33,6 +35,30 @@ async function main() {
   if (customer.id !== linked.id) {
     throw new Error("Customer identity linking failed: seed created a duplicate customer");
   }
+
+  // P4: dev-mode sign-in credential + one saved recipient so the account area
+  // and builder address book have data on a fresh DB.
+  await db.customer.update({
+    where: { id: linked.id },
+    data: { passwordHash: hashPassword("customer-demo-1234") },
+  });
+  const seededAddress = {
+    recipient: "Rivka Friedman",
+    line1: "12 Main St",
+    city: "Lakewood",
+    state: "NJ",
+    zip: "08701",
+  };
+  await db.customerAddress.upsert({
+    where: {
+      customerId_normalizedKey: {
+        customerId: linked.id,
+        normalizedKey: normalizedAddressKey(seededAddress),
+      },
+    },
+    update: {},
+    create: { customerId: linked.id, normalizedKey: normalizedAddressKey(seededAddress), ...seededAddress },
+  });
 
   await seedDomainCore(linked.id);
 

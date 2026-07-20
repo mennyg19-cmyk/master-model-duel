@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { db } from "@/lib/db";
 import { getOpenSeason } from "@/lib/season";
 import { getSetting } from "@/lib/settings";
-import { ZipChecker } from "@/components/storefront/zip-checker";
+import { getCustomerContext } from "@/lib/auth/customer-session";
+import { getBuilderCatalog, priceCart, cartSchema } from "@/lib/order-builder/cart";
+import { resolveDraftOwner, findActiveDraft } from "@/lib/order-builder/draft-store";
+import { OrderBuilder } from "@/components/builder/order-builder";
 
 /**
  * Season closure is enforced here on the server (R-002): when no season is
@@ -27,15 +31,32 @@ export default async function OrderPage() {
     );
   }
 
+  // Resume (R-022): the draft the request's cookies own, priced fresh.
+  const [catalog, customer, owner] = await Promise.all([
+    getBuilderCatalog(season.id),
+    getCustomerContext(),
+    resolveDraftOwner(),
+  ]);
+  const draft = await findActiveDraft(season.id, owner);
+  const cart = draft ? cartSchema.parse(draft.cart) : null;
+  const priced = cart ? await priceCart(season.id, cart) : null;
+  const addressBook = customer
+    ? await db.customerAddress.findMany({
+        where: { customerId: customer.id },
+        orderBy: { updatedAt: "desc" },
+      })
+    : [];
+
   return (
-    <main className="mx-auto max-w-3xl flex-1 px-6 py-16" data-store-state="open">
-      <h1 className="text-2xl font-semibold">Start your {season.name} order</h1>
-      <p className="mt-3 text-muted">
-        The full order builder — cart, recipients, and greetings — ships in the next release.
-        Meanwhile, browse the <Link href="/catalog" className="text-brand hover:underline">catalog</Link> and
-        check whether we deliver to your recipients.
-      </p>
-      <ZipChecker />
+    <main className="flex flex-1" data-store-state="open">
+      <OrderBuilder
+        seasonName={season.name}
+        catalog={catalog}
+        initialCart={cart}
+        initialPriced={priced}
+        initialAddressBook={addressBook}
+        isSignedIn={customer !== null}
+      />
     </main>
   );
 }

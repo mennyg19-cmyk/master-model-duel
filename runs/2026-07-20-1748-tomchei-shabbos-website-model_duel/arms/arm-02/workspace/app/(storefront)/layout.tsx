@@ -1,5 +1,6 @@
 import { getOpenSeason } from "@/lib/season";
 import { getSetting } from "@/lib/settings";
+import { getCustomerContext } from "@/lib/auth/customer-session";
 import { SiteHeader } from "@/components/storefront/site-header";
 import { SiteFooter } from "@/components/storefront/site-footer";
 
@@ -9,12 +10,12 @@ import { SiteFooter } from "@/components/storefront/site-footer";
 export const dynamic = "force-dynamic";
 
 export default async function StorefrontLayout({ children }: { children: React.ReactNode }) {
-  const openSeason = await getOpenSeason();
+  const [openSeason, customer] = await Promise.all([getOpenSeason(), getCustomerContext()]);
   const closedMessage = openSeason ? null : await getSetting("store.closed_message");
 
   return (
     <div className="flex min-h-screen flex-col">
-      <SiteHeader storeOpen={openSeason !== null} />
+      <SiteHeader storeOpen={openSeason !== null} customerName={customer?.name ?? null} />
       {closedMessage && (
         <div role="status" className="bg-accent px-4 py-2 text-center text-sm font-medium text-white">
           {closedMessage}

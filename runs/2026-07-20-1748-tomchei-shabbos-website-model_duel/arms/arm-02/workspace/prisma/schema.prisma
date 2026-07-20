@@ -51,6 +51,8 @@ model PermissionOverride {
 
 // Customers are accounts, never staff rows.
 // Email is stored lowercased; phoneNormalized is digits-only for dedupe (R-144).
+// passwordHash is the dev-mode credential (same scrypt scheme as StaffUser);
+// Clerk mode links through clerkUserId instead.
 model Customer {
   id              String            @id @default(cuid())
   email           String            @unique
@@ -58,28 +60,48 @@ model Customer {
   phone           String?
   phoneNormalized String?           @unique
   clerkUserId     String?           @unique
+  passwordHash    String?
   createdAt       DateTime          @default(now())
   addresses       CustomerAddress[]
   orders          Order[]
+  sessions        CustomerSession[]
+  orderDrafts     OrderDraft[]
 }
 
 // Saved address book with geocode fields (R-145). Geocoding is filled lazily
 // by the geocode cache, so lat/lng stay null until a lookup happens.
+// normalizedKey is the punctuation/case/suffix-normalized recipient+address
+// string; the per-customer unique on it is the dedupe rule (UR-014).
 model CustomerAddress {
-  id         String    @id @default(cuid())
+  id            String    @id @default(cuid())
+  customerId    String
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label         String?
+  recipient     String
+  line1         String
+  line2         String?
+  city          String
+  state         String
+  zip           String
+  normalizedKey String
+  latitude      Float?
+  longitude     Float?
+  geocodedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([customerId, normalizedKey])
+}
+
+// Customer sessions mirror staff sessions (DB-backed, HMAC token hash) but in
+// their own table + cookie so a customer login can never leak into staff auth.
+model CustomerSession {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
   customerId String
-  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  label      String?
-  recipient  String
-  line1      String
-  line2      String?
-  city       String
-  state      String
-  zip        String
-  latitude   Float?
-  longitude  Float?
-  geocodedAt DateTime?
-  createdAt  DateTime  @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 }
 
 // DB-backed sessions so revocation and impersonation take effect on the next request.
@@ -146,6 +168,7 @@ model Season {
   addOns       AddOn[]
   orders       Order[]
   packages     Package[]
+  orderDrafts  OrderDraft[]
 }
 
 enum ProductKind {
@@ -557,6 +580,40 @@ model NewsletterSubscriber {
   subscribedAt        DateTime         @default(now())
   unsubscribedAt      DateTime?
   updatedAt           DateTime         @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// P4 — order builder drafts.
+// ---------------------------------------------------------------------------
+
+enum OrderDraftStatus {
+  ACTIVE
+  COMPLETED
+  DISCARDED
+}
+
+// The builder's autosaved cart (R-022). This is deliberately NOT an Order:
+// mid-build lines have no recipient yet, and Order/OrderLine keep their
+// finalize invariants (every line fully addressed). Checkout (P5) converts an
+// ACTIVE draft into a real Order and marks it COMPLETED — that completion is
+// the only thing that clears a guest draft (guest-clear-on-success).
+//
+// Ownership (R-121, R-023): exactly one of customerId / guestTokenHash is set.
+// Lookups go through the session cookie or the HMAC-hashed guest token only —
+// draft ids are never accepted from the client, so ids can't be enumerated.
+model OrderDraft {
+  id             String           @id @default(cuid())
+  seasonId       String
+  season         Season           @relation(fields: [seasonId], references: [id])
+  customerId     String?
+  customer       Customer?        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  guestTokenHash String?          @unique
+  cart           Json
+  status         OrderDraftStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([customerId, status])
 }
 
 model AssemblyBatch {

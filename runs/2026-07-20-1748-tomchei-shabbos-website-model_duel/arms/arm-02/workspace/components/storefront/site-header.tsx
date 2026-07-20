@@ -11,7 +11,13 @@ const NAV_LINKS = [
   { href: "/collections", label: "Past Collections" },
 ];
 
-export function SiteHeader({ storeOpen }: { storeOpen: boolean }) {
+export function SiteHeader({
+  storeOpen,
+  customerName,
+}: {
+  storeOpen: boolean;
+  customerName: string | null;
+}) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
@@ -84,10 +90,22 @@ export function SiteHeader({ storeOpen }: { storeOpen: boolean }) {
             </button>
             {userMenuOpen && (
               <div className="absolute right-0 mt-2 w-48 rounded-md border border-border bg-surface p-2 text-sm shadow-lg">
-                <p className="px-2 py-1 text-xs text-muted">
-                  Customer accounts arrive with ordering.
-                </p>
-                <Link href="/login" className="block rounded px-2 py-1.5 hover:bg-brand-soft">
+                {customerName ? (
+                  <>
+                    <p className="px-2 py-1 text-xs text-muted">Signed in as {customerName}</p>
+                    <Link href="/account" className="block rounded px-2 py-1.5 hover:bg-brand-soft">
+                      My account
+                    </Link>
+                    <Link href="/account/orders" className="block rounded px-2 py-1.5 hover:bg-brand-soft">
+                      My orders
+                    </Link>
+                  </>
+                ) : (
+                  <Link href="/signin" className="block rounded px-2 py-1.5 hover:bg-brand-soft">
+                    Sign in / create account
+                  </Link>
+                )}
+                <Link href="/login" className="block rounded px-2 py-1.5 text-muted hover:bg-brand-soft">
                   Staff sign in
                 </Link>
               </div>
