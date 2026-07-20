@@ -120,6 +120,52 @@ AskQuestion single-select over reviewer_defaults for this host **excluding** fam
 | One agent | `one` |
 | Focused specialists | `focused` |
 
+### After bootstrap — which tests to run (MULTI-SELECT)
+
+**Required:** Ask once after bootstrap (and optionally again when user says **run tests** / **continue testing** with no list).
+
+#### If AskQuestion is available
+
+Call **`AskQuestion` with `allow_multiple: true`**.
+
+- Prompt: `Which tests should run? Select Full suite and/or any individual tests.`  
+- Options (use these labels — short description in each):
+
+| Option id | Label (show in UI) |
+|---|---|
+| `suite` | **Full suite** — run Tests 1a→1b→2→3→4→5→6 in order (with gates) |
+| `1a` | **1a Codebase inventory** — read the old app; list features with evidence paths |
+| `1b` | **1b Grill inventory** — interview you; build a “what you want” inventory; diff vs codebase |
+| `2` | **2 Plan** — greenfield phased build plan from the resolved inventory |
+| `3` | **3 Build (no feedback)** — ship phases from merged plan; reviews grade only |
+| `4` | **4 Build (with review)** — same plan; one review→fix pass per phase |
+| `5` | **5 Self-review loop** — self-critique → one fix → external residual grade |
+| `6` | **6 Detect + vague fix** — find seeded bugs on identical trees; fix from symptoms |
+
+- If user selects **only** `suite` → run full ordered suite.  
+- If user selects `suite` **plus** others → treat as full suite (ignore extras) **or** confirm: prefer suite-only. Default: **suite wins**.  
+- If user selects a subset (no suite) → run those tests in numeric order (1a→1b→2→…); skip others. Still enforce prerequisites (ask for missing inventory/plan when needed).  
+- Selecting nothing → ask again.
+
+Record in KICKOFF / run-state: `tests_selected: [suite]` or `[1a, 1b, 2, …]`.
+
+#### If AskQuestion is missing (e.g. Grok)
+
+Print the same list numbered, then:
+
+> Select tests. Reply with **comma-separated ids** (example: `suite` or `1a,1b,2` or `3,4`).
+
+| # | id | Short description |
+|---:|---|---|
+| 0 | `suite` | Full suite 1→6 with gates |
+| 1 | `1a` | Codebase feature inventory |
+| 2 | `1b` | Grill you → want-inventory + diff |
+| 3 | `2` | Greenfield build plan |
+| 4 | `3` | Build without review feedback |
+| 5 | `4` | Build with one review→fix pass |
+| 6 | `5` | Self-review → fix → residual |
+| 7 | `6` | Detect bugs + vague fix |
+
 ### Confirm bootstrap
 
 | AskQuestion options | Fallback reply |
@@ -127,13 +173,6 @@ AskQuestion single-select over reviewer_defaults for this host **excluding** fam
 | Yes, bootstrap | `go` |
 | Change an answer | `change` |
 | Cancel | `cancel` |
-
-### After bootstrap
-
-| AskQuestion options | Fallback reply |
-|---|---|
-| Run full suite | `suite` |
-| Stop — I'll say run test N | `stop` |
 
 ### Host confirm (detection medium/low)
 

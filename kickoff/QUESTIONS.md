@@ -185,6 +185,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-run.ps1 -K
 
 Use `-DuelHost opencode` or `generic` to match Q-1 (or set `host:` in KICKOFF.yaml).
 
-**Then ask:** Run the full suite now (Tests 1–6), or stop after bootstrap so you can say **run test 1** (etc.) one at a time? See `protocol/RUN-SINGLE-TEST.md`.
+**Then ask (multi-select):** Which tests to run? See `kickoff/ASK-UI.md` § After bootstrap — **Full suite** plus each test with a one-line description.  
+Record `tests_selected` in KICKOFF.yaml / `.scratch/run-state.md`.
 
-If full suite: begin Test 1 with locked `inventory_mode` / jobs. If single-test path: stop after bootstrap and wait for **run test N**.
+- `suite` → run 1→6 in order  
+- subset → run those ids in order; ask for missing prerequisites per `RUN-SINGLE-TEST.md`

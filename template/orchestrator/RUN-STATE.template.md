@@ -35,3 +35,11 @@ include_grill_inventory: true|false
 ## Grill interleave
 
 If 1b: alternate human turns across arms (A Q1 → B Q1 → A Q2 …) when possible. Log order here.
+
+## tests_selected
+
+From post-bootstrap multi-select (see kickoff/ASK-UI.md):
+
+```
+tests_selected: suite | 1a,1b,2,...
+```

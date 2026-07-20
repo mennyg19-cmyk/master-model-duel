@@ -43,4 +43,5 @@ inventory_jobs: [string]   # if focused, e.g. product, security, data, ui, integ
 self_review_mode: single | focused
 self_review_jobs: [string] # if focused, e.g. security, quality, rules, clean-code
 
+tests_selected: [suite] | [1a, 1b, 2, ...]   # after bootstrap multi-select
 notes: string
