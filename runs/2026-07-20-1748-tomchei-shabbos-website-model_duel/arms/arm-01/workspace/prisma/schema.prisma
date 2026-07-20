@@ -76,6 +76,17 @@ enum ShippingLabelStatus {
   FAILED
 }
 
+enum DeliveryRouteStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum DeliveryStopStatus {
+  PENDING
+  DELIVERED
+}
+
 enum PaymentMethod {
   STRIPE
   CASH
@@ -125,6 +136,7 @@ model StaffUser {
   updatedAt        DateTime       @updatedAt
   invitations      StaffInvite[]
   sessions         SessionStamp[]
+  assignedRoutes   DeliveryRoute[] @relation("AssignedDriver")
 
   @@index([status, role])
 }
@@ -334,6 +346,7 @@ model Customer {
   accounts        CustomerAccount[]
   addresses       CustomerAddress[]
   orders          Order[]
+  notifications   NotificationCapture[]
 
   @@index([displayName])
 }
@@ -481,10 +494,20 @@ model Package {
   shippingQuotes      ShippingQuote[]
   shipmentBoxes       ShipmentBox[]
   shippingLabels      ShippingLabel[]
+  deliveryStop        DeliveryStop?
+  pickupLocationId    String?
+  pickupLocation      PickupLocation? @relation(fields: [pickupLocationId], references: [id])
+  pickupReadyAt       DateTime?
+  pickupReadyNotifiedAt DateTime?
+  pickupExpiresAt     DateTime?
+  pickupExpiredAt     DateTime?
+  bulkDeliveryStart   DateTime?
+  bulkDeliveryEnd     DateTime?
 
   @@unique([orderId, groupingKey])
   @@index([isActive, stage, updatedAt])
   @@index([stage, updatedAt])
+  @@index([pickupExpiresAt, pickupExpiredAt])
 }
 
 model PackageLine {
@@ -634,8 +657,92 @@ model PickupLocation {
   address      Json
   instructions String?
   isActive     Boolean @default(true)
+  packages     Package[]
 
   @@unique([seasonId, name])
+}
+
+model DeliveryRoute {
+  id                    String              @id @default(cuid())
+  name                  String
+  status                DeliveryRouteStatus @default(PLANNED)
+  assignedDriverId      String?
+  assignedDriver        StaffUser?          @relation("AssignedDriver", fields: [assignedDriverId], references: [id])
+  startedAt             DateTime?
+  completedAt           DateTime?
+  printRevision         Int                 @default(1)
+  dayOfNotificationsAt  DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  stops                 DeliveryStop[]
+  links                 DriverMagicLink[]
+  audits                DriverDeliveryAudit[]
+
+  @@index([status, createdAt])
+  @@index([assignedDriverId, status])
+}
+
+model DeliveryStop {
+  id          String             @id @default(cuid())
+  routeId     String
+  route       DeliveryRoute      @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  packageId   String             @unique
+  package     Package            @relation(fields: [packageId], references: [id])
+  sequence    Int
+  latitude    Decimal            @db.Decimal(9, 6)
+  longitude   Decimal            @db.Decimal(9, 6)
+  status      DeliveryStopStatus @default(PENDING)
+  deliveredAt DateTime?
+  createdAt   DateTime           @default(now())
+
+  @@unique([routeId, sequence])
+  @@index([routeId, status, sequence])
+}
+
+model DriverMagicLink {
+  id              String        @id @default(cuid())
+  routeId         String
+  route           DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  tokenHash       String        @unique
+  pinHash         String?
+  expiresAt       DateTime
+  failedAttempts  Int           @default(0)
+  lockedUntil     DateTime?
+  lastUsedAt      DateTime?
+  expiredAt       DateTime?
+  createdAt       DateTime      @default(now())
+  audits          DriverDeliveryAudit[]
+
+  @@index([routeId, expiresAt])
+}
+
+model DriverDeliveryAudit {
+  id          String          @id @default(cuid())
+  routeId     String
+  route       DeliveryRoute   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  stopId      String
+  linkId      String
+  link        DriverMagicLink @relation(fields: [linkId], references: [id])
+  deliveredAt DateTime        @default(now())
+
+  @@index([routeId, deliveredAt])
+  @@index([linkId, deliveredAt])
+}
+
+model NotificationCapture {
+  id          String    @id @default(cuid())
+  customerId  String
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  packageId   String?
+  channel     String
+  eventKey    String
+  destination String
+  payload     Json
+  sentAt      DateTime  @default(now())
+
+  @@unique([eventKey, channel])
+  @@index([customerId, sentAt])
+  @@index([packageId, sentAt])
 }
 
 model PackageType {

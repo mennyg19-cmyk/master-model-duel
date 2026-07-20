@@ -15,6 +15,9 @@ and customer directories, order money actions, shared-builder POS, staged CSV
 imports, audit views, and live settings.
 P7 materializes finalized orders into physical packages, adds the staff
 fulfillment board, and persists idempotent nightly and targeted reprint PDFs.
+P8 adds Shippo rate shopping, margin capture, shipment planning, labels, address
+validation, and tracking. P9 adds delivery routes, scoped driver magic links,
+confirmed map reroutes, pickup operations, and bulk scheduling.
 
 ## Local development
 
@@ -32,6 +35,8 @@ them, non-production builds use the local identity adapter for smoke testing.
 - `npm run build`
 - `npm run smoke:concurrency`
 - `npm run smoke:p7`
+- `npm run smoke:p8`
+- `npm run smoke:p9`
 
 The project uses one pattern per concern: server components for reads, route
 handlers for mutations, Prisma for persistence, Tailwind tokens for styling,
@@ -120,3 +125,14 @@ and native `node:test` through `tsx` for unit tests.
   receives slips, labels, and greeting-card PDFs; each order receives a packing slip.
 - Filing-group and order reprints create isolated artifacts. PDF generation never
   changes `NEW`, `PRINTED`, `PACKED`, `SENT`, or `PICKED_UP` package stages.
+
+## P9 delivery and pickup
+
+- `/admin/delivery` builds Mapbox-geocoded routes, reassigns drivers, confirms
+  nearby shipping reroutes, schedules bulk delivery, and runs pickup/follow-up desks.
+- `/driver/routes/[token]` exposes only one route through a hashed, expiring
+  magic link with optional throttled PIN, Google Maps stop links, and delivered-tap audit.
+- Shipping/delivery switches preserve paid totals and void any unshipped label.
+- Route print views contain the complete stop list and per-stop greeting cards.
+- Pickup readiness is inventory-gated and idempotently notifies customers.
+- Pickup-expiry and payment-reminder cron routes require `CRON_SECRET`.

@@ -13,6 +13,8 @@ type ServerEnvironment = {
   SHIP_FROM_STATE?: string;
   SHIP_FROM_ZIP?: string;
   SHIP_FROM_COUNTRY?: string;
+  MAPBOX_ACCESS_TOKEN?: string;
+  CRON_SECRET?: string;
 };
 
 function requireEnvironmentValue(name: string) {
@@ -39,6 +41,8 @@ export function readServerEnvironment(): ServerEnvironment {
     SHIP_FROM_STATE: process.env.SHIP_FROM_STATE,
     SHIP_FROM_ZIP: process.env.SHIP_FROM_ZIP,
     SHIP_FROM_COUNTRY: process.env.SHIP_FROM_COUNTRY,
+    MAPBOX_ACCESS_TOKEN: process.env.MAPBOX_ACCESS_TOKEN,
+    CRON_SECRET: process.env.CRON_SECRET,
   };
 }
 
