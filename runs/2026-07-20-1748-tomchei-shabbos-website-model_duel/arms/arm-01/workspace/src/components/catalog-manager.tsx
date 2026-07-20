@@ -8,6 +8,7 @@ type SeasonChoice = { id: string; name: string; year: number };
 type ManagedProduct = {
   id: string;
   seasonId: string;
+  seasonYear: number;
   sku: string;
   name: string;
   description: string | null;
@@ -49,7 +50,9 @@ export function CatalogManager({
       setMessage(payload.error);
       return;
     }
-    setProducts((current) => [...current, payload.product]);
+    const seasonYear =
+      seasons.find((season) => season.id === payload.product.seasonId)?.year ?? 0;
+    setProducts((current) => [...current, { ...payload.product, seasonYear }]);
     setMessage(`${payload.product.name} is now in the catalog.`);
   }
 
@@ -69,7 +72,9 @@ export function CatalogManager({
     }
     setProducts((current) =>
       current.map((candidate) =>
-        candidate.id === product.id ? payload.product : candidate,
+        candidate.id === product.id
+          ? { ...candidate, ...payload.product }
+          : candidate,
       ),
     );
     setMessage(`Saved ${payload.product.name}.`);
@@ -104,8 +109,8 @@ export function CatalogManager({
       </p>
       <h1 className="mt-2 text-4xl font-black">Catalog</h1>
       <p className="mt-3 text-[var(--muted)]">
-        Manage gifts and add-ons across seasons. Replacement links are prepared
-        here for the repeat-order release.
+        Manage gifts and add-ons across seasons. Replacement links move forward
+        through later catalogs and can resolve across several years.
       </p>
       <form
         action={createProduct}
@@ -166,7 +171,7 @@ export function CatalogManager({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--brand)]">
-                  {product.kind.replace("_", " ")} · {product.sku}
+                  {product.kind.replace("_", " ")} · {product.sku} · {product.seasonYear}
                 </p>
                 <h2 className="mt-1 text-xl font-bold">{product.name}</h2>
                 <p className="mt-1 text-sm text-[var(--muted)]">
@@ -225,9 +230,15 @@ export function CatalogManager({
                 >
                   <option value="">Not mapped</option>
                   {products
-                    .filter((candidate) => candidate.id !== product.id && candidate.kind === product.kind)
+                    .filter(
+                      (candidate) =>
+                        candidate.kind === product.kind &&
+                        candidate.seasonYear > product.seasonYear,
+                    )
                     .map((candidate) => (
-                      <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.name} ({candidate.seasonYear})
+                      </option>
                     ))}
                 </select>
               </label>

@@ -1,9 +1,8 @@
-import { randomBytes } from "node:crypto";
 import { type CachedPaymentStatus, type OrderStatus, Prisma } from "@prisma/client";
+import { repeatOrdersInBulk } from "@/domain/repeat-orders";
 import { db } from "@/lib/db";
 
 export const ADMIN_PAGE_SIZE = 25;
-export const MAX_BULK_ORDERS = 50;
 
 export type OrderFilters = {
   page?: number;
@@ -149,93 +148,10 @@ export function getOrderDetail(orderId: string) {
   });
 }
 
-export async function repeatOrders(
+export function repeatOrders(
   actorStaffId: string,
   requestedSources: { orderId: string; version: number }[],
 ) {
-  if (requestedSources.length > MAX_BULK_ORDERS) {
-    throw new Error(`Bulk repeat accepts at most ${MAX_BULK_ORDERS} orders.`);
-  }
-  const sortedSources = [...requestedSources].sort((left, right) =>
-    left.orderId.localeCompare(right.orderId),
-  );
-  const seen = new Set<string>();
-  const applied: { sourceOrderId: string; draftOrderId: string }[] = [];
-  const conflicts: { orderId: string; reason: string }[] = [];
-
-  for (const requested of sortedSources) {
-    if (seen.has(requested.orderId)) {
-      conflicts.push({ orderId: requested.orderId, reason: "duplicate request" });
-      continue;
-    }
-    seen.add(requested.orderId);
-    const repeated = await db.$transaction(async (transaction) => {
-      const source = await transaction.order.findFirst({
-        where: {
-          id: requested.orderId,
-          version: requested.version,
-          status: "FINALIZED",
-        },
-        include: {
-          lines: { include: { addOns: true } },
-        },
-      });
-      if (!source) return null;
-      const draft = await transaction.order.create({
-        data: {
-          seasonId: source.seasonId,
-          customerId: source.customerId,
-          draftReference: `R-${source.id.slice(-8)}-${randomBytes(4).toString("hex")}`,
-          subtotalCents: source.subtotalCents,
-          donationCents: source.donationCents,
-          totalCents: source.totalCents,
-          defaultGreeting: source.defaultGreeting,
-          lines: {
-            create: source.lines.map((line) => ({
-              productId: line.productId,
-              productOptionId: line.productOptionId,
-              recipientAddressId: line.recipientAddressId,
-              recipientSource: line.recipientSource,
-              recipientNameSnapshot: line.recipientNameSnapshot,
-              fulfillmentMethodId: line.fulfillmentMethodId,
-              fulfillmentFeeCentsSnapshot: line.fulfillmentFeeCentsSnapshot,
-              greetingSnapshot: line.greetingSnapshot,
-              deliveryDay: line.deliveryDay,
-              productNameSnapshot: line.productNameSnapshot,
-              skuSnapshot: line.skuSnapshot,
-              unitPriceCentsSnapshot: line.unitPriceCentsSnapshot,
-              quantity: line.quantity,
-              addOns: {
-                create: line.addOns.map((addOn) => ({
-                  addOnProductId: addOn.addOnProductId,
-                  addOnNameSnapshot: addOn.addOnNameSnapshot,
-                  unitPriceCentsSnapshot: addOn.unitPriceCentsSnapshot,
-                  quantity: addOn.quantity,
-                })),
-              },
-            })),
-          },
-        },
-      });
-      await transaction.auditLog.create({
-        data: {
-          actorStaffId,
-          action: "order.repeated",
-          targetType: "Order",
-          targetId: draft.id,
-          metadata: { sourceOrderId: source.id, sourceVersion: source.version },
-        },
-      });
-      return draft;
-    });
-    if (repeated) {
-      applied.push({ sourceOrderId: requested.orderId, draftOrderId: repeated.id });
-    } else {
-      conflicts.push({
-        orderId: requested.orderId,
-        reason: "source missing, changed, or not finalized",
-      });
-    }
-  }
-  return { applied, conflicts };
+  return repeatOrdersInBulk(db, actorStaffId, requestedSources);
 }
+

@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
+import { applyScheduledSeasonStatuses } from "@/domain/seasons";
 
 export async function getCurrentSeason() {
+  await applyScheduledSeasonStatuses(db);
   const currentSeasonSetting = await db.appSetting.findUnique({
     where: { key: "current-season-id" },
   });

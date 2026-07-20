@@ -10,6 +10,7 @@ export default async function AdminCatalogPage() {
     db.season.findMany({ orderBy: { year: "desc" } }),
     db.product.findMany({
       orderBy: [{ season: { year: "desc" } }, { name: "asc" }],
+      include: { season: { select: { year: true } } },
     }),
   ]);
 
@@ -18,6 +19,7 @@ export default async function AdminCatalogPage() {
       initialProducts={products.map((product) => ({
         id: product.id,
         seasonId: product.seasonId,
+        seasonYear: product.season.year,
         sku: product.sku,
         name: product.name,
         description: product.description,

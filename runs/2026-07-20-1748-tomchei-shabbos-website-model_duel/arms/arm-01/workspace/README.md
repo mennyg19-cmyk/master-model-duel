@@ -18,6 +18,8 @@ fulfillment board, and persists idempotent nightly and targeted reprint PDFs.
 P8 adds Shippo rate shopping, margin capture, shipment planning, labels, address
 validation, and tracking. P9 adds delivery routes, scoped driver magic links,
 confirmed map reroutes, pickup operations, and bulk scheduling.
+P10 adds forward replacement chains, reviewed customer and staff repeats,
+bounded bulk repeats, a new-season cloning wizard, and scheduled status changes.
 
 ## Local development
 
@@ -37,6 +39,7 @@ them, non-production builds use the local identity adapter for smoke testing.
 - `npm run smoke:p7`
 - `npm run smoke:p8`
 - `npm run smoke:p9`
+- `npm run smoke:p10`
 
 The project uses one pattern per concern: server components for reads, route
 handlers for mutations, Prisma for persistence, Tailwind tokens for styling,
@@ -136,3 +139,15 @@ and native `node:test` through `tsx` for unit tests.
 - Route print views contain the complete stop list and per-stop greeting cards.
 - Pickup readiness is inventory-gated and idempotently notifies customers.
 - Pickup-expiry and payment-reminder cron routes require `CRON_SECRET`.
+
+## P10 seasons and repeat orders
+
+- Customer and staff repeat flows stop on a review page until replacements and
+  saved recipients are both confirmed; unmapped products must be chosen or removed.
+- Catalog replacements point only into later seasons and resolve across chains.
+- Bulk repeat creates current-season drafts only when every product and recipient
+  resolves without staff judgment; conflicts remain explicit.
+- The settings wizard clones catalog and operating setup with zero stock, closes
+  the new current season, and maps the prior catalog forward.
+- Manual Open/Closed changes and scheduled flips are audited. The storefront
+  applies due flips lazily; `/api/cron/season-status` provides the bearer-auth sweep.

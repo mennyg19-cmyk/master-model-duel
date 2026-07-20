@@ -12,22 +12,41 @@ export function SettingsHub({
   initialAdminSettings,
   packageTypes,
   pickupLocations,
+  seasons,
 }: {
-  season: { id: string; name: string; status: SeasonStatus } | null;
+  season: {
+    id: string;
+    name: string;
+    status: SeasonStatus;
+    scheduledStatus: SeasonStatus | null;
+    scheduledStatusAt: string | null;
+  } | null;
   initialDeliveryZips: string[];
   initialAdminSettings: AdminSettings;
   packageTypes: { id: string; name: string }[];
   pickupLocations: { id: string; name: string; isActive: boolean }[];
+  seasons: {
+    id: string;
+    name: string;
+    year: number;
+    status: SeasonStatus;
+  }[];
 }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("Orders");
   const [storeStatus, setStoreStatus] = useState<SeasonStatus>(season?.status ?? "CLOSED");
   const [deliveryZips, setDeliveryZips] = useState(initialDeliveryZips.join(", "));
   const [message, setMessage] = useState("");
   const [adminSettings, setAdminSettings] = useState(initialAdminSettings);
+  const [scheduledStatus, setScheduledStatus] = useState<SeasonStatus>(
+    season?.scheduledStatus ?? "OPEN",
+  );
+  const [scheduledStatusAt, setScheduledStatusAt] = useState("");
   const tabs: SettingsTab[] = ["Orders", "Shipping", "Email", "Developer"];
 
   async function saveSettings(changes: {
     storeStatus?: SeasonStatus;
+    scheduledStatus?: SeasonStatus;
+    scheduledStatusAt?: string;
     deliveryZips?: string[];
     adminSettings?: AdminSettings;
   }) {
@@ -38,6 +57,25 @@ export function SettingsHub({
     });
     const payload = await response.json();
     setMessage(response.ok ? "Settings saved. Storefront checks now use these values." : payload.error);
+  }
+
+  async function createSeason(formData: FormData) {
+    const response = await fetch("/api/admin/seasons", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: formData.get("name"),
+        year: Number(formData.get("year")),
+        sourceSeasonId: formData.get("sourceSeasonId") || undefined,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(payload.error);
+      return;
+    }
+    setMessage(`${payload.season.name} was created as the closed current season.`);
+    window.location.reload();
   }
 
   return (
@@ -79,6 +117,86 @@ export function SettingsHub({
                   </button>
                 ))}
               </div>
+              <div className="mt-5 grid gap-3 rounded-2xl bg-[var(--surface)] p-4 sm:grid-cols-[160px_1fr_auto]">
+                <select
+                  className="rounded-xl border border-[var(--border)] px-3 py-2.5"
+                  onChange={(event) => setScheduledStatus(event.target.value as SeasonStatus)}
+                  value={scheduledStatus}
+                >
+                  <option value="OPEN">Open automatically</option>
+                  <option value="CLOSED">Close automatically</option>
+                </select>
+                <input
+                  aria-label="Scheduled season status time"
+                  className="rounded-xl border border-[var(--border)] px-3 py-2.5"
+                  onChange={(event) => setScheduledStatusAt(event.target.value)}
+                  type="datetime-local"
+                  value={scheduledStatusAt}
+                />
+                <button
+                  className="rounded-xl bg-[var(--ink)] px-4 py-2.5 font-bold text-white"
+                  onClick={() => {
+                    if (!scheduledStatusAt) {
+                      setMessage("Choose a date and time for the automatic status change.");
+                      return;
+                    }
+                    void saveSettings({
+                      scheduledStatus,
+                      scheduledStatusAt: new Date(scheduledStatusAt).toISOString(),
+                    });
+                  }}
+                  type="button"
+                >
+                  Schedule
+                </button>
+              </div>
+              {season?.scheduledStatusAt && (
+                <p className="mt-2 text-sm text-[var(--muted)]">
+                  Scheduled to {season.scheduledStatus?.toLowerCase()} on{" "}
+                  {new Date(season.scheduledStatusAt).toLocaleString()}.
+                </p>
+              )}
+            </section>
+            <section>
+              <h2 className="text-xl font-bold">New-season setup wizard</h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                Clone catalog and operating settings, start with zero stock, and
+                create forward replacement mappings from the prior catalog.
+              </p>
+              <form action={createSeason} className="mt-4 grid gap-3 sm:grid-cols-3">
+                <input
+                  className="rounded-xl border border-[var(--border)] px-3 py-2.5"
+                  name="name"
+                  placeholder="Purim 2028"
+                  required
+                />
+                <input
+                  className="rounded-xl border border-[var(--border)] px-3 py-2.5"
+                  min="2000"
+                  name="year"
+                  placeholder="2028"
+                  required
+                  type="number"
+                />
+                <select
+                  className="rounded-xl border border-[var(--border)] px-3 py-2.5"
+                  defaultValue={season?.id ?? ""}
+                  name="sourceSeasonId"
+                >
+                  <option value="">Start empty</option>
+                  {seasons.map((seasonChoice) => (
+                    <option key={seasonChoice.id} value={seasonChoice.id}>
+                      Clone {seasonChoice.name} ({seasonChoice.status.toLowerCase()})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="rounded-xl bg-[var(--brand)] px-5 py-3 font-bold text-white sm:col-span-3"
+                  type="submit"
+                >
+                  Create closed season
+                </button>
+              </form>
             </section>
             <section>
               <h2 className="text-xl font-bold">Package types</h2>

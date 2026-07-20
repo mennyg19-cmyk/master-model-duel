@@ -1,5 +1,6 @@
 import { ProductKind } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { assertReplacementMapping } from "@/domain/repeat-orders";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -95,6 +96,21 @@ export async function PATCH(request: Request) {
     }
     if (body.name !== undefined && !body.name.trim()) {
       return NextResponse.json({ error: "Product name cannot be blank." }, { status: 400 });
+    }
+    if (body.replacementProductId) {
+      try {
+        await assertReplacementMapping(db, body.id, body.replacementProductId);
+      } catch (error) {
+        return NextResponse.json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Replacement mapping is invalid.",
+          },
+          { status: 400 },
+        );
+      }
     }
 
     const product = await db.$transaction(async (transaction) => {

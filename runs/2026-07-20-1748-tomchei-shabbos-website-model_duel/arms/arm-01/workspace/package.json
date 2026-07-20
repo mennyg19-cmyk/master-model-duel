@@ -20,6 +20,7 @@
     "smoke:p7": "tsx scripts/p7-smoke.ts",
     "smoke:p8": "tsx scripts/p8-smoke.ts",
     "smoke:p9": "tsx scripts/p9-smoke.ts",
+    "smoke:p10": "tsx scripts/p10-smoke.ts",
     "ci": "npm run lint && npm run typecheck && npm test && npm run db:guard"
   },
   "dependencies": {

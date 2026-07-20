@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OrderMoneyActions } from "@/components/admin-order-actions";
 import { BackLink } from "@/components/back-link";
@@ -7,6 +8,7 @@ import { requirePermission } from "@/lib/auth";
 import { formatCurrency } from "@/lib/currency";
 import { db } from "@/lib/db";
 import { hasPermission } from "@/lib/permissions";
+import { getCurrentSeason } from "@/lib/storefront";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +19,10 @@ export default async function OrderDetailPage({
 }) {
   const session = await requirePermission("admin:view");
   const { orderId } = await params;
-  const order = await getOrderDetail(orderId);
+  const [order, currentSeason] = await Promise.all([
+    getOrderDetail(orderId),
+    getCurrentSeason(),
+  ]);
   if (!order) notFound();
   const paymentIds = order.payments.map((payment) => payment.id);
   const canViewAudit = hasPermission(session.effective, "audit:view");
@@ -45,6 +50,16 @@ export default async function OrderDetailPage({
           <p className="text-sm font-bold uppercase tracking-[0.2em] text-[var(--brand)]">{order.season.name}</p>
           <h1 className="mt-2 text-4xl font-black">Order #{order.orderNumber ?? order.draftReference}</h1>
           <p className="mt-2 text-[var(--muted)]">{order.customer.displayName} · {order.customer.email ?? order.customer.phone ?? "No contact"}</p>
+          {order.status === "FINALIZED" &&
+            order.seasonId !== currentSeason?.id &&
+            hasPermission(session.effective, "orders:manage") && (
+              <Link
+                className="mt-4 inline-block rounded-full bg-[var(--brand)] px-5 py-2.5 font-bold text-white"
+                href={`/admin/orders/${order.id}/repeat`}
+              >
+                Review and repeat
+              </Link>
+            )}
         </div>
         <div className="text-right"><p className="text-3xl font-black">{formatCurrency(order.totalCents)}</p><p className="text-sm font-bold">{order.status} · {order.cachedPaymentStatus}</p></div>
       </div>

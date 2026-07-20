@@ -1,5 +1,6 @@
 import { SettingsHub } from "@/components/settings-hub";
 import { requirePermission } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { getAdminSettings, getDeliveryZips } from "@/lib/store-settings";
 import { getCurrentSeason } from "@/lib/storefront";
 
@@ -7,8 +8,9 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminSettingsPage() {
   await requirePermission("settings:manage");
-  const [season, deliveryZips, adminSettings] = await Promise.all([
+  const [season, seasons, deliveryZips, adminSettings] = await Promise.all([
     getCurrentSeason(),
+    db.season.findMany({ orderBy: { year: "desc" } }),
     getDeliveryZips(),
     getAdminSettings(),
   ]);
@@ -30,9 +32,21 @@ export default async function AdminSettingsPage() {
           isActive: location.isActive,
         })) ?? []
       }
+      seasons={seasons.map((seasonChoice) => ({
+        id: seasonChoice.id,
+        name: seasonChoice.name,
+        year: seasonChoice.year,
+        status: seasonChoice.status,
+      }))}
       season={
         season
-          ? { id: season.id, name: season.name, status: season.status }
+          ? {
+              id: season.id,
+              name: season.name,
+              status: season.status,
+              scheduledStatus: season.scheduledStatus,
+              scheduledStatusAt: season.scheduledStatusAt?.toISOString() ?? null,
+            }
           : null
       }
     />

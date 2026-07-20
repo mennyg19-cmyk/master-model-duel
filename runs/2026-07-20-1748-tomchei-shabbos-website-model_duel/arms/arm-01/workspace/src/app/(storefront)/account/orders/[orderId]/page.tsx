@@ -4,6 +4,7 @@ import { CancelDraftButton } from "@/components/account-actions";
 import { formatCurrency } from "@/lib/currency";
 import { getAuthenticatedCustomer } from "@/lib/customer-access";
 import { db } from "@/lib/db";
+import { getCurrentSeason } from "@/lib/storefront";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +15,17 @@ export default async function AccountOrderDetailPage({
 }) {
   const [{ orderId }, account] = await Promise.all([params, getAuthenticatedCustomer()]);
   if (!account?.customerId) notFound();
-  const order = await db.order.findFirst({
-    where: { id: orderId, customerId: account.customerId },
-    include: {
-      lines: {
-        include: { addOns: true, recipientAddress: true, productOption: true },
+  const [order, currentSeason] = await Promise.all([
+    db.order.findFirst({
+      where: { id: orderId, customerId: account.customerId },
+      include: {
+        lines: {
+          include: { addOns: true, recipientAddress: true, productOption: true },
+        },
       },
-    },
-  });
+    }),
+    getCurrentSeason(),
+  ]);
   if (!order) notFound();
 
   return (
@@ -68,6 +72,16 @@ export default async function AccountOrderDetailPage({
             storageOwnerKey={account.customerId}
           />
         </div>
+      )}
+      {order.status === "FINALIZED" &&
+        order.seasonId !== currentSeason?.id &&
+        currentSeason?.status === "OPEN" && (
+        <Link
+          className="mt-7 inline-block rounded-full bg-[var(--brand)] px-5 py-2.5 font-bold text-white"
+          href={`/account/orders/${order.id}/repeat`}
+        >
+          Repeat for {currentSeason?.name ?? "current season"}
+        </Link>
       )}
     </div>
   );
