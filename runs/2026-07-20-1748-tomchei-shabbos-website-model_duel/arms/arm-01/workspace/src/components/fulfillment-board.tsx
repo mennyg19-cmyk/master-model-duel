@@ -2,8 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  ShippingActions,
+  type ShippingPackage,
+} from "@/components/shipping-actions";
 
-type PackageRow = {
+type PackageRow = ShippingPackage & {
   id: string;
   orderId: string;
   orderLabel: string;
@@ -224,6 +228,7 @@ export function FulfillmentBoard({
               <p className="mt-3 break-all text-xs text-[var(--muted)]">
                 Package {entry.id}
               </p>
+              <ShippingActions packageRecord={entry} />
             </article>
           ))}
           {!packages.length && (

@@ -18,6 +18,7 @@
     "smoke:concurrency": "tsx scripts/concurrency-smoke.ts",
     "smoke:p6": "tsx scripts/p6-smoke.ts",
     "smoke:p7": "tsx scripts/p7-smoke.ts",
+    "smoke:p8": "tsx scripts/p8-smoke.ts",
     "ci": "npm run lint && npm run typecheck && npm test && npm run db:guard"
   },
   "dependencies": {

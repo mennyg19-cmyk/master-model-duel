@@ -70,6 +70,12 @@ enum PrintArtifactKind {
   PACKING_SLIP
 }
 
+enum ShippingLabelStatus {
+  PURCHASED
+  VOIDED
+  FAILED
+}
+
 enum PaymentMethod {
   STRIPE
   CASH
@@ -474,6 +480,7 @@ model Package {
   audits              PackageAudit[]
   shippingQuotes      ShippingQuote[]
   shipmentBoxes       ShipmentBox[]
+  shippingLabels      ShippingLabel[]
 
   @@unique([orderId, groupingKey])
   @@index([isActive, stage, updatedAt])
@@ -590,6 +597,35 @@ model ShippingQuote {
   @@index([packageId, expiresAt])
 }
 
+model ShippingLabel {
+  id                    String              @id @default(cuid())
+  packageId             String
+  package               Package             @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  shipmentBoxId         String?
+  shipmentBox           ShipmentBox?        @relation(fields: [shipmentBoxId], references: [id])
+  provider              String
+  serviceCode           String
+  providerRateId        String
+  providerTransactionId String?             @unique
+  trackingNumber        String?
+  trackingStatus        String?
+  labelUrl              String?
+  chargedCents          Int
+  purchasedCents        Int
+  marginCents           Int
+  currency              String              @default("usd")
+  status                ShippingLabelStatus @default(PURCHASED)
+  failureMessage        String?
+  purchasedAt           DateTime?
+  voidedAt              DateTime?
+  trackingRefreshedAt   DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([packageId, status])
+  @@index([trackingNumber])
+}
+
 model PickupLocation {
   id           String  @id @default(cuid())
   seasonId     String
@@ -626,6 +662,7 @@ model ShipmentBox {
   sequence      Int
   weightGrams   Int?
   createdAt     DateTime    @default(now())
+  shippingLabels ShippingLabel[]
 
   @@unique([packageId, sequence])
 }

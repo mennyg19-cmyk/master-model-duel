@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { OrderMoneyActions } from "@/components/admin-order-actions";
 import { BackLink } from "@/components/back-link";
+import { ShippingActions } from "@/components/shipping-actions";
 import { getOrderDetail } from "@/lib/admin-operations";
 import { requirePermission } from "@/lib/auth";
 import { formatCurrency } from "@/lib/currency";
@@ -60,6 +61,47 @@ export default async function OrderDetailPage({
               ))}
             </div>
           </section>
+          {order.packages.some((packageRecord) => packageRecord.fulfillmentMethod.isShipping) && (
+            <section className="rounded-3xl border border-[var(--border)] bg-white p-6">
+              <h2 className="text-xl font-bold">Shipping packages</h2>
+              <div className="mt-4 space-y-4">
+                {order.packages
+                  .filter((packageRecord) => packageRecord.fulfillmentMethod.isShipping)
+                  .map((packageRecord) => {
+                    const quoteAmounts = packageRecord.shippingQuotes.map(
+                      (quote) => quote.amountCents,
+                    );
+                    const purchasedCents = quoteAmounts.length
+                      ? Math.min(...quoteAmounts)
+                      : 0;
+                    const chargedCents = quoteAmounts.length
+                      ? Math.max(...quoteAmounts)
+                      : 0;
+                    return (
+                      <article className="rounded-2xl border border-[var(--border)] p-4" key={packageRecord.id}>
+                        <p className="font-black">{packageRecord.recipientName}</p>
+                        <p className="text-xs text-[var(--muted)]">Package {packageRecord.id}</p>
+                        <ShippingActions
+                          packageRecord={{
+                            id: packageRecord.id,
+                            isShipping: true,
+                            stage: packageRecord.stage,
+                            quoteSummary: quoteAmounts.length
+                              ? {
+                                  chargedCents,
+                                  purchasedCents,
+                                  marginCents: chargedCents - purchasedCents,
+                                }
+                              : null,
+                            label: packageRecord.shippingLabels[0] ?? null,
+                          }}
+                        />
+                      </article>
+                    );
+                  })}
+              </div>
+            </section>
+          )}
           {canViewAudit && (
             <section className="rounded-3xl border border-[var(--border)] bg-white p-6">
               <h2 className="text-xl font-bold">Audit trail</h2>

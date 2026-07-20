@@ -130,7 +130,21 @@ export function getOrderDetail(orderId: string) {
       },
       payments: { orderBy: [{ postedAt: "desc" }, { id: "asc" }] },
       paymentIntents: { orderBy: { createdAt: "desc" } },
-      packages: { orderBy: { createdAt: "asc" } },
+      packages: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          fulfillmentMethod: true,
+          shippingQuotes: {
+            where: { expiresAt: { gt: new Date() } },
+            orderBy: { amountCents: "asc" },
+          },
+          shippingLabels: {
+            where: { status: "PURCHASED" },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
     },
   });
 }

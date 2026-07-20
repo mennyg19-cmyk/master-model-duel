@@ -40,6 +40,7 @@ function getFeeGroup(choice: CheckoutLineChoice, addressId: string) {
 export function calculateFulfillmentFees(
   choices: CheckoutLineChoice[],
   addressIdsByLineId: ReadonlyMap<string, string>,
+  shippingFeesByAddressId?: ReadonlyMap<string, number>,
 ) {
   const chargedGroups = new Set<string>();
   const feesByLineId = new Map<string, number>();
@@ -51,7 +52,18 @@ export function calculateFulfillmentFees(
       ]);
     }
     const group = getFeeGroup(choice, addressId);
-    const fee = chargedGroups.has(group) ? 0 : fulfillmentFees[choice.fulfillmentCode];
+    const configuredFee =
+      choice.fulfillmentCode === "SHIPPING"
+        ? shippingFeesByAddressId
+          ? shippingFeesByAddressId.get(addressId)
+          : fulfillmentFees.SHIPPING
+        : fulfillmentFees[choice.fulfillmentCode];
+    if (configuredFee === undefined) {
+      throw new CheckoutConflictError("Live shipping is unavailable for this recipient.", [
+        "Refresh rates or choose another fulfillment method.",
+      ]);
+    }
+    const fee = chargedGroups.has(group) ? 0 : configuredFee;
     chargedGroups.add(group);
     feesByLineId.set(choice.orderLineId, fee);
   }
@@ -160,6 +172,7 @@ export async function prepareCheckout(
   defaultGreeting: string,
   donationCents: number,
   allowedDeliveryZips: string[],
+  shippingFeesByAddressId?: ReadonlyMap<string, number>,
 ) {
   const order = await loadCheckoutOrder(prisma, orderId);
   if (!order || order.status !== "DRAFT") {
@@ -193,7 +206,11 @@ export async function prepareCheckout(
       line.recipientAddressId ? [[line.id, line.recipientAddressId] as const] : [],
     ),
   );
-  const feesByLineId = calculateFulfillmentFees(choices, addressesByLineId);
+  const feesByLineId = calculateFulfillmentFees(
+    choices,
+    addressesByLineId,
+    shippingFeesByAddressId,
+  );
   for (const line of order.lines) {
     const choice = choicesByLineId.get(line.id);
     if (!choice || !methodsByCode.has(choice.fulfillmentCode)) {

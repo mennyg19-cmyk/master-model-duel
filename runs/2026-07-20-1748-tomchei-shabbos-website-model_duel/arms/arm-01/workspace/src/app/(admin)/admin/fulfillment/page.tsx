@@ -14,6 +14,15 @@ export default async function FulfillmentPage() {
       include: {
         fulfillmentMethod: true,
         order: { select: { id: true, orderNumber: true } },
+        shippingQuotes: {
+          where: { expiresAt: { gt: new Date() } },
+          orderBy: { amountCents: "asc" },
+        },
+        shippingLabels: {
+          where: { status: "PURCHASED" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
         lines: {
           include: {
             orderLine: {
@@ -106,8 +115,28 @@ export default async function FulfillmentPage() {
             orderLabel: `Order #${entry.order.orderNumber ?? entry.orderId.slice(-6)}`,
             recipientName: entry.recipientName,
             method: entry.fulfillmentMethod.displayName,
+            isShipping: entry.fulfillmentMethod.isShipping,
             stage: entry.stage,
             version: entry.version,
+            quoteSummary:
+              entry.shippingQuotes.length > 0
+                ? {
+                    chargedCents: Math.max(
+                      ...entry.shippingQuotes.map((quote) => quote.amountCents),
+                    ),
+                    purchasedCents: Math.min(
+                      ...entry.shippingQuotes.map((quote) => quote.amountCents),
+                    ),
+                    marginCents:
+                      Math.max(
+                        ...entry.shippingQuotes.map((quote) => quote.amountCents),
+                      ) -
+                      Math.min(
+                        ...entry.shippingQuotes.map((quote) => quote.amountCents),
+                      ),
+                  }
+                : null,
+            label: entry.shippingLabels[0] ?? null,
             lines: entry.lines.map((line) => ({
               id: line.id,
               label: `${line.orderLine.productNameSnapshot} (${line.orderLine.skuSnapshot})`,

@@ -7,6 +7,7 @@ import {
   fulfillmentFees,
   prepareCheckout,
 } from "@/domain/checkout";
+import { quoteDraftShipping } from "@/domain/shipping";
 import { findAccessibleDraft } from "@/lib/customer-access";
 import { db } from "@/lib/db";
 import {
@@ -15,6 +16,7 @@ import {
 } from "@/lib/public-request";
 import { getDeliveryZips } from "@/lib/store-settings";
 import { getStripe } from "@/lib/stripe";
+import { getShippingProvider } from "@/lib/shippo";
 
 const checkoutSchema = z.object({
   method: z.literal("STRIPE"),
@@ -69,9 +71,27 @@ export async function GET(request: Request) {
     db.appSetting.findUnique({ where: { key: "purim-delivery-days" } }),
     getDeliveryZips(),
   ]);
+  const shippingProvider = getShippingProvider();
+  let shippingFeesByAddressId: Record<string, number> = {};
+  let shippingRateError: string | null = null;
+  if (order && shippingProvider) {
+    try {
+      shippingFeesByAddressId = await quoteDraftShipping(
+        db,
+        shippingProvider,
+        order.id,
+      );
+    } catch (error) {
+      shippingRateError =
+        error instanceof Error ? error.message : "Live shipping rates failed.";
+    }
+  }
   return NextResponse.json({
     order,
     fulfillmentFees,
+    shippingFeesByAddressId,
+    isLiveShippingAvailable: Boolean(shippingProvider) && !shippingRateError,
+    shippingRateError,
     deliveryDays:
       deliveryDays && Array.isArray(deliveryDays.value)
         ? deliveryDays.value
@@ -99,6 +119,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Draft not found." }, { status: 404 });
     }
 
+    const shippingProvider = getShippingProvider();
+    const hasShipping = parsed.data.choices.some(
+      (choice) => choice.fulfillmentCode === "SHIPPING",
+    );
+    if (hasShipping && !shippingProvider) {
+      throw new CheckoutConflictError("Live shipping is not configured.", [
+        "Choose another fulfillment method or ask staff to configure Shippo.",
+      ]);
+    }
+    const shippingFeesByAddressId = hasShipping && shippingProvider
+      ? await quoteDraftShipping(db, shippingProvider, draft.id)
+      : {};
     const prepared = await prepareCheckout(
       db,
       draft.id,
@@ -106,6 +138,7 @@ export async function POST(request: Request) {
       parsed.data.defaultGreeting,
       parsed.data.donationCents,
       await getDeliveryZips(),
+      new Map(Object.entries(shippingFeesByAddressId)),
     );
     if (parsed.data.expectedTotalCents !== prepared.totalCents) {
       return NextResponse.json(

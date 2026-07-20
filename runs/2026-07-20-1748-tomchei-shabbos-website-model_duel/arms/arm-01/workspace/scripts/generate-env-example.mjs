@@ -20,6 +20,18 @@ BLOB_READ_WRITE_TOKEN=vercel_blob_rw_replace_me
 STRIPE_SECRET_KEY=sk_test_replace_me
 STRIPE_WEBHOOK_SECRET=whsec_replace_me
 
+# Optional Shippo shipping. FedEx and UPS IDs document the connected org accounts.
+SHIPPO_API_TOKEN=shippo_test_replace_me
+SHIPPO_FEDEX_ACCOUNT_ID=replace_me
+SHIPPO_UPS_ACCOUNT_ID=replace_me
+SHIP_FROM_NAME=Tomchei Shabbos
+SHIP_FROM_STREET1=replace_me
+SHIP_FROM_STREET2=
+SHIP_FROM_CITY=Brooklyn
+SHIP_FROM_STATE=NY
+SHIP_FROM_ZIP=11219
+SHIP_FROM_COUNTRY=US
+
 # Test/CI only. Never enable on preview, staging, or production deployments.
 ENABLE_TEST_AUTH=false
 `;

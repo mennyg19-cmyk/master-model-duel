@@ -32,6 +32,8 @@ type CheckoutPayload = {
     };
   };
   fulfillmentFees: Record<string, number>;
+  shippingFeesByAddressId: Record<string, number>;
+  isLiveShippingAvailable: boolean;
   deliveryDays: string[];
   deliveryZips: string[];
 };
@@ -84,7 +86,11 @@ export function CheckoutForm({ draftId }: { draftId: string }) {
           : `${choice.fulfillmentCode}:${line.recipientAddress.id}`;
       if (chargedGroups.has(group)) return sum;
       chargedGroups.add(group);
-      return sum + (checkout.fulfillmentFees[choice.fulfillmentCode] ?? 0);
+      const fee =
+        choice.fulfillmentCode === "SHIPPING"
+          ? checkout.shippingFeesByAddressId[line.recipientAddress.id]
+          : checkout.fulfillmentFees[choice.fulfillmentCode];
+      return sum + (fee ?? 0);
     }, 0);
   }, [checkout, choices]);
   const donationCents = Math.max(0, Math.round(donationDollars * 100));
@@ -187,13 +193,28 @@ export function CheckoutForm({ draftId }: { draftId: string }) {
                     >
                       {checkout.order.season.fulfillmentMethods.map((method) => (
                         <option
-                          disabled={method.code === "PACKAGE_DELIVERY" && isOutOfZone}
+                          disabled={
+                            (method.code === "PACKAGE_DELIVERY" && isOutOfZone) ||
+                            (method.code === "SHIPPING" &&
+                              !checkout.isLiveShippingAvailable)
+                          }
                           key={method.code}
                           value={method.code}
                         >
-                          {method.displayName} (+{formatCurrency(checkout.fulfillmentFees[method.code] ?? 0)})
+                          {method.displayName} (+
+                          {formatCurrency(
+                            method.code === "SHIPPING"
+                              ? checkout.shippingFeesByAddressId[
+                                  line.recipientAddress?.id ?? ""
+                                ] ?? 0
+                              : checkout.fulfillmentFees[method.code] ?? 0,
+                          )}
+                          )
                           {method.code === "PACKAGE_DELIVERY" && isOutOfZone
                             ? " — outside delivery area"
+                            : method.code === "SHIPPING" &&
+                                !checkout.isLiveShippingAvailable
+                              ? " — live rates unavailable"
                             : ""}
                         </option>
                       ))}
