@@ -209,9 +209,20 @@ export function OrderBuilder({
       setDraftVersion(payload.order.version);
       draftVersionRef.current = payload.order.version;
       setSaveState("Saved");
+      return currentDraftId;
     } catch (error) {
       setSaveState(error instanceof Error ? error.message : "Draft could not be saved.");
+      return null;
     }
+  }
+
+  async function continueToCheckout() {
+    if (lines.some((line) => !line.recipientAddressId)) {
+      setSaveState("Choose a recipient for every gift before checkout.");
+      return;
+    }
+    const savedDraftId = await saveDraft(lines);
+    if (savedDraftId) window.location.assign(`/checkout/${savedDraftId}`);
   }
 
   useEffect(() => {
@@ -482,9 +493,17 @@ export function OrderBuilder({
               <span>{formatCurrency(subtotalCents)}</span>
             </div>
             <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-              Payment and fulfillment choices begin in the next step.
+              Delivery, greetings, and secure payment continue in the next step.
               {isAuthenticated ? " This draft is linked to your account." : " Your guest access is protected by an expiring token."}
             </p>
+            <button
+              className="mt-5 w-full rounded-full bg-[var(--ink)] px-6 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={lines.length === 0 || lines.some((line) => !line.recipientAddressId)}
+              onClick={() => void continueToCheckout()}
+              type="button"
+            >
+              Continue to checkout
+            </button>
           </div>
         </aside>
       </div>

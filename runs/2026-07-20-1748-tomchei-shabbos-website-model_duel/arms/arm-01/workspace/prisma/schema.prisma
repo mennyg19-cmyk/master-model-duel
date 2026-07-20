@@ -73,6 +73,7 @@ enum PaymentIntentStatus {
   CREATED
   PROCESSING
   SUCCEEDED
+  FAILED
   CANCELLED
   REFUNDED
 }
@@ -316,6 +317,7 @@ model CustomerAddress {
   longitude       Decimal?  @db.Decimal(9, 6)
   geocodedAt      DateTime?
   geocodeProvider String?
+  rememberedGreeting String?
   version         Int       @default(1)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -339,7 +341,10 @@ model Order {
   wireFormatVersion   Int                   @default(1)
   cachedPaymentStatus CachedPaymentStatus   @default(UNPAID)
   subtotalCents       Int                   @default(0)
+  donationCents       Int                   @default(0)
   totalCents          Int                   @default(0)
+  defaultGreeting     String                @default("")
+  confirmationTriggeredAt DateTime?
   finalizedAt         DateTime?
   discardedAt         DateTime?
   version             Int                   @default(1)
@@ -367,6 +372,11 @@ model OrderLine {
   recipientAddress       CustomerAddress? @relation(fields: [recipientAddressId], references: [id])
   recipientSource        RecipientAssignmentSource?
   recipientNameSnapshot  String?
+  fulfillmentMethodId    String?
+  fulfillmentMethod      FulfillmentMethod? @relation(fields: [fulfillmentMethodId], references: [id])
+  fulfillmentFeeCentsSnapshot Int           @default(0)
+  greetingSnapshot       String             @default("")
+  deliveryDay            String?
   productNameSnapshot    String
   skuSnapshot            String
   unitPriceCentsSnapshot Int
@@ -376,6 +386,7 @@ model OrderLine {
 
   @@index([orderId])
   @@index([recipientAddressId])
+  @@index([fulfillmentMethodId])
 }
 
 model OrderLineAddOn {
@@ -403,6 +414,7 @@ model FulfillmentMethod {
   isActive        Boolean   @default(true)
   sortOrder       Int       @default(0)
   packages        Package[]
+  orderLines      OrderLine[]
 
   @@unique([seasonId, code])
 }
@@ -472,6 +484,7 @@ model Payment {
   createdAt       DateTime      @default(now())
 
   @@index([orderId, status])
+  @@unique([method, reference])
 }
 
 model StripePaymentIntent {
@@ -479,6 +492,7 @@ model StripePaymentIntent {
   orderId               String
   order                 Order               @relation(fields: [orderId], references: [id])
   stripePaymentIntentId String              @unique
+  stripeCheckoutSessionId String?           @unique
   idempotencyKey        String              @unique
   status                PaymentIntentStatus
   amountCents           Int
@@ -487,6 +501,12 @@ model StripePaymentIntent {
   updatedAt             DateTime            @updatedAt
 
   @@index([orderId, status])
+}
+
+model StripeWebhookEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
 }
 
 model ShippingQuote {
@@ -592,6 +612,13 @@ model CronRun {
 }
 
 model GuestDraftThrottle {
+  key             String   @id
+  windowStartedAt DateTime
+  attempts        Int
+  updatedAt       DateTime @updatedAt
+}
+
+model PublicRequestThrottle {
   key             String   @id
   windowStartedAt DateTime
   attempts        Int

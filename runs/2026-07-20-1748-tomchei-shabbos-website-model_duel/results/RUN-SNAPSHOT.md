@@ -21,7 +21,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- arm-01: P5 build next
+- arm-01 P5: review panel (security, quality, rules, clean-code) → aggregate → fix
 - arm-02: [arm-02 Test4 P4 build](b86bea98-c701-49ea-9cc4-402ddbd24c27)
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)

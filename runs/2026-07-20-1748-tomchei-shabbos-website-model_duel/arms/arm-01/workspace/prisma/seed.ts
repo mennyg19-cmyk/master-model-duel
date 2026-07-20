@@ -205,11 +205,53 @@ async function seed() {
     where: {
       seasonId_code: { seasonId: season.id, code: "DELIVERY" },
     },
-    update: {},
+    update: { isActive: false },
     create: {
       seasonId: season.id,
       code: "DELIVERY",
       displayName: "Local delivery",
+      isActive: false,
+    },
+  });
+
+  for (const [sortOrder, fulfillmentMethod] of [
+    { code: "BULK_DELIVERY", displayName: "Bulk delivery", requiresAddress: true },
+    {
+      code: "PACKAGE_DELIVERY",
+      displayName: "Per-package delivery",
+      requiresAddress: true,
+    },
+    { code: "SHIPPING", displayName: "Shipping (estimated rate)", requiresAddress: true },
+    { code: "PICKUP", displayName: "Pickup", requiresAddress: false, isPickup: true },
+  ].entries()) {
+    await prisma.fulfillmentMethod.upsert({
+      where: {
+        seasonId_code: { seasonId: season.id, code: fulfillmentMethod.code },
+      },
+      update: {
+        displayName: fulfillmentMethod.displayName,
+        requiresAddress: fulfillmentMethod.requiresAddress,
+        isPickup: fulfillmentMethod.isPickup ?? false,
+        sortOrder,
+      },
+      create: {
+        seasonId: season.id,
+        code: fulfillmentMethod.code,
+        displayName: fulfillmentMethod.displayName,
+        requiresAddress: fulfillmentMethod.requiresAddress,
+        isPickup: fulfillmentMethod.isPickup ?? false,
+        isShipping: fulfillmentMethod.code === "SHIPPING",
+        sortOrder,
+      },
+    });
+  }
+
+  await prisma.appSetting.upsert({
+    where: { key: "purim-delivery-days" },
+    update: {},
+    create: {
+      key: "purim-delivery-days",
+      value: ["Purim eve", "Purim day"],
     },
   });
 

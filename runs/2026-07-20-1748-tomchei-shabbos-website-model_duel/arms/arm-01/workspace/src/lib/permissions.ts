@@ -6,6 +6,7 @@ export const permissions = [
   "staff:impersonate",
   "audit:view",
   "settings:manage",
+  "payments:manage",
 ] as const;
 
 export type Permission = (typeof permissions)[number];

@@ -8,6 +8,8 @@ P3 adds the public marketing site, current and archived catalogs, newsletter
 preferences, catalog and media administration, and storefront settings.
 P4 adds the cart-first order builder, saved-recipient workflow, protected
 authenticated and guest drafts, and customer account pages.
+P5 adds recipient-level fulfillment, greeting capture, hosted Stripe Checkout,
+signed payment webhooks, offline staff payments, and final order commitment.
 
 ## Local development
 
@@ -72,3 +74,20 @@ and native `node:test` through `tsx` for unit tests.
 - `/account`, `/account/orders/[orderId]`, `/account/profile`, and
   `/account/addresses` expose ownership-enforced customer account views.
 - P4 stops before payment capture and fulfillment commitment.
+
+## P5 checkout and payments
+
+- `/checkout/[draftId]` collects fulfillment, manager-configured delivery day,
+  default and recipient greetings, and an optional donation.
+- Bulk delivery charges once per destination; per-package delivery charges per
+  recipient and cannot bypass the configured delivery-ZIP list.
+- `/api/checkout/stripe` revalidates live prices and stock, then redirects to
+  hosted Stripe Checkout with automatic capture. Local test auth uses the
+  production-disabled `/checkout/test` stand-in when Stripe keys are absent.
+- Signed Stripe webhooks are idempotent, commit stock once, assign the seasonal
+  order number, trigger confirmation once, synchronize refunds, and safety-refund
+  a charge when the paid order became stale.
+- Staff with `payments:manage` may post and void cash/check payments with audit
+  entries. Public checkout accepts Stripe only.
+- Live Shippo rates remain deferred to P8; P5 stores deterministic placeholder
+  rate snapshots so later fulfillment changes do not alter the paid total.
