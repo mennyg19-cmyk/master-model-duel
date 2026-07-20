@@ -31,4 +31,5 @@
 "2026-07-20T21:10:00Z","2026-07-20-1748-tomchei-shabbos-website-model_duel","4","arm-02","P4","review_rules","glm-5.2-high","bdf336a6-decd-4a31-9786-ca5bbd515488","","","","","","","","pending; usage_missing_pending_export"
 "2026-07-20T21:10:00Z","2026-07-20-1748-tomchei-shabbos-website-model_duel","4","arm-02","P4","review_clean_code","glm-5.2-high","d4ab66a9-643e-488c-ab32-a54db79497c9","","","","","","","","16 findings (0 high 8 med); usage_missing_pending_export"
 "2026-07-20T20:06:00Z","2026-07-20-1748-tomchei-shabbos-website-model_duel","4","arm-02","P3","review_clean_code","glm-5.2-high","f46474d2-d736-4d9c-9fd9-a8ef91e1928f","","","","","","","","10 findings; usage_missing_pending_export"
+"2026-07-20T21:25:00Z","2026-07-20-1748-tomchei-shabbos-website-model_duel","4","arm-01","P6","build","gpt-5.6-sol-medium","c63da8b0-d773-47ca-9b48-9baffe069893","","","","","","","","pending; usage_missing_pending_export"
 "2026-07-20T19:39:32Z","2026-07-20-1748-tomchei-shabbos-website-model_duel","gate","shared","","orchestrate","orchestrator","","","","","","","","","cost-ledger-hardening-smoke; usage_missing_pending_export"
