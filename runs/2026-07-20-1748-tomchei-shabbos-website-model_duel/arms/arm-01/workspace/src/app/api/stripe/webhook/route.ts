@@ -6,6 +6,7 @@ import {
   commitStripePayment,
   recalculatePaymentStatus,
 } from "@/domain/checkout";
+import { enqueueTransactionalEmail } from "@/domain/messaging";
 import { db } from "@/lib/db";
 import { constructStripeEvent, getStripe } from "@/lib/stripe";
 
@@ -139,6 +140,21 @@ async function processRefund(event: Stripe.ChargeRefundedEvent) {
         data: { id: event.id, type: event.type },
       });
       await recalculatePaymentStatus(transaction, storedIntent.orderId);
+      const order = await transaction.order.findUniqueOrThrow({
+        where: { id: storedIntent.orderId },
+        include: { customer: true },
+      });
+      await enqueueTransactionalEmail(transaction, {
+        idempotencyKey: `refund:${payment.id}:${payment.refundedCents}:${refundedCents - payment.refundedCents}`,
+        templateKey: "order.refund",
+        recipient: order.customer.email,
+        variables: {
+          orderNumber: order.orderNumber ?? order.draftReference,
+          refundAmount: `$${((refundedCents - payment.refundedCents) / 100).toFixed(2)}`,
+        },
+        customerId: order.customer.id,
+        orderId: order.id,
+      });
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );

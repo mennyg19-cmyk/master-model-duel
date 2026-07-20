@@ -13,6 +13,16 @@ CLIENT_ERROR_TOKEN=replace-with-a-random-value
 # Required for signed newsletter preference and unsubscribe links
 NEWSLETTER_HMAC_SECRET=replace-with-at-least-24-random-characters
 
+# Required for live Resend delivery. EMAIL_TEST_MODE captures without contacting providers.
+RESEND_API_KEY=re_replace_me
+EMAIL_FROM_ADDRESS=Tomchei Shabbos <purim@example.org>
+EMAIL_TEST_MODE=false
+APP_URL=https://example.org
+
+# Optional single SMS provider endpoint used by delivery notifications
+SMS_PROVIDER_URL=https://sms-provider.example/v1/messages
+SMS_PROVIDER_TOKEN=replace_me
+
 # Required for production media uploads to Vercel Blob
 BLOB_READ_WRITE_TOKEN=vercel_blob_rw_replace_me
 
@@ -31,6 +41,13 @@ SHIP_FROM_CITY=Brooklyn
 SHIP_FROM_STATE=NY
 SHIP_FROM_ZIP=11219
 SHIP_FROM_COUNTRY=US
+
+# Required for uncached delivery-address geocoding and admin route maps
+MAPBOX_ACCESS_TOKEN=pk.replace_me
+
+# Required by all cron routes
+CRON_SECRET=replace-with-a-random-value
+MESSAGE_LOG_RETENTION_DAYS=90
 
 # Test/CI only. Never enable on preview, staging, or production deployments.
 ENABLE_TEST_AUTH=false

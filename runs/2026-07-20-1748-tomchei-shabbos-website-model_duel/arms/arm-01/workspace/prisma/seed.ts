@@ -6,10 +6,12 @@ import {
   StaffRole,
   StaffStatus,
 } from "@prisma/client";
+import { ensureMessagingConfiguration } from "../src/domain/messaging";
 
 const prisma = new PrismaClient();
 
 async function seed() {
+  await ensureMessagingConfiguration(prisma);
   await prisma.appSetting.upsert({
     where: { key: "organization" },
     update: {},

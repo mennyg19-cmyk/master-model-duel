@@ -10,6 +10,7 @@ import {
   CheckoutConflictError,
   type CheckoutLineChoice,
 } from "@/domain/fulfillment-fees";
+import { enqueueTransactionalEmail } from "@/domain/messaging";
 import { materializeOrderPackages } from "@/domain/package-operations";
 
 export {
@@ -303,6 +304,20 @@ export async function commitStripePayment(
       }
       await transaction.stripeWebhookEvent.create({
         data: { id: eventId, type: "checkout.session.completed" },
+      });
+      const customer = await transaction.customer.findUniqueOrThrow({
+        where: { id: order.customerId },
+      });
+      await enqueueTransactionalEmail(transaction, {
+        idempotencyKey: `order-confirmation:${order.id}`,
+        templateKey: "order.confirmation",
+        recipient: customer.email,
+        variables: {
+          customerName: customer.displayName,
+          orderNumber: season.nextOrderNumber - 1,
+        },
+        customerId: customer.id,
+        orderId: order.id,
       });
       return { replayed: false };
     },

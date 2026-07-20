@@ -21,6 +21,7 @@
     "smoke:p8": "tsx scripts/p8-smoke.ts",
     "smoke:p9": "tsx scripts/p9-smoke.ts",
     "smoke:p10": "tsx scripts/p10-smoke.ts",
+    "smoke:p11": "tsx scripts/p11-smoke.ts",
     "ci": "npm run lint && npm run typecheck && npm test && npm run db:guard"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "pdfkit": "0.19.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "resend": "6.17.2",
     "stripe": "22.3.2",
     "zod": "4.4.3"
   },

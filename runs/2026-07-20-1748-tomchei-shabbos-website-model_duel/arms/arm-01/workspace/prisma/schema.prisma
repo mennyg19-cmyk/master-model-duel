@@ -87,6 +87,25 @@ enum DeliveryStopStatus {
   DELIVERED
 }
 
+enum MessageChannel {
+  EMAIL
+  SMS
+}
+
+enum MessageStatus {
+  PENDING
+  PROCESSING
+  SENT
+  CAPTURED
+  FAILED
+}
+
+enum CampaignStatus {
+  DRAFT
+  SENDING
+  SENT
+}
+
 enum PaymentMethod {
   STRIPE
   CASH
@@ -297,6 +316,95 @@ model NewsletterSubscriber {
   subscribedAt       DateTime @default(now())
   unsubscribedAt     DateTime?
   updatedAt          DateTime @updatedAt
+}
+
+model EmailList {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  preferenceField String   @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  campaigns       EmailCampaign[]
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  subject   String
+  htmlBody  String
+  textBody  String
+  isEnabled Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmailCampaign {
+  id            String         @id @default(cuid())
+  name          String
+  subject       String
+  htmlBody      String
+  textBody      String
+  emailListId   String
+  emailList     EmailList      @relation(fields: [emailListId], references: [id])
+  status        CampaignStatus @default(DRAFT)
+  createdById   String
+  testSentAt    DateTime?
+  sentAt        DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  outboxMessages MessageOutbox[]
+
+  @@index([status, createdAt])
+}
+
+model MessageOutbox {
+  id                String         @id @default(cuid())
+  idempotencyKey    String         @unique
+  channel           MessageChannel
+  eventKey          String
+  templateKey       String?
+  recipient         String
+  subject           String?
+  htmlBody          String?
+  textBody          String
+  payload           Json
+  customerId        String?
+  orderId           String?
+  packageId         String?
+  campaignId        String?
+  campaign          EmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  status            MessageStatus  @default(PENDING)
+  attempts          Int            @default(0)
+  nextAttemptAt     DateTime       @default(now())
+  lockedAt          DateTime?
+  lockedBy          String?
+  providerMessageId String?
+  lastError         String?
+  sentAt            DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  attemptLog        MessageAttempt[]
+
+  @@index([status, nextAttemptAt])
+  @@index([campaignId, status])
+  @@index([customerId, createdAt])
+  @@index([orderId, createdAt])
+}
+
+model MessageAttempt {
+  id                String        @id @default(cuid())
+  outboxId          String
+  outbox             MessageOutbox @relation(fields: [outboxId], references: [id], onDelete: Cascade)
+  attemptNumber     Int
+  status            MessageStatus
+  providerMessageId String?
+  errorMessage      String?
+  attemptedAt       DateTime      @default(now())
+
+  @@unique([outboxId, attemptNumber])
+  @@index([status, attemptedAt])
 }
 
 model MediaAsset {

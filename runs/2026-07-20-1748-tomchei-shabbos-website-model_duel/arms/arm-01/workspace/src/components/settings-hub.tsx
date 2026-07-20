@@ -37,6 +37,7 @@ export function SettingsHub({
   const [deliveryZips, setDeliveryZips] = useState(initialDeliveryZips.join(", "));
   const [message, setMessage] = useState("");
   const [adminSettings, setAdminSettings] = useState(initialAdminSettings);
+  const [emailTestRecipient, setEmailTestRecipient] = useState("");
   const [scheduledStatus, setScheduledStatus] = useState<SeasonStatus>(
     season?.scheduledStatus ?? "OPEN",
   );
@@ -76,6 +77,20 @@ export function SettingsHub({
     }
     setMessage(`${payload.season.name} was created as the closed current season.`);
     window.location.reload();
+  }
+
+  async function sendEmailTest() {
+    const response = await fetch("/api/admin/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "testTransactional",
+        recipient: emailTestRecipient,
+        templateKey: "order.confirmation",
+      }),
+    });
+    const payload = await response.json();
+    setMessage(response.ok ? "Email test queued." : payload.error);
   }
 
   return (
@@ -277,6 +292,19 @@ export function SettingsHub({
               <input className="mt-2 w-full rounded-xl border border-[var(--border)] px-3 py-2" onChange={(event) => setAdminSettings({ ...adminSettings, emailSenderName: event.target.value })} value={adminSettings.emailSenderName} />
             </label>
             <button className="rounded-xl bg-[var(--ink)] px-5 py-3 font-bold text-white" onClick={() => saveSettings({ adminSettings })} type="button">Save email defaults</button>
+            <div className="max-w-xl border-t border-[var(--border)] pt-5">
+              <h3 className="font-bold">Send test email</h3>
+              <div className="mt-3 flex gap-3">
+                <input
+                  className="min-w-0 flex-1 rounded-xl border border-[var(--border)] px-3 py-2"
+                  onChange={(event) => setEmailTestRecipient(event.target.value)}
+                  placeholder="staff@example.org"
+                  type="email"
+                  value={emailTestRecipient}
+                />
+                <button className="rounded-xl bg-[var(--brand)] px-5 py-2 font-bold text-white" onClick={sendEmailTest} type="button">Send test</button>
+              </div>
+            </div>
           </div>
         )}
         {activeTab === "Developer" && (

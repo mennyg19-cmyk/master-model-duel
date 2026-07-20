@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { enqueueTransactionalEmail } from "@/domain/messaging";
 import { db } from "@/lib/db";
+import { createNewsletterToken } from "@/lib/newsletter";
 import { normalizeEmail } from "@/lib/normalize";
 
 export async function POST(request: Request) {
@@ -12,7 +14,7 @@ export async function POST(request: Request) {
     );
   }
 
-  await db.newsletterSubscriber.upsert({
+  const subscriber = await db.newsletterSubscriber.upsert({
     where: { email },
     create: { email },
     update: {
@@ -20,7 +22,17 @@ export async function POST(request: Request) {
       unsubscribedAt: null,
     },
   });
+  const token = createNewsletterToken(subscriber.id);
+  await enqueueTransactionalEmail(db, {
+    idempotencyKey: `newsletter-preferences:${subscriber.id}:${subscriber.updatedAt.getTime()}`,
+    templateKey: "newsletter.preferences",
+    recipient: subscriber.email,
+    variables: {
+      preferenceUrl: `${process.env.APP_URL ?? "http://127.0.0.1:3101"}/newsletter/preferences?token=${encodeURIComponent(token)}`,
+    },
+  });
   return NextResponse.json({
     message: "You’re on the list. Check your inbox for preference controls.",
+    ...(process.env.EMAIL_TEST_MODE === "true" ? { preferenceToken: token } : {}),
   });
 }

@@ -1,4 +1,5 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { MessageChannel, type Prisma, type PrismaClient } from "@prisma/client";
+import { enqueueMessage } from "@/domain/messaging";
 
 type NotificationClient = PrismaClient | Prisma.TransactionClient;
 
@@ -14,22 +15,32 @@ export async function captureCustomerNotification(
   },
 ) {
   if (!input.destination) return null;
-  return prisma.notificationCapture.upsert({
-    where: {
-      eventKey_channel: {
-        eventKey: input.eventKey,
-        channel: input.channel,
-      },
-    },
-    create: {
-      customerId: input.customerId,
-      packageId: input.packageId,
-      eventKey: input.eventKey,
-      channel: input.channel,
-      destination: input.destination,
-      payload: input.payload,
-    },
-    update: {},
+  const payload =
+    typeof input.payload === "object" && !Array.isArray(input.payload)
+      ? (input.payload as Record<string, Prisma.JsonValue>)
+      : {};
+  const type = typeof payload.type === "string" ? payload.type : "CUSTOMER_UPDATE";
+  const messageText = type
+    .split("_")
+    .map((part) => part.toLowerCase())
+    .join(" ");
+  return enqueueMessage(prisma, {
+    idempotencyKey: `${input.eventKey}:${input.channel}`,
+    eventKey: input.eventKey,
+    channel: MessageChannel[input.channel],
+    recipient: input.destination,
+    subject:
+      input.channel === "EMAIL"
+        ? `Tomchei Shabbos: ${messageText}`
+        : undefined,
+    htmlBody:
+      input.channel === "EMAIL"
+        ? `<p>${messageText}</p>`
+        : undefined,
+    textBody: `Tomchei Shabbos update: ${messageText}.`,
+    customerId: input.customerId,
+    packageId: input.packageId,
+    payload: input.payload,
   });
 }
 

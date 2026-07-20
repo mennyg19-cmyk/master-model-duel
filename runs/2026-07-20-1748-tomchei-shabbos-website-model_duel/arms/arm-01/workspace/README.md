@@ -20,6 +20,8 @@ validation, and tracking. P9 adds delivery routes, scoped driver magic links,
 confirmed map reroutes, pickup operations, and bulk scheduling.
 P10 adds forward replacement chains, reviewed customer and staff repeats,
 bounded bulk repeats, a new-season cloning wizard, and scheduled status changes.
+P11 adds Resend-backed campaigns, preference lists, configurable transactional
+templates, a retrying message outbox, authenticated sweep/purge crons, and test capture.
 
 ## Local development
 
@@ -40,6 +42,7 @@ them, non-production builds use the local identity adapter for smoke testing.
 - `npm run smoke:p8`
 - `npm run smoke:p9`
 - `npm run smoke:p10`
+- `npm run smoke:p11`
 
 The project uses one pattern per concern: server components for reads, route
 handlers for mutations, Prisma for persistence, Tailwind tokens for styling,
@@ -151,3 +154,14 @@ and native `node:test` through `tsx` for unit tests.
   the new current season, and maps the prior catalog forward.
 - Manual Open/Closed changes and scheduled flips are audited. The storefront
   applies due flips lazily; `/api/cron/season-status` provides the bearer-auth sweep.
+
+## P11 email and notifications
+
+- `/admin/email` provides campaign drafts, preference lists, test sends,
+  transactional template overrides, and recent outbox status.
+- Confirmation, payment-link, refund, delivery, pickup, and SMS events use one
+  idempotent transactional outbox with retry history.
+- `/api/cron/message-outbox` claims work with PostgreSQL `SKIP LOCKED`;
+  `/api/cron/message-log-purge` removes eligible logs while retaining outbox and audit rows.
+- Resend is isolated in `src/lib/resend.ts`; test mode records captures without
+  contacting Resend or the configured SMS provider.

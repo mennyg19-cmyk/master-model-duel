@@ -100,6 +100,9 @@ export default async function AdminLayout({
                 <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/media">
                   Media
                 </Link>
+                <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/email">
+                  Email hub
+                </Link>
                 <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/settings">
                   Settings
                 </Link>

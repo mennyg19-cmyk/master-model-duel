@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { PackageStage, Prisma, type PrismaClient } from "@prisma/client";
 import { captureCustomerNotification, captureEmailAndSms } from "@/domain/delivery-notifications";
+import { enqueueTransactionalEmail } from "@/domain/messaging";
 import { voidPackageLabel } from "@/domain/shipping";
 import type { ShippingProvider } from "@/lib/shippo";
 
@@ -640,12 +641,16 @@ export async function sendPaymentReminders(prisma: PrismaClient) {
     take: 500,
   });
   for (const order of orders) {
-    await captureCustomerNotification(prisma, {
+    await enqueueTransactionalEmail(prisma, {
+      idempotencyKey: `payment-reminder:${order.id}:${new Date().toISOString().slice(0, 10)}`,
+      templateKey: "order.payment_link",
+      recipient: order.customer.email,
       customerId: order.customer.id,
-      eventKey: `payment-reminder:${order.id}:${new Date().toISOString().slice(0, 10)}`,
-      channel: "EMAIL",
-      destination: order.customer.email,
-      payload: { type: "PAYMENT_REMINDER", orderId: order.id },
+      orderId: order.id,
+      variables: {
+        orderNumber: order.orderNumber ?? order.draftReference,
+        paymentUrl: `${process.env.APP_URL ?? "http://127.0.0.1:3101"}/account/orders/${order.id}`,
+      },
     });
   }
   return orders.length;

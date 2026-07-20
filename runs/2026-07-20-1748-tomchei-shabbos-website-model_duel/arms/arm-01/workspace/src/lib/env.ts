@@ -15,6 +15,11 @@ type ServerEnvironment = {
   SHIP_FROM_COUNTRY?: string;
   MAPBOX_ACCESS_TOKEN?: string;
   CRON_SECRET?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM_ADDRESS?: string;
+  SMS_PROVIDER_URL?: string;
+  SMS_PROVIDER_TOKEN?: string;
+  MESSAGE_LOG_RETENTION_DAYS?: string;
 };
 
 function requireEnvironmentValue(name: string) {
@@ -43,6 +48,11 @@ export function readServerEnvironment(): ServerEnvironment {
     SHIP_FROM_COUNTRY: process.env.SHIP_FROM_COUNTRY,
     MAPBOX_ACCESS_TOKEN: process.env.MAPBOX_ACCESS_TOKEN,
     CRON_SECRET: process.env.CRON_SECRET,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    EMAIL_FROM_ADDRESS: process.env.EMAIL_FROM_ADDRESS,
+    SMS_PROVIDER_URL: process.env.SMS_PROVIDER_URL,
+    SMS_PROVIDER_TOKEN: process.env.SMS_PROVIDER_TOKEN,
+    MESSAGE_LOG_RETENTION_DAYS: process.env.MESSAGE_LOG_RETENTION_DAYS,
   };
 }
 

@@ -2,6 +2,7 @@ import { PaymentIntentStatus, PaymentMethod } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recalculatePaymentStatus } from "@/domain/checkout";
+import { enqueueTransactionalEmail } from "@/domain/messaging";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStripe } from "@/lib/stripe";
@@ -82,6 +83,21 @@ export async function POST(
         },
       });
       const cachedPaymentStatus = await recalculatePaymentStatus(transaction, orderId);
+      const order = await transaction.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { customer: true },
+      });
+      await enqueueTransactionalEmail(transaction, {
+        idempotencyKey: `refund:${payment.id}:${payment.refundedCents}:${parsed.data.amountCents}`,
+        templateKey: "order.refund",
+        recipient: order.customer.email,
+        variables: {
+          orderNumber: order.orderNumber ?? order.draftReference,
+          refundAmount: `$${(parsed.data.amountCents / 100).toFixed(2)}`,
+        },
+        customerId: order.customer.id,
+        orderId,
+      });
       return { cachedPaymentStatus };
     });
     if (!outcome) {
