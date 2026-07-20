@@ -121,15 +121,15 @@ export async function createDeliveryRoute(
     name: string;
     packageIds: string[];
     assignedDriverId?: string;
-    pin?: string;
+    pin: string;
     actorStaffId: string;
   },
 ) {
   if (!input.name.trim() || !input.packageIds.length) {
     throw new Error("A route name and at least one package are required.");
   }
-  if (input.pin && !/^\d{4}$/.test(input.pin)) {
-    throw new Error("Driver PIN must contain exactly four digits.");
+  if (!/^\d{4}$/.test(input.pin)) {
+    throw new Error("A four-digit driver PIN is required.");
   }
   const geocoded = await Promise.all(
     [...new Set(input.packageIds)].map((packageId) => geocodePackage(prisma, packageId)),
@@ -151,7 +151,7 @@ export async function createDeliveryRoute(
       links: {
         create: {
           tokenHash,
-          pinHash: input.pin ? pinHash(tokenHash, input.pin) : null,
+          pinHash: pinHash(tokenHash, input.pin),
           expiresAt: new Date(Date.now() + routeLinkLifetimeMs),
         },
       },
@@ -223,19 +223,20 @@ export async function accessDriverRoute(
   if (link.lockedUntil && link.lockedUntil > now) {
     throw new Error("Too many wrong PIN attempts. Try again later.");
   }
-  if (link.pinHash) {
-    const isCorrect = pin ? equalHashes(link.pinHash, pinHash(tokenHash, pin)) : false;
-    if (!isCorrect) {
-      const failedAttempts = link.failedAttempts + 1;
-      await prisma.driverMagicLink.update({
-        where: { id: link.id },
-        data: {
-          failedAttempts,
-          lockedUntil: failedAttempts >= 5 ? new Date(Date.now() + pinLockMs) : null,
-        },
-      });
-      throw new Error("The driver PIN is incorrect.");
-    }
+  if (!link.pinHash) {
+    throw new Error("This driver link has no PIN. Ask a manager to issue a new link.");
+  }
+  const isCorrect = pin ? equalHashes(link.pinHash, pinHash(tokenHash, pin)) : false;
+  if (!isCorrect) {
+    const failedAttempts = link.failedAttempts + 1;
+    await prisma.driverMagicLink.update({
+      where: { id: link.id },
+      data: {
+        failedAttempts,
+        lockedUntil: failedAttempts >= 5 ? new Date(Date.now() + pinLockMs) : null,
+      },
+    });
+    throw new Error("The driver PIN is incorrect.");
   }
   await prisma.driverMagicLink.update({
     where: { id: link.id },
@@ -309,9 +310,15 @@ export async function markStopDelivered(
   }
   return prisma.$transaction(async (transaction) => {
     const deliveredAt = new Date();
-    const stop = await transaction.deliveryStop.update({
-      where: { id: stopId },
+    const claimed = await transaction.deliveryStop.updateMany({
+      where: { id: stopId, status: "PENDING" },
       data: { status: "DELIVERED", deliveredAt },
+    });
+    if (claimed.count !== 1) {
+      throw new Error("That stop was already delivered.");
+    }
+    const stop = await transaction.deliveryStop.findUniqueOrThrow({
+      where: { id: stopId },
     });
     await transaction.package.update({
       where: { id: stop.packageId },
@@ -328,7 +335,8 @@ export async function markStopDelivered(
     const remaining = await transaction.deliveryStop.count({
       where: { routeId: access.route.id, status: "PENDING" },
     });
-    if (remaining === 0) {
+    const completed = remaining === 0;
+    if (completed) {
       await transaction.deliveryRoute.update({
         where: { id: access.route.id },
         data: { status: "COMPLETED", completedAt: deliveredAt },
@@ -338,7 +346,7 @@ export async function markStopDelivered(
         data: { expiredAt: deliveredAt },
       });
     }
-    return stop;
+    return { ...stop, completed };
   });
 }
 
@@ -454,6 +462,13 @@ export async function confirmRouteReroute(
     actorStaffId: string;
   },
 ) {
+  const route = await prisma.deliveryRoute.findUniqueOrThrow({
+    where: { id: input.routeId },
+    select: { status: true },
+  });
+  if (route.status === "COMPLETED") {
+    throw new Error("A completed route cannot be rerouted.");
+  }
   const suggestions = await findNearbyShippingPackages(prisma, input.routeId);
   if (!suggestions.some((entry) => entry.id === input.packageId)) {
     throw new Error("The package is not an eligible nearby reroute suggestion.");
@@ -538,6 +553,12 @@ export async function stampPickup(
   return prisma.$transaction(async (transaction) => {
     const packageRecord = await transaction.package.findUniqueOrThrow({ where: { id: packageId } });
     if (!packageRecord.pickupReadyAt) throw new Error("Pickup must be ready before it is stamped.");
+    if (
+      packageRecord.pickupExpiredAt ||
+      (packageRecord.pickupExpiresAt && packageRecord.pickupExpiresAt <= new Date())
+    ) {
+      throw new Error("An expired pickup cannot be stamped.");
+    }
     const updated = await transaction.package.update({
       where: { id: packageId },
       data: { stage: "PICKED_UP", version: { increment: 1 } },

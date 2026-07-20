@@ -284,6 +284,16 @@ async function run() {
   await addActiveLabel(switchFixture.packageRecord.id, "switch");
   await addActiveLabel(rerouteFixture.packageRecord.id, "reroute");
 
+  await assert.rejects(
+    createDeliveryRoute(prisma, {
+      name: `P9 Insecure Route ${runKey}`,
+      packageIds: [routeFixture.packageRecord.id],
+      assignedDriverId: driver.id,
+      pin: "",
+      actorStaffId: staff.id,
+    }),
+    /PIN is required/,
+  );
   const { route, token } = await createDeliveryRoute(prisma, {
     name: `P9 Route ${runKey}`,
     packageIds: [routeFixture.packageRecord.id],
@@ -303,6 +313,16 @@ async function run() {
   const scoped = await accessDriverRoute(prisma, token, "1234");
   assert.deepEqual(scoped.route.stops.map((stop) => stop.recipientName), ["Route Recipient"]);
   assert.match(scoped.route.stops[0]!.googleMapsUrl, /destination=770%20Eastern%20Parkway/);
+  const missingPinResponse = await fetch(
+    `http://127.0.0.1:3101/api/driver/routes/${encodeURIComponent(token)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "open" }),
+    },
+  );
+  assert.equal(missingPinResponse.status, 400);
+  assert.equal((await missingPinResponse.json() as { completed?: boolean }).completed, undefined);
   console.log("S1 PASS scoped magic link, PIN throttle, mobile stop payload, completion expiry, timestamp/link audit");
 
   const printResponse = await fetch(
@@ -326,6 +346,23 @@ async function run() {
   assert.equal(voidCount, 1);
   const suggestions = await findNearbyShippingPackages(prisma, route.id);
   assert.ok(suggestions.some((entry) => entry.id === rerouteFixture.packageRecord.id));
+  await prisma.deliveryRoute.update({
+    where: { id: route.id },
+    data: { status: "COMPLETED", completedAt: new Date() },
+  });
+  await assert.rejects(
+    confirmRouteReroute(prisma, provider, {
+      routeId: route.id,
+      packageId: rerouteFixture.packageRecord.id,
+      deliveryMethodId: deliveryMethod.id,
+      actorStaffId: staff.id,
+    }),
+    /completed route/,
+  );
+  await prisma.deliveryRoute.update({
+    where: { id: route.id },
+    data: { status: "PLANNED", completedAt: null },
+  });
   await confirmRouteReroute(prisma, provider, {
     routeId: route.id,
     packageId: rerouteFixture.packageRecord.id,
@@ -402,6 +439,10 @@ async function run() {
     (await prisma.package.findUniqueOrThrow({ where: { id: expiryFixture.packageRecord.id } }))
       .pickupExpiredAt,
   );
+  await assert.rejects(
+    stampPickup(prisma, expiryFixture.packageRecord.id, staff.id),
+    /expired pickup/,
+  );
   const missingCronAuth = await fetch("http://127.0.0.1:3101/api/cron/pickup-expiry");
   assert.equal(missingCronAuth.status, 401);
   const acceptedCronAuth = await fetch("http://127.0.0.1:3101/api/cron/pickup-expiry", {
@@ -416,10 +457,40 @@ async function run() {
   assert.equal(acceptedPaymentCronAuth.status, 200);
   console.log("S5 PASS inventory-gated pickup ready once, door stamp, unclaimed expiry, bearer cron rejection/acceptance");
 
-  for (const stop of (await accessDriverRoute(prisma, token, "1234")).route.stops) {
+  const pendingStops = (await accessDriverRoute(prisma, token, "1234")).route.stops;
+  const duplicateTapResults = await Promise.allSettled([
+    markStopDelivered(prisma, token, pendingStops[0]!.id, "1234"),
+    markStopDelivered(prisma, token, pendingStops[0]!.id, "1234"),
+  ]);
+  assert.equal(duplicateTapResults.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(duplicateTapResults.filter((result) => result.status === "rejected").length, 1);
+  for (const stop of pendingStops.slice(1, -1)) {
     await markStopDelivered(prisma, token, stop.id, "1234");
   }
+  const completionResponse = await fetch(
+    `http://127.0.0.1:3101/api/driver/routes/${encodeURIComponent(token)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "deliver", stopId: pendingStops.at(-1)!.id, pin: "1234" }),
+    },
+  );
+  assert.equal(completionResponse.status, 200);
+  assert.equal((await completionResponse.json() as { completed?: boolean }).completed, true);
   await assert.rejects(accessDriverRoute(prisma, token, "1234"), /expired/);
+  const repeatedCompletionResponse = await fetch(
+    `http://127.0.0.1:3101/api/driver/routes/${encodeURIComponent(token)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "deliver", stopId: pendingStops.at(-1)!.id, pin: "1234" }),
+    },
+  );
+  assert.equal(repeatedCompletionResponse.status, 401);
+  assert.equal(
+    (await repeatedCompletionResponse.json() as { completed?: boolean }).completed,
+    undefined,
+  );
   const audits = await prisma.driverDeliveryAudit.findMany({ where: { routeId: route.id } });
   assert.equal(audits.length, 2);
   assert.ok(audits.every((audit) => audit.linkId === route.links[0]!.id && audit.deliveredAt));

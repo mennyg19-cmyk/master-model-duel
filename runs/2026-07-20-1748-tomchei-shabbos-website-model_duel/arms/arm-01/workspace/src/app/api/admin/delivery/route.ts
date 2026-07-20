@@ -20,7 +20,7 @@ const deliveryActionSchema = z.discriminatedUnion("action", [
     name: z.string().min(1),
     packageIds: z.array(z.string().min(1)).min(1),
     assignedDriverId: z.string().min(1).optional(),
-    pin: z.string().regex(/^\d{4}$/).optional(),
+    pin: z.string().regex(/^\d{4}$/),
   }),
   z.object({
     action: z.literal("reassign-route"),

@@ -79,14 +79,24 @@ See `shared/phases/PHASE-P7-EXPECTED.md`. arm-01 P7 **gated**.
 
 See `shared/phases/PHASE-P8-EXPECTED.md`. arm-01 P8 **gated**.
 
-## P9 (next)
+## P9
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Driver magic link | | |
-| S2 | Maps + print fallback | | |
-| S3 | Method switch + reroute | | |
-| S4 | Bulk + day-of notify | | |
-| S5 | Pickup + crons | | |
+| S1 | Driver magic link | ✓ | |
+| S2 | Maps + print fallback | ✓ | |
+| S3 | Method switch + reroute | ✓ | |
+| S4 | Bulk + day-of notify | ✓ | |
+| S5 | Pickup + crons | ✓ | |
 
-See `shared/phases/PHASE-P9-EXPECTED.md`.
+See `shared/phases/PHASE-P9-EXPECTED.md`. arm-01 P9 **gated**.
+
+## P10 (next)
+
+| # | Check | arm-01 | arm-02 |
+|---|---|---|---|
+| S1 | Repeat + replacement | | |
+| S2 | Bulk repeat + auto-flip | | |
+| S3 | Imported prior-year repeat | | |
+
+See `shared/phases/PHASE-P10-EXPECTED.md`.

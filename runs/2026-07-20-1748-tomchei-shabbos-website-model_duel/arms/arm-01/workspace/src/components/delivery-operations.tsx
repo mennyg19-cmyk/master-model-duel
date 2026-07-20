@@ -66,11 +66,11 @@ export function DeliveryOperations({
         action: "create-route",
         name: formData.get("name"),
         assignedDriverId: formData.get("driverId") || undefined,
-        pin: formData.get("pin") || undefined,
+        pin: formData.get("pin"),
         packageIds: selectedPackages,
       });
       setMagicLink(`${window.location.origin}/driver/routes/${payload.token}`);
-      setMessage("Route created. Copy the driver link now; only its hash is stored.");
+      setMessage("Route created. Send the link and required PIN separately.");
       setSelectedPackages([]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Route creation failed.");
@@ -128,7 +128,7 @@ export function DeliveryOperations({
             <option value="">Unassigned driver</option>
             {drivers.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
           </select>
-          <input className="rounded-xl border p-3" inputMode="numeric" maxLength={4} name="pin" placeholder="Optional 4-digit PIN" />
+          <input className="rounded-xl border p-3" inputMode="numeric" maxLength={4} minLength={4} name="pin" pattern="\d{4}" placeholder="Required 4-digit PIN" required />
           <button className="rounded-xl bg-[var(--brand)] px-4 py-3 font-bold text-white">Create route</button>
         </form>
         {magicLink && <input className="mt-4 w-full rounded-xl border p-3" readOnly value={magicLink} />}

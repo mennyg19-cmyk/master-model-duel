@@ -52,8 +52,8 @@ export function DriverRoute({ token }: { token: string }) {
         <p className="text-sm font-bold uppercase tracking-[0.2em] text-[var(--brand)]">Driver route</p>
         <h1 className="mt-2 text-3xl font-black">Open today&apos;s stops</h1>
         <label className="mt-6 block text-sm font-bold">
-          Optional 4-digit PIN
-          <input className="mt-2 w-full rounded-xl border p-3 text-lg" inputMode="numeric" maxLength={4} onChange={(event) => setPin(event.target.value)} type="password" value={pin} />
+          Required 4-digit PIN
+          <input className="mt-2 w-full rounded-xl border p-3 text-lg" inputMode="numeric" maxLength={4} minLength={4} onChange={(event) => setPin(event.target.value)} pattern="\d{4}" required type="password" value={pin} />
         </label>
         <button className="mt-4 w-full rounded-xl bg-[var(--brand)] p-3 font-bold text-white" onClick={() => void act("open")} type="button">Open route</button>
         {message && <p aria-live="polite" className="mt-4 font-semibold">{message}</p>}
