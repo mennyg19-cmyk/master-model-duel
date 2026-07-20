@@ -10,6 +10,7 @@ const refundSchema = z.object({
   paymentId: z.string().min(1),
   amountCents: z.number().int().positive(),
   reason: z.string().trim().min(2).max(240),
+  idempotencyKey: z.string().min(1).max(200).optional(),
 });
 
 export async function POST(
@@ -31,23 +32,13 @@ export async function POST(
       return NextResponse.json({ error: "Refund exceeds the remaining posted payment." }, { status: 409 });
     }
 
-    if (payment.method === PaymentMethod.STRIPE && payment.reference) {
-      const stripe = getStripe();
-      const isLocalPayment = payment.reference.startsWith("pi_local_");
-      if (!stripe && !isLocalPayment) {
-        return NextResponse.json({ error: "Stripe is unavailable; no refund was recorded." }, { status: 503 });
-      }
-      if (stripe && !isLocalPayment) {
-        await stripe.refunds.create(
-          {
-            payment_intent: payment.reference,
-            amount: parsed.data.amountCents,
-            reason: "requested_by_customer",
-            metadata: { orderId, staffReason: parsed.data.reason },
-          },
-          { idempotencyKey: `admin-refund:${payment.id}:${payment.refundedCents}:${parsed.data.amountCents}` },
-        );
-      }
+    const stripe = getStripe();
+    const stripePaymentIntentId =
+      payment.method === PaymentMethod.STRIPE ? payment.reference : null;
+    const isStripePayment = Boolean(stripePaymentIntentId);
+    const isLocalPayment = stripePaymentIntentId?.startsWith("pi_local_") ?? false;
+    if (isStripePayment && !stripe && !isLocalPayment) {
+      return NextResponse.json({ error: "Stripe is unavailable; no refund was recorded." }, { status: 503 });
     }
 
     const outcome = await db.$transaction(async (transaction) => {
@@ -56,12 +47,28 @@ export async function POST(
         data: { refundedCents: { increment: parsed.data.amountCents } },
       });
       if (updated.count !== 1) return null;
+      if (isStripePayment && stripe && !isLocalPayment) {
+        await stripe.refunds.create(
+          {
+            payment_intent: stripePaymentIntentId!,
+            amount: parsed.data.amountCents,
+            reason: "requested_by_customer",
+            metadata: { orderId, staffReason: parsed.data.reason },
+          },
+          {
+            idempotencyKey: `admin-refund:${payment.id}:${
+              parsed.data.idempotencyKey ??
+              `${payment.refundedCents}:${parsed.data.amountCents}`
+            }`,
+          },
+        );
+      }
       if (
-        payment.method === PaymentMethod.STRIPE &&
+        isStripePayment &&
         payment.refundedCents + parsed.data.amountCents === payment.amountCents
       ) {
         await transaction.stripePaymentIntent.updateMany({
-          where: { orderId, stripePaymentIntentId: payment.reference ?? undefined },
+          where: { orderId, stripePaymentIntentId: stripePaymentIntentId! },
           data: { status: PaymentIntentStatus.REFUNDED },
         });
       }

@@ -12,7 +12,7 @@ const requestSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const session = await requirePermission("admin:view");
+    const session = await requirePermission("orders:manage");
     const parsed = requestSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
       return NextResponse.json(

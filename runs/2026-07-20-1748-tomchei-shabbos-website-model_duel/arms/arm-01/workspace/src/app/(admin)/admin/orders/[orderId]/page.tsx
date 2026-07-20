@@ -19,16 +19,19 @@ export default async function OrderDetailPage({
   const order = await getOrderDetail(orderId);
   if (!order) notFound();
   const paymentIds = order.payments.map((payment) => payment.id);
-  const auditEvents = await db.auditLog.findMany({
-    where: {
-      OR: [
-        { targetType: "Order", targetId: order.id },
-        { targetType: "Payment", targetId: { in: paymentIds } },
-      ],
-    },
-    orderBy: { occurredAt: "desc" },
-    take: 50,
-  });
+  const canViewAudit = hasPermission(session.effective, "audit:view");
+  const auditEvents = canViewAudit
+    ? await db.auditLog.findMany({
+        where: {
+          OR: [
+            { targetType: "Order", targetId: order.id },
+            { targetType: "Payment", targetId: { in: paymentIds } },
+          ],
+        },
+        orderBy: { occurredAt: "desc" },
+        take: 50,
+      })
+    : [];
   const paidCents = order.payments
     .filter((payment) => payment.status === "POSTED")
     .reduce((sum, payment) => sum + payment.amountCents - payment.refundedCents, 0);
@@ -57,13 +60,15 @@ export default async function OrderDetailPage({
               ))}
             </div>
           </section>
-          <section className="rounded-3xl border border-[var(--border)] bg-white p-6">
-            <h2 className="text-xl font-bold">Audit trail</h2>
-            <div className="mt-4 divide-y divide-[var(--border)]">
-              {auditEvents.map((event) => <div className="py-3" key={event.id}><p className="font-semibold">{event.action}</p><p className="text-xs text-[var(--muted)]">{event.occurredAt.toLocaleString()} · {event.actorStaffId ?? "System"}</p></div>)}
-              {!auditEvents.length && <p className="py-5 text-[var(--muted)]">No audit events for this order yet.</p>}
-            </div>
-          </section>
+          {canViewAudit && (
+            <section className="rounded-3xl border border-[var(--border)] bg-white p-6">
+              <h2 className="text-xl font-bold">Audit trail</h2>
+              <div className="mt-4 divide-y divide-[var(--border)]">
+                {auditEvents.map((event) => <div className="py-3" key={event.id}><p className="font-semibold">{event.action}</p><p className="text-xs text-[var(--muted)]">{event.occurredAt.toLocaleString()} · {event.actorStaffId ?? "System"}</p></div>)}
+                {!auditEvents.length && <p className="py-5 text-[var(--muted)]">No audit events for this order yet.</p>}
+              </div>
+            </section>
+          )}
         </div>
         <section className="h-fit rounded-3xl border border-[var(--border)] bg-white p-6">
           <h2 className="text-xl font-bold">Money actions</h2>

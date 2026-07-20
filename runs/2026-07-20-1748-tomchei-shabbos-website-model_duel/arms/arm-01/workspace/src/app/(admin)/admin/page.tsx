@@ -3,17 +3,21 @@ import { getOperationsDashboard } from "@/lib/admin-operations";
 import { requirePermission } from "@/lib/auth";
 import { formatCurrency } from "@/lib/currency";
 import { db } from "@/lib/db";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  await requirePermission("admin:view");
+  const session = await requirePermission("admin:view");
+  const canViewAudit = hasPermission(session.effective, "audit:view");
   const [dashboard, auditEvents] = await Promise.all([
     getOperationsDashboard(),
-    db.auditLog.findMany({
-      orderBy: { occurredAt: "desc" },
-      take: 6,
-    }),
+    canViewAudit
+      ? db.auditLog.findMany({
+          orderBy: { occurredAt: "desc" },
+          take: 6,
+        })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -54,27 +58,29 @@ export default async function AdminOverviewPage() {
           ))}
         </div>
       </section>
-      <section className="mt-8 rounded-3xl border border-[var(--border)] bg-white p-6">
-        <h2 className="text-xl font-bold">Recent security activity</h2>
-        <div className="mt-5 divide-y divide-[var(--border)]">
-          {auditEvents.map((event) => (
-            <div key={event.id} className="flex items-center justify-between gap-4 py-4">
-              <div>
-                <p className="font-semibold">{event.action}</p>
-                <p className="text-sm text-[var(--muted)]">
-                  {event.targetType} · {event.targetId}
-                </p>
+      {canViewAudit && (
+        <section className="mt-8 rounded-3xl border border-[var(--border)] bg-white p-6">
+          <h2 className="text-xl font-bold">Recent security activity</h2>
+          <div className="mt-5 divide-y divide-[var(--border)]">
+            {auditEvents.map((event) => (
+              <div key={event.id} className="flex items-center justify-between gap-4 py-4">
+                <div>
+                  <p className="font-semibold">{event.action}</p>
+                  <p className="text-sm text-[var(--muted)]">
+                    {event.targetType} · {event.targetId}
+                  </p>
+                </div>
+                <time className="text-sm text-[var(--muted)]">
+                  {event.occurredAt.toLocaleString()}
+                </time>
               </div>
-              <time className="text-sm text-[var(--muted)]">
-                {event.occurredAt.toLocaleString()}
-              </time>
-            </div>
-          ))}
-          {auditEvents.length === 0 && (
-            <p className="py-8 text-center text-[var(--muted)]">No activity yet.</p>
-          )}
-        </div>
-      </section>
+            ))}
+            {auditEvents.length === 0 && (
+              <p className="py-8 text-center text-[var(--muted)]">No activity yet.</p>
+            )}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

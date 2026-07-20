@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 export function BulkRepeatButton({
   orders,
@@ -47,8 +47,9 @@ export function OrderMoneyActions({
   orderId: string;
   balanceCents: number;
   canManagePayments: boolean;
-  payments: { id: string; method: string; status: string; amountCents: number; reference: string | null }[];
+  payments: { id: string; method: string; status: string; amountCents: number; refundedCents: number; reference: string | null }[];
 }) {
+  const refundFormId = useId();
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
 
@@ -78,6 +79,7 @@ export function OrderMoneyActions({
         paymentId: formData.get("paymentId"),
         amountCents: Math.round(Number(formData.get("amount")) * 100),
         reason: formData.get("reason"),
+        idempotencyKey: formData.get("idempotencyKey"),
       }),
     });
     const payload = await response.json();
@@ -99,11 +101,12 @@ export function OrderMoneyActions({
           <button className="rounded-xl bg-[var(--ink)] px-4 py-2 font-bold text-white disabled:opacity-50" disabled={isBusy}>Post payment</button>
         </form>
       )}
-      {payments.filter((payment) => payment.status === "POSTED" && payment.amountCents > 0).map((payment) => (
+      {payments.filter((payment) => payment.status === "POSTED" && payment.refundedCents < payment.amountCents).map((payment) => (
         <form action={refund} className="grid gap-3 border-t border-[var(--border)] pt-4 sm:grid-cols-2" key={payment.id}>
           <input name="paymentId" type="hidden" value={payment.id} />
+          <input name="idempotencyKey" type="hidden" value={`${refundFormId}:${payment.id}:${payment.refundedCents}`} />
           <p className="font-semibold">{payment.method} · {payment.reference ?? "No reference"}</p>
-          <input className="rounded-xl border border-[var(--border)] px-3 py-2" defaultValue={(payment.amountCents / 100).toFixed(2)} min="0.01" name="amount" step="0.01" type="number" />
+          <input className="rounded-xl border border-[var(--border)] px-3 py-2" defaultValue={((payment.amountCents - payment.refundedCents) / 100).toFixed(2)} max={((payment.amountCents - payment.refundedCents) / 100).toFixed(2)} min="0.01" name="amount" step="0.01" type="number" />
           <input className="rounded-xl border border-[var(--border)] px-3 py-2" name="reason" placeholder="Refund reason" required />
           <button className="rounded-xl border border-[var(--danger)] px-4 py-2 font-bold text-[var(--danger)] disabled:opacity-50" disabled={isBusy}>Refund</button>
         </form>

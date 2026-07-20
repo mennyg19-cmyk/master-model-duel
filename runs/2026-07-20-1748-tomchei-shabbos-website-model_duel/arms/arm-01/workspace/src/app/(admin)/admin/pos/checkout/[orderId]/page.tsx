@@ -32,6 +32,15 @@ export default async function PosCheckoutPage({
     },
   });
   if (!order || order.lines.some((line) => !line.recipientAddress)) notFound();
+  const deliveryDaysSetting = await db.appSetting.findUnique({
+    where: { key: "purim-delivery-days" },
+  });
+  const deliveryDays =
+    deliveryDaysSetting && Array.isArray(deliveryDaysSetting.value)
+      ? deliveryDaysSetting.value.filter(
+          (day): day is string => typeof day === "string" && Boolean(day.trim()),
+        )
+      : ["Purim eve", "Purim day"];
   return (
     <div className="mx-auto max-w-3xl">
       <BackLink fallback="/admin/pos" />
@@ -44,6 +53,7 @@ export default async function PosCheckoutPage({
             code: method.code,
             displayName: method.displayName,
           }))}
+          deliveryDays={deliveryDays}
           lines={order.lines.map((line) => ({
             id: line.id,
             productName: line.productNameSnapshot,

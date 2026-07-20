@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { type ImportEntity, stageCsv } from "@/lib/csv-import";
 import { db } from "@/lib/db";
-import { normalizeEmail } from "@/lib/normalize";
+import { normalizeEmail, normalizePhone } from "@/lib/normalize";
 
 const stageSchema = z.object({
   entityType: z.enum(["customers", "products"]),
@@ -11,18 +11,15 @@ const stageSchema = z.object({
   csv: z.string().min(1).max(2_000_000),
 });
 
-function normalizedPhone(phone: string) {
-  const digits = phone.replace(/\D/g, "");
-  return digits ? (digits.length === 10 ? `+1${digits}` : `+${digits}`) : "";
-}
-
 async function findDatabaseDuplicateRows(
   entityType: ImportEntity,
   rows: ReturnType<typeof stageCsv>["rows"],
 ) {
   if (entityType === "customers") {
     const emails = rows.map((row) => normalizeEmail(row.email || "")).filter(Boolean);
-    const phones = rows.map((row) => normalizedPhone(row.phone || "")).filter(Boolean);
+    const phones = rows
+      .map((row) => normalizePhone(row.phone || ""))
+      .filter((phone): phone is string => Boolean(phone));
     const existing = await db.customer.findMany({
       where: {
         OR: [
@@ -42,7 +39,7 @@ async function findDatabaseDuplicateRows(
     );
     return rows.filter((row) =>
       existingKeys.has(normalizeEmail(row.email || "")) ||
-      existingKeys.has(normalizedPhone(row.phone || "")),
+      existingKeys.has(normalizePhone(row.phone || "") ?? ""),
     );
   }
   const currentSeasonSetting = await db.appSetting.findUnique({ where: { key: "current-season-id" } });

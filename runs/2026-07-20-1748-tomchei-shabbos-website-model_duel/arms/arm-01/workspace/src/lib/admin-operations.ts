@@ -49,6 +49,13 @@ export async function listOrders(filters: OrderFilters) {
 export async function getOperationsDashboard() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const currentSeasonSetting = await db.appSetting.findUnique({
+    where: { key: "current-season-id" },
+  });
+  const currentSeasonId =
+    typeof currentSeasonSetting?.value === "string"
+      ? currentSeasonSetting.value
+      : null;
   const [orderCount, todayCount, unpaidCount, gross, recentOrders] = await Promise.all([
     db.order.count({ where: { status: "FINALIZED" } }),
     db.order.count({ where: { createdAt: { gte: today } } }),
@@ -59,7 +66,10 @@ export async function getOperationsDashboard() {
       },
     }),
     db.order.aggregate({
-      where: { status: "FINALIZED" },
+      where: {
+        status: "FINALIZED",
+        seasonId: currentSeasonId ?? "__no-current-season__",
+      },
       _sum: { totalCents: true },
     }),
     db.order.findMany({

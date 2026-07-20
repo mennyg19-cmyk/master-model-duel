@@ -14,11 +14,13 @@ export function PosCheckoutForm({
   orderId,
   lines,
   fulfillmentMethods,
+  deliveryDays,
   subtotalCents,
 }: {
   orderId: string;
   lines: PosLine[];
   fulfillmentMethods: { code: string; displayName: string }[];
+  deliveryDays: string[];
   subtotalCents: number;
 }) {
   const [message, setMessage] = useState("");
@@ -29,12 +31,18 @@ export function PosCheckoutForm({
       body: JSON.stringify({
         method: formData.get("paymentMethod"),
         reference: formData.get("reference"),
-        choices: lines.map((line) => ({
-          orderLineId: line.id,
-          fulfillmentCode: formData.get(`fulfillment-${line.id}`),
-          greeting: formData.get(`greeting-${line.id}`),
-          deliveryDay: null,
-        })),
+        choices: lines.map((line) => {
+          const fulfillmentCode = String(formData.get(`fulfillment-${line.id}`));
+          return {
+            orderLineId: line.id,
+            fulfillmentCode,
+            greeting: formData.get(`greeting-${line.id}`),
+            deliveryDay:
+              fulfillmentCode === "PICKUP"
+                ? null
+                : formData.get(`delivery-day-${line.id}`),
+          };
+        }),
       }),
     });
     const payload = await response.json();
@@ -56,6 +64,12 @@ export function PosCheckoutForm({
           </label>
           <label className="mt-3 block text-sm font-bold">Greeting
             <input className="mt-1 w-full rounded-xl border border-[var(--border)] px-3 py-2" defaultValue={line.rememberedGreeting || "A freilichen Purim!"} name={`greeting-${line.id}`} required />
+          </label>
+          <label className="mt-3 block text-sm font-bold">Delivery day
+            <select className="mt-1 w-full rounded-xl border border-[var(--border)] px-3 py-2" defaultValue={deliveryDays[0]} name={`delivery-day-${line.id}`}>
+              {deliveryDays.map((day) => <option key={day} value={day}>{day}</option>)}
+            </select>
+            <span className="mt-1 block font-normal text-[var(--muted)]">Ignored for pickup.</span>
           </label>
         </fieldset>
       ))}

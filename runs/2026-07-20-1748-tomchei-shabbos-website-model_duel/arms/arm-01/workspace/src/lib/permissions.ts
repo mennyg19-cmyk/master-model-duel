@@ -7,6 +7,7 @@ export const permissions = [
   "audit:view",
   "settings:manage",
   "payments:manage",
+  "orders:manage",
 ] as const;
 
 export type Permission = (typeof permissions)[number];

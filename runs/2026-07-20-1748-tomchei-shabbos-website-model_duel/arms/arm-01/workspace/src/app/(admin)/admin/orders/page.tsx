@@ -4,6 +4,7 @@ import { BulkRepeatButton } from "@/components/admin-order-actions";
 import { listOrders } from "@/lib/admin-operations";
 import { requirePermission } from "@/lib/auth";
 import { formatCurrency } from "@/lib/currency";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function OrdersPage({
 }: {
   searchParams: Promise<{ page?: string; q?: string; status?: string; payment?: string }>;
 }) {
-  await requirePermission("admin:view");
+  const session = await requirePermission("admin:view");
   const query = await searchParams;
   const listing = await listOrders({
     page: Number(query.page) || 1,
@@ -33,7 +34,9 @@ export default async function OrdersPage({
           <h1 className="text-4xl font-black">Orders</h1>
           <p className="mt-2 text-[var(--muted)]">{listing.total.toLocaleString()} matching orders</p>
         </div>
-        <BulkRepeatButton orders={listing.orders.map((order) => ({ id: order.id, version: order.version, status: order.status }))} />
+        {hasPermission(session.effective, "orders:manage") && (
+          <BulkRepeatButton orders={listing.orders.map((order) => ({ id: order.id, version: order.version, status: order.status }))} />
+        )}
       </div>
       <form className="mt-7 grid gap-3 rounded-2xl border border-[var(--border)] bg-white p-4 md:grid-cols-[1fr_180px_180px_auto]">
         <input className="rounded-xl border border-[var(--border)] px-4 py-3" defaultValue={query.q} name="q" placeholder="Order #, reference, customer, email" />

@@ -1,4 +1,4 @@
-import { normalizeEmail } from "@/lib/normalize";
+import { normalizeEmail, normalizePhone } from "@/lib/normalize";
 
 export type ImportEntity = "customers" | "products";
 export type StagedRow = Record<string, string> & { rowNumber: string };
@@ -7,12 +7,6 @@ export type ImportIssue = {
   code: "INVALID" | "DUPLICATE";
   message: string;
 };
-
-function normalizeImportedPhone(phone: string) {
-  const digits = phone.replace(/\D/g, "");
-  if (!digits) return "";
-  return digits.length === 10 ? `+1${digits}` : `+${digits}`;
-}
 
 function parseCsvLine(line: string) {
   const fields: string[] = [];
@@ -63,7 +57,7 @@ export function stageCsv(entityType: ImportEntity, csv: string) {
     const rowNumber = lineIndex + 1;
     const key =
       entityType === "customers"
-        ? normalizeEmail(row.email || "") || normalizeImportedPhone(row.phone || "")
+        ? normalizeEmail(row.email || "") || normalizePhone(row.phone || "") || ""
         : row.sku.toUpperCase();
     if (!row.displayname && entityType === "customers") {
       issues.push({ rowNumber, code: "INVALID", message: "Display name is required." });

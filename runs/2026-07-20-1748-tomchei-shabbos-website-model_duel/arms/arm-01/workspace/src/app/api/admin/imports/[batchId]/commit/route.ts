@@ -1,14 +1,11 @@
-import { ProductKind, type Prisma } from "@prisma/client";
+import { Prisma, ProductKind } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import type { StagedRow } from "@/lib/csv-import";
 import { db } from "@/lib/db";
-import { normalizeEmail } from "@/lib/normalize";
+import { normalizeEmail, normalizePhone } from "@/lib/normalize";
 
-function normalizedPhone(phone: string) {
-  const digits = phone.replace(/\D/g, "");
-  return digits ? (digits.length === 10 ? `+1${digits}` : `+${digits}`) : null;
-}
+class ImportConflictError extends Error {}
 
 export async function POST(
   _request: Request,
@@ -29,14 +26,41 @@ export async function POST(
     }
     const rows = batch.rows as unknown as StagedRow[];
     const importedCount = await db.$transaction(async (transaction) => {
+      const claimed = await transaction.importBatch.updateMany({
+        where: { id: batch.id, status: "STAGED" },
+        data: { status: "COMMITTING" },
+      });
+      if (claimed.count !== 1) {
+        throw new ImportConflictError("This import batch is already being committed.");
+      }
       if (batch.entityType === "customers") {
+        const emails = rows
+          .map((row) => normalizeEmail(row.email || ""))
+          .filter(Boolean);
+        const phones = rows
+          .map((row) => normalizePhone(row.phone || ""))
+          .filter((phone): phone is string => Boolean(phone));
+        const duplicate = await transaction.customer.findFirst({
+          where: {
+            OR: [
+              ...(emails.length ? [{ emailNormalized: { in: emails } }] : []),
+              ...(phones.length ? [{ phoneNormalized: { in: phones } }] : []),
+            ],
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          throw new ImportConflictError(
+            "A matching customer was created after this preview. Stage the import again.",
+          );
+        }
         await transaction.customer.createMany({
           data: rows.map((row) => ({
             displayName: row.displayname,
             email: row.email || null,
             emailNormalized: row.email ? normalizeEmail(row.email) : null,
             phone: row.phone || null,
-            phoneNormalized: row.phone ? normalizedPhone(row.phone) : null,
+            phoneNormalized: row.phone ? normalizePhone(row.phone) : null,
           })),
         });
       } else {
@@ -48,6 +72,18 @@ export async function POST(
             ? currentSeasonSetting.value
             : null;
         if (!seasonId) throw new Error("Current season is required for product imports.");
+        const duplicate = await transaction.product.findFirst({
+          where: {
+            seasonId,
+            sku: { in: rows.map((row) => row.sku) },
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          throw new ImportConflictError(
+            "A matching product was created after this preview. Stage the import again.",
+          );
+        }
         await transaction.product.createMany({
           data: rows.map((row) => ({
             seasonId,
@@ -62,7 +98,7 @@ export async function POST(
         });
       }
       await transaction.importBatch.update({
-        where: { id: batch.id },
+        where: { id: batch.id, status: "COMMITTING" },
         data: {
           status: "COMMITTED",
           committedByStaffId: session.actor.id,
@@ -87,6 +123,21 @@ export async function POST(
   } catch (error) {
     if (error instanceof AccessDeniedError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    if (
+      error instanceof ImportConflictError ||
+      (error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof ImportConflictError
+              ? error.message
+              : "A matching record was created concurrently. Stage the import again.",
+        },
+        { status: 409 },
+      );
     }
     throw error;
   }

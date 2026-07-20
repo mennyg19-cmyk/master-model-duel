@@ -46,15 +46,25 @@ See `shared/phases/PHASE-P4-EXPECTED.md`. Both arms P4 **gated**.
 | S4 | POS cash/check | ✓ | |
 | S5 | Order lifecycle | ✓ | |
 
-See `shared/phases/PHASE-P5-EXPECTED.md`. arm-01 P5 **gated** · arm-02 P5 next.
+See `shared/phases/PHASE-P5-EXPECTED.md`. arm-01 P5 **gated** · arm-02 P5 in progress.
 
-## P6 (next)
+## P6
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Ops hub | | |
-| S2 | POS | | |
-| S3 | Import | | |
-| S4 | Scale | | |
+| S1 | Ops hub | ✓ | |
+| S2 | POS | ✓ | |
+| S3 | Import | ✓ | |
+| S4 | Scale | ✓ | |
 
-See `shared/phases/PHASE-P6-EXPECTED.md`.
+See `shared/phases/PHASE-P6-EXPECTED.md`. arm-01 P6 **gated**.
+
+## P7 (next)
+
+| # | Check | arm-01 | arm-02 |
+|---|---|---|---|
+| S1 | Package split/group | | |
+| S2 | Print vs status | | |
+| S3 | Batch idempotency | | |
+
+See `shared/phases/PHASE-P7-EXPECTED.md`.

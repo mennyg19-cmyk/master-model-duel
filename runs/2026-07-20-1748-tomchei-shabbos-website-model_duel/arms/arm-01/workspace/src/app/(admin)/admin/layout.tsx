@@ -68,18 +68,24 @@ export default async function AdminLayout({
             <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/orders">
               Orders
             </Link>
-            <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/pos">
-              POS
-            </Link>
+            {hasPermission(staffSession.effective, "payments:manage") && (
+              <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/pos">
+                POS
+              </Link>
+            )}
             <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/customers">
               Customers
             </Link>
-            <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/imports">
-              Imports
-            </Link>
-            <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/audit">
-              Audit
-            </Link>
+            {hasPermission(staffSession.effective, "settings:manage") && (
+              <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/imports">
+                Imports
+              </Link>
+            )}
+            {hasPermission(staffSession.effective, "audit:view") && (
+              <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/audit">
+                Audit
+              </Link>
+            )}
             {hasPermission(staffSession.effective, "settings:manage") && (
               <>
                 <Link className="rounded-xl px-4 py-3 font-semibold hover:bg-[var(--surface)]" href="/admin/catalog">

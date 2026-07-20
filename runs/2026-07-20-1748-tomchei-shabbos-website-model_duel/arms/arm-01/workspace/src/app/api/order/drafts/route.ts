@@ -1,4 +1,4 @@
-import { createHash, randomInt } from "node:crypto";
+import { randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
 import { formatDraftReference } from "@/domain/order-engine";
 import { requirePermission } from "@/lib/auth";
@@ -10,35 +10,13 @@ import {
 } from "@/lib/customer-access";
 import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize";
+import {
+  guardPublicWrite,
+  publicRequestErrorResponse,
+} from "@/lib/public-request";
 import { getCurrentSeason } from "@/lib/storefront";
 
 const GUEST_DRAFT_LIMIT_PER_MINUTE = 10;
-
-async function enforceGuestDraftLimit(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const source = forwardedFor || request.headers.get("x-real-ip") || "unknown";
-  const key = createHash("sha256").update(source).digest("hex");
-  const windowStartedAt = new Date(Date.now() - 60_000);
-  const rows = await db.$queryRaw<{ attempts: number }[]>`
-    INSERT INTO "GuestDraftThrottle" ("key", "windowStartedAt", "attempts", "updatedAt")
-    VALUES (${key}, CURRENT_TIMESTAMP, 1, CURRENT_TIMESTAMP)
-    ON CONFLICT ("key") DO UPDATE SET
-      "attempts" = CASE
-        WHEN "GuestDraftThrottle"."windowStartedAt" < ${windowStartedAt} THEN 1
-        ELSE "GuestDraftThrottle"."attempts" + 1
-      END,
-      "windowStartedAt" = CASE
-        WHEN "GuestDraftThrottle"."windowStartedAt" < ${windowStartedAt}
-          THEN CURRENT_TIMESTAMP
-        ELSE "GuestDraftThrottle"."windowStartedAt"
-      END,
-      "updatedAt" = CURRENT_TIMESTAMP
-    RETURNING "attempts"
-  `;
-  if ((rows[0]?.attempts ?? GUEST_DRAFT_LIMIT_PER_MINUTE + 1) > GUEST_DRAFT_LIMIT_PER_MINUTE) {
-    throw new Error("GUEST_DRAFT_RATE_LIMIT");
-  }
-}
 
 export async function POST(request: Request) {
   const season = await getCurrentSeason();
@@ -83,15 +61,12 @@ export async function POST(request: Request) {
       }
     }
     try {
-      await enforceGuestDraftLimit(request);
+      await guardPublicWrite(request, "guest-draft", {
+        limit: GUEST_DRAFT_LIMIT_PER_MINUTE,
+        rateLimitMessage: "Too many guest drafts were started. Try again in a minute.",
+      });
     } catch (error) {
-      if (error instanceof Error && error.message === "GUEST_DRAFT_RATE_LIMIT") {
-        return NextResponse.json(
-          { error: "Too many guest drafts were started. Try again in a minute." },
-          { status: 429 },
-        );
-      }
-      throw error;
+      return publicRequestErrorResponse(error);
     }
     guestAccess = createGuestDraftAccess();
     const guestCustomer = await db.customer.create({

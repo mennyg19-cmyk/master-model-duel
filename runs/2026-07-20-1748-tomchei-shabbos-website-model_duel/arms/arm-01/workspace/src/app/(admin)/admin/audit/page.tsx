@@ -1,10 +1,21 @@
-import { requirePermission } from "@/lib/auth";
+import { getCurrentStaffUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AuditPage() {
-  await requirePermission("admin:view");
+  const session = await getCurrentStaffUser();
+  if (!session || !hasPermission(session.effective, "audit:view")) {
+    return (
+      <div className="rounded-3xl border border-[var(--border)] bg-white p-8">
+        <h1 className="text-3xl font-black">Audit permission required</h1>
+        <p className="mt-3 text-[var(--muted)]">
+          Your staff account cannot view security and accountability events.
+        </p>
+      </div>
+    );
+  }
   const events = await db.auditLog.findMany({
     orderBy: [{ occurredAt: "desc" }, { id: "asc" }],
     take: 200,

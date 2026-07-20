@@ -18,7 +18,15 @@ const checkoutSchema = z.object({
     orderLineId: z.string().min(1),
     fulfillmentCode: z.enum(["BULK_DELIVERY", "PACKAGE_DELIVERY", "SHIPPING", "PICKUP"]),
     greeting: z.string().trim().min(1).max(500),
-    deliveryDay: z.string().nullable().optional(),
+    deliveryDay: z.string().trim().min(1).max(40).nullable().optional(),
+  }).superRefine((choice, context) => {
+    if (choice.fulfillmentCode !== "PICKUP" && !choice.deliveryDay) {
+      context.addIssue({
+        code: "custom",
+        path: ["deliveryDay"],
+        message: "Delivery day is required for non-pickup fulfillment.",
+      });
+    }
   })).min(1).max(100),
 });
 

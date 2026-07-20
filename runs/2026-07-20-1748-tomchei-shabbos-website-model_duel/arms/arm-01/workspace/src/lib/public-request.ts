@@ -3,6 +3,11 @@ import { db } from "@/lib/db";
 
 const PUBLIC_WRITE_LIMIT_PER_MINUTE = 30;
 
+type PublicWriteOptions = {
+  limit?: number;
+  rateLimitMessage?: string;
+};
+
 export class PublicRequestError extends Error {
   constructor(
     message: string,
@@ -13,7 +18,12 @@ export class PublicRequestError extends Error {
   }
 }
 
-export async function guardPublicWrite(request: Request, action: string) {
+export async function guardPublicWrite(
+  request: Request,
+  action: string,
+  options: PublicWriteOptions = {},
+) {
+  const limit = options.limit ?? PUBLIC_WRITE_LIMIT_PER_MINUTE;
   const origin = request.headers.get("origin");
   const host = request.headers.get("host");
   let originHost: string | null = null;
@@ -47,8 +57,11 @@ export async function guardPublicWrite(request: Request, action: string) {
       "updatedAt" = CURRENT_TIMESTAMP
     RETURNING "attempts"
   `;
-  if ((rows[0]?.attempts ?? PUBLIC_WRITE_LIMIT_PER_MINUTE + 1) > PUBLIC_WRITE_LIMIT_PER_MINUTE) {
-    throw new PublicRequestError("Too many checkout requests. Try again in a minute.", 429);
+  if ((rows[0]?.attempts ?? limit + 1) > limit) {
+    throw new PublicRequestError(
+      options.rateLimitMessage ?? "Too many checkout requests. Try again in a minute.",
+      429,
+    );
   }
 }
 

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { normalizeEmail } from "@/lib/normalize";
+import { normalizeEmail, normalizePhone } from "@/lib/normalize";
 
 const customerSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
@@ -11,14 +11,9 @@ const customerSchema = z.object({
   phone: z.string().trim().max(40).optional(),
 });
 
-function normalizePhone(phone: string) {
-  const digits = phone.replace(/\D/g, "");
-  return digits ? (digits.length === 10 ? `+1${digits}` : `+${digits}`) : null;
-}
-
 export async function POST(request: Request) {
   try {
-    const session = await requirePermission("admin:view");
+    const session = await requirePermission("payments:manage");
     const parsed = customerSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success || (!parsed.data.email && !parsed.data.phone)) {
       return NextResponse.json({ error: "Name and email or phone are required." }, { status: 400 });

@@ -144,10 +144,14 @@ async function run() {
   });
   await prisma.order.update({ where: { id: refundOrder.id }, data: { cachedPaymentStatus: "PAID" } });
 
-  for (const path of ["/admin", "/admin/today", "/admin/orders", `/admin/orders/${refundOrder.id}`, "/admin/audit"]) {
+  for (const path of ["/admin", "/admin/today", "/admin/orders", `/admin/orders/${refundOrder.id}`]) {
     assert.equal((await request(path, "p6_manager")).status, 200, `manager route ${path}`);
     assert.equal((await request(path, staff.clerkUserId!)).status, 200, `staff route ${path}`);
   }
+  assert.equal((await request("/admin/audit", "p6_manager")).status, 200);
+  const restrictedAudit = await request("/admin/audit", staff.clerkUserId!);
+  assert.equal(restrictedAudit.status, 200);
+  assert.match(await restrictedAudit.text(), /Audit permission required/);
   for (const path of ["/admin/pos", "/admin/customers", "/admin/imports", "/admin/settings"]) {
     assert.equal((await request(path, "p6_manager")).status, 200, `manager route ${path}`);
   }
