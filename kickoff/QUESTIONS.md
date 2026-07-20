@@ -4,10 +4,8 @@ Ask **one group at a time**. Do not bootstrap until all answers are locked in `r
 
 ## How to ask (important)
 
-**Cursor:** use **`AskQuestion`** for every fixed choice. **Never** “Reply A or B.” Details + ready-made options: `kickoff/ASK-UI.md`.  
-If AskQuestion is missing → **STOP** (do not continue kickoff in prose).
-
-**OpenCode / generic:** short A/B/C in chat is OK.
+**Cursor:** Prefer **`AskQuestion`** when present. If missing (often on Grok), use **short-reply fallback** in `kickoff/ASK-UI.md` — do not stop the run.  
+**OpenCode / generic:** short-reply words.
 
 ---
 

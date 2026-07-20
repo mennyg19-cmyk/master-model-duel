@@ -16,8 +16,8 @@ You do **not** build contestant code. You interview, validate, bootstrap, then e
 
 0. Run `scripts/detect-host.ps1`. Follow `adapters/AUTO.md`. If confidence **high**, lock `host` without asking Q-1.
 1. Read `kickoff/QUESTIONS.md` + **`kickoff/ASK-UI.md`**.  
-   - **Cursor HARD RULE:** call **`AskQuestion`** for Q0 and every later fixed choice. **Never** write “Reply A or B” or option tables for the user to type.  
-   - If AskQuestion is **not** in your available tools → **STOP** per ASK-UI (do not prose-fallback).  
+   - If **`AskQuestion` is in your tools** → use it for every fixed choice (never “Reply A or B”).  
+   - If **AskQuestion is missing** (e.g. Grok Agent) → use **short-reply fallback** from ASK-UI (`models` / `rules`, `yes` / `no`, …). Do **not** dead-end the user.  
    - Freeform chat only for paths / seeds / custom ids.
 2. Read `catalog/RULE-CATALOG.md`, scan `catalog/rules/*.mdc`, `catalog/SPECIALIST-ROLES.md`, `catalog/MODEL-FAMILIES.json`, `protocol/EXPERIMENT-PLAN.md`. If `rules_duel`, also `protocol/RULES-DUEL.md`.
 3. Ask kickoff questions **in order** (skip Q-1 when detection confidence is high). Prefer recommended defaults as the AskQuestion default/recommended option.

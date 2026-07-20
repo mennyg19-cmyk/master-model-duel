@@ -14,7 +14,7 @@ This repository is **Master Model Duel**. It runs agent experiments (`model_duel
 - Never reuse another run’s inventories, plans, or builds (absolute greenfield per run).
 - Contestants never run `git` and never touch `results/` or `COST-LEDGER.csv`.
 - Reviewer model family must not overlap contestant families (`catalog/MODEL-FAMILIES.json`).
-- On Cursor kickoff/fixed choices: **AskQuestion only** — never “Reply A or B” (`kickoff/ASK-UI.md`). If the tool is missing, stop and tell the user.
+- Kickoff: use **AskQuestion** if you have that tool; else short-reply fallback in `kickoff/ASK-UI.md` (Grok and some models don’t get AskQuestion — don’t stop the run).
 - Say **"run test N"** / **"run grill"** (or aliases) to run one test; ask for missing inventories/plans/seeds per `protocol/RUN-SINGLE-TEST.md` + `protocol/GRILL-INVENTORY.md`.
 - Follow `protocol/EXPERIMENT-PLAN.md` for Tests 1–6; use frozen prompts in `runs/{id}/kit/prompts/`; `protocol/RULES-DUEL.md` when mode is `rules_duel`.
 - Keep `.scratch/run-state.md` and `results/SCOREBOARD.md` updated after each gate.

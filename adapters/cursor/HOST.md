@@ -2,8 +2,8 @@
 
 ## Ask UI
 
-Kickoff **must** use Cursor’s **`AskQuestion`** tool (clickable cards).  
-**Never** ask the user to type A/B. If AskQuestion isn’t in the agent’s tool list, stop and tell the user — see `kickoff/ASK-UI.md`.
+- **If `AskQuestion` exists** → clickable kickoff (`kickoff/ASK-UI.md`). Never “Reply A or B.”  
+- **If not** (Grok Agent often has no AskQuestion) → short-reply words (`models` / `rules`, …). Continue the run; don’t tell the user to switch chats.
 
 ## Orchestrator
 

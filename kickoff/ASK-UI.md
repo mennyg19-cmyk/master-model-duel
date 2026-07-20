@@ -1,97 +1,100 @@
-# Kickoff ask UI (click, don’t type)
+# Kickoff ask UI (less typing)
 
-## Cursor — HARD RULE
+## Priority
 
-On host `cursor` you **must** call the **`AskQuestion` tool** for every fixed-choice kickoff step.
+1. **If the `AskQuestion` tool is in your tool list** → use it for every fixed-choice kickoff step (one question per turn). Clickable UI.  
+2. **If `AskQuestion` is missing** (common on some models, including Grok) → use the **short-reply fallback** below. Do **not** tell the user to “switch chats” unless they asked for clickable cards and you know another model in their account has AskQuestion.
 
-**Forbidden on Cursor (never do these for choices):**
-- “Reply A or B”
-- Markdown tables of options asking the user to type a letter
-- Numbered lists “1) 2) 3) reply with a number”
+## When AskQuestion is available (Cursor)
 
-**If `AskQuestion` is not in your tool list:**  
-STOP. Do not continue kickoff in prose. Tell the user:
-
-> AskQuestion isn’t available in this agent session, so I can’t show clickable options. Switch to a Cursor Agent chat that has the AskQuestion tool (or another model/mode), then say **start testing** again.
-
-Only then may you wait. Do **not** silently fall back to A/B.
-
-**AskQuestion usage**
-- Exactly **one** AskQuestion per assistant turn  
+**Do:**
+- Call `AskQuestion` once per turn  
 - Short option labels  
-- At most one escape option: `Something else (I will type it)`  
-- Put the recommended choice in the question prompt text when there is one  
+- At most one escape: `Something else (I will type it)`  
 
-## Other hosts
+**Don’t:**
+- “Reply A or B”  
+- Markdown option tables for typing letters  
 
-| Host | Structured ask |
-|---|---|
-| OpenCode / generic | No Cursor AskQuestion → short A/B/C in chat is OK |
+## Short-reply fallback (no AskQuestion)
 
-## Freeform chat is OK only for
+Ask **one** question. Options are **one-word / short-phrase** answers the user can tap-send or type fast — not “A or B”.
+
+Example for Q0:
+
+> What are you comparing? Reply with one of:  
+> **`models`** — different models, same rules  
+> **`rules`** — same model, different rules  
+
+Map: `models` → `model_duel`, `rules` → `rules_duel`.
+
+Same pattern for every fixed choice (see ready-made sets: use the **fallback reply** column).
+
+## Host map
+
+| Host | Prefer | Fallback |
+|---|---|---|
+| Cursor + AskQuestion tool | AskQuestion | — |
+| Cursor without AskQuestion (e.g. Grok) | — | short-reply words |
+| OpenCode / generic | — | short-reply words |
+
+## Freeform chat only for
 
 - Absolute path to source codebase  
 - Grill seed paragraph  
-- Custom model id / custom rule pack names  
+- Custom model id / custom pack names  
 
-## Ready-made AskQuestion sets (Cursor)
-
-### Host confirm (detection medium/low only)
-
-- Prompt: `Which harness should run this duel?`  
-- Options: `Cursor` | `OpenCode` | `Other (generic)` | `Something else (I will type it)`
+## Ready-made sets
 
 ### Q0 Run mode
 
-- Prompt: `What are you comparing?`  
-- Options: `Different models (same rules)` | `Same model, different rules`
-
-### Contestant pick method (model_duel)
-
-- Prompt: `How do you want to pick contestant models?`  
-- Options: `Suggested pair next (click models)` | `I will type slugs` | `Something else (I will type it)`
-
-### Reviewer
-
-- Prompt: `Pick reviewer (must be a different family than contestants). Recommended: GLM if contestants are Claude/GPT.`  
-- Options: build from `reviewer_defaults.cursor` in MODEL-FAMILIES + `Something else (I will type it)`
+| AskQuestion options | Fallback reply |
+|---|---|
+| Different models (same rules) | `models` |
+| Same model, different rules | `rules` |
 
 ### Rules pack
 
-- Prompt: `Which rule pack? (recommended: Default on)`  
-- Options: `Default on` | `Default + testing` | `Minimal` | `Choose each rule next` | `Something else (I will type it)`
-
-### Inventory shape
-
-- Prompt: `Test 1a codebase inventory shape?`  
-- Options: `One agent per arm` | `Focused specialists`
+| AskQuestion options | Fallback reply |
+|---|---|
+| Default on | `default` |
+| Default + testing | `testing` |
+| Minimal | `minimal` |
+| Choose each rule next | `custom` |
 
 ### Grill inventory
 
-- Prompt: `Include grill inventory (interview you)? Recommended: Yes for rebuilds.`  
-- Options: `Yes` | `No`
+| AskQuestion options | Fallback reply |
+|---|---|
+| Yes | `yes` |
+| No | `no` |
 
-### Grill sees codebase?
+### Inventory / self-review shape
 
-- Prompt: `Should grill agents see the codebase inventory? Recommended: No.`  
-- Options: `No` | `Yes`
+| AskQuestion options | Fallback reply |
+|---|---|
+| One agent | `one` |
+| Focused specialists | `focused` |
 
-### Self-review shape
+### Confirm bootstrap
 
-- Prompt: `Test 5 self-review shape?`  
-- Options: `One agent` | `Focused specialists`
-
-### Run id
-
-- Prompt: `Run id?`  
-- Options: `Auto (date + repo + mode)` | `Something else (I will type it)`
-
-### Confirm
-
-- Prompt: `Bootstrap this run?`  
-- Options: `Yes, bootstrap` | `Change an answer` | `Cancel`
+| AskQuestion options | Fallback reply |
+|---|---|
+| Yes, bootstrap | `go` |
+| Change an answer | `change` |
+| Cancel | `cancel` |
 
 ### After bootstrap
 
-- Prompt: `What next?`  
-- Options: `Run full suite` | `Stop — I'll say run test N` | `Something else (I will type it)`
+| AskQuestion options | Fallback reply |
+|---|---|
+| Run full suite | `suite` |
+| Stop — I'll say run test N | `stop` |
+
+### Host confirm (detection medium/low)
+
+| AskQuestion options | Fallback reply |
+|---|---|
+| Cursor | `cursor` |
+| OpenCode | `opencode` |
+| Other (generic) | `generic` |
