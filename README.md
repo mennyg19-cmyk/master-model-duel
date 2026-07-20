@@ -64,9 +64,16 @@ Example: leave out `clean-code` or `context-canary` to see who still ships clean
 
 `catalog/MODEL-FAMILIES.json` maps slugs → families. Bootstrap **refuses** a reviewer whose family appears in the contestant set (e.g. no Fable reviewer if Fable is competing).
 
-## Related
+## Late join
 
-v1 MenEZmanim write-up (historical): https://github.com/mennyg19-cmyk/model-duel-menezmanim
+You can add another model to an **existing** run without restarting:
+
+- Say **add model** / **late join**
+- Shared live-duel freezes stay put (reconciled inventory, merged plan, rules, reviewer)
+- Late arm is graded against those freezes and can earn **bonus** if it finds more real features (or plans better) than the freeze captured
+- Build tests still use the **same merged plan** so execution stays equal
+
+Details: [`protocol/LATE-JOIN.md`](protocol/LATE-JOIN.md)
 
 ## License
 

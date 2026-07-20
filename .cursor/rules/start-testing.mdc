@@ -30,3 +30,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap-run.ps1 -K
 ## Multi-run
 
 Each `runs/{run_id}/` is a full archive. New "start testing" → new `run_id`. Old runs stay readable forever.
+
+## Late join
+
+Triggered by **"add model"**, **"late join"**, **"add contestant"**.
+
+1. Read `protocol/LATE-JOIN.md` in full.  
+2. Confirm `run_id`. Shared freezes (reconciled inventory, merged plan, rules, reviewer) **do not change**.  
+3. Ask for model slug + ports; validate family vs reviewer.  
+4. Run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/late-join-arm.ps1 -RunId "{run_id}" -ArmId "arm-0N" -Model "{slug}" -WebPort {port} -DbPort {port}
+```
+
+5. Run the late arm through tests per LATE-JOIN: grade vs freezes; award **bonus** for novel true inventory IDs / plan extras; builds use the **old merged plan**.

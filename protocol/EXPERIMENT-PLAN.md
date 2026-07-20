@@ -9,7 +9,8 @@
 **Greenfield:** absolute — no prior apps, no prior run trees, no web harvest of the target product  
 **Scorecard mode:** **Option D** — one internal /100 **plus two published headlines**
 
-Kickoff interview: `kickoff/QUESTIONS.md`. Bootstrap: `scripts/bootstrap-run.ps1`.
+Kickoff interview: `kickoff/QUESTIONS.md`. Bootstrap: `scripts/bootstrap-run.ps1`.  
+**Late join** (add a model to an existing run): `protocol/LATE-JOIN.md` + `scripts/late-join-arm.ps1`.
 
 ---
 
