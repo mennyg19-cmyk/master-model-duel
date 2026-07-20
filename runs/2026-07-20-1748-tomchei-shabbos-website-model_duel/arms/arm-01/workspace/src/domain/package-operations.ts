@@ -26,7 +26,7 @@ export async function materializeOrderPackages(
     },
   });
   if (order.status !== "FINALIZED" || order.packages.length > 0) {
-    return order.packages.length;
+    return 0;
   }
   if (
     order.lines.some(
@@ -216,6 +216,11 @@ export async function regroupPackages(
     throw new Error("Choose two different packages to regroup.");
   }
   return prisma.$transaction(async (transaction) => {
+    for (const packageId of [sourcePackageId, targetPackageId].sort()) {
+      await transaction.$queryRaw`
+        SELECT "id" FROM "Package" WHERE "id" = ${packageId} FOR UPDATE
+      `;
+    }
     const packages = await transaction.package.findMany({
       where: { id: { in: [sourcePackageId, targetPackageId] } },
       include: { lines: true },

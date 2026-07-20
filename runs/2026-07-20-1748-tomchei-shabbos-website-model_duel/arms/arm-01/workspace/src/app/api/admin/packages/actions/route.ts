@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   bulkAdvancePackageStage,
+  materializeMissingFinalizedOrders,
   regroupPackages,
   splitPackage,
 } from "@/domain/package-operations";
@@ -10,6 +11,9 @@ import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 const packageActionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("materialize"),
+  }),
   z.object({
     action: z.literal("split"),
     packageId: z.string().min(1),
@@ -49,6 +53,9 @@ export async function POST(request: Request) {
       );
     }
     const input = parsed.data;
+    if (input.action === "materialize") {
+      return NextResponse.json(await materializeMissingFinalizedOrders(db));
+    }
     if (input.action === "split") {
       const createdPackage = await splitPackage(db, {
         ...input,

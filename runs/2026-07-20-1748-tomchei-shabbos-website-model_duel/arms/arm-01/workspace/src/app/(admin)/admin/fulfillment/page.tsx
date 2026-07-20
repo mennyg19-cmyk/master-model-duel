@@ -1,5 +1,4 @@
 import { FulfillmentBoard } from "@/components/fulfillment-board";
-import { materializeMissingFinalizedOrders } from "@/domain/package-operations";
 import { requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -7,7 +6,6 @@ export const dynamic = "force-dynamic";
 
 export default async function FulfillmentPage() {
   await requirePermission("admin:view");
-  const materialization = await materializeMissingFinalizedOrders(db);
   const [packages, recentArtifacts] = await Promise.all([
     db.package.findMany({
       where: { isActive: true },
@@ -77,13 +75,6 @@ export default async function FulfillmentPage() {
         Group, split, print, pack, and send physical packages. PDF production is
         deliberately separate from fulfillment status.
       </p>
-      {materialization.skipped.length > 0 && (
-        <p className="mt-4 rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-950">
-          {materialization.skipped.length} older finalized order
-          {materialization.skipped.length === 1 ? "" : "s"} need recipient or
-          fulfillment repair before packages can be created.
-        </p>
-      )}
       <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[...channels.entries()].map(([name, summary]) => (
           <article

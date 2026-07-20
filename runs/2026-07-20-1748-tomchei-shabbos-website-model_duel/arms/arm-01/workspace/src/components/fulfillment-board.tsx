@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 type PackageRow = {
@@ -29,6 +30,7 @@ export function FulfillmentBoard({
   orders: { id: string; label: string }[];
   artifacts: ArtifactRow[];
 }) {
+  const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkStage, setBulkStage] = useState("PRINTED");
   const [sourcePackageId, setSourcePackageId] = useState("");
@@ -38,15 +40,38 @@ export function FulfillmentBoard({
 
   async function post(path: string, body: unknown, success: string) {
     setIsBusy(true);
-    const response = await fetch(path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const payload = await response.json();
-    setMessage(response.ok ? success : payload.error);
-    setIsBusy(false);
-    if (response.ok) window.location.reload();
+    try {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        applied?: string[];
+        conflicts?: { packageId: string; reason: string }[];
+        error?: string;
+      };
+      if (!response.ok) {
+        setMessage(payload.error ?? "The package action failed.");
+        return;
+      }
+      const conflicts = payload.conflicts ?? [];
+      setMessage(
+        conflicts.length
+          ? `${payload.applied?.length ?? 0} package(s) changed; ${conflicts.length} not changed: ${conflicts
+              .map(
+                (conflict) =>
+                  `${conflict.packageId.slice(-6)} — ${conflict.reason}`,
+              )
+              .join(" ")}`
+          : success,
+      );
+      router.refresh();
+    } catch {
+      setMessage("The package action could not reach the server.");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   async function split(packageId: string, packageLineId: string, formData: FormData) {
@@ -89,6 +114,20 @@ export function FulfillmentBoard({
     <div className="space-y-8">
       <section className="rounded-3xl border border-[var(--border)] bg-white p-6">
         <div className="flex flex-wrap items-end gap-3">
+          <button
+            className="rounded-xl border border-[var(--brand)] px-5 py-2.5 font-bold text-[var(--brand-dark)] disabled:opacity-50"
+            disabled={isBusy}
+            onClick={() =>
+              void post(
+                "/api/admin/packages/actions",
+                { action: "materialize" },
+                "Missing finalized orders checked and packages created.",
+              )
+            }
+            type="button"
+          >
+            Create missing packages
+          </button>
           <div>
             <label className="text-sm font-bold" htmlFor="bulk-stage">
               Bulk status

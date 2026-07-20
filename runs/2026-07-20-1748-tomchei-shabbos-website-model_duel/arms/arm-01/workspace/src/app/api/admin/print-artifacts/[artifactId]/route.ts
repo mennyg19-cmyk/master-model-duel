@@ -6,7 +6,7 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ artifactId: string }> },
 ) {
-  await requirePermission("admin:view");
+  await requirePermission("orders:manage");
   const { artifactId } = await context.params;
   const artifact = await db.printArtifact.findUnique({
     where: { id: artifactId },
@@ -14,7 +14,7 @@ export async function GET(
   if (!artifact) {
     return Response.json({ error: "Print artifact was not found." }, { status: 404 });
   }
-  const pdf = renderArtifactPdf(artifact.payload);
+  const pdf = await renderArtifactPdf(artifact.payload);
   const filename = `${artifact.kind.toLowerCase()}-${artifact.filingGroup
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, "-")}.pdf`;

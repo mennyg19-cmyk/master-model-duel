@@ -19,6 +19,7 @@ const dateNumber = (Number.parseInt(runKey.slice(0, 4), 16) % 336) + 1;
 const month = String(Math.floor((dateNumber - 1) / 28) + 1).padStart(2, "0");
 const day = String(((dateNumber - 1) % 28) + 1).padStart(2, "0");
 const nightlyDateKey = `2099-${month}-${day}`;
+const hebrewRecipient = "משפחת כהן";
 
 function authHeaders() {
   const timestamp = Date.now();
@@ -100,7 +101,7 @@ async function run() {
           },
           {
             label: "Recipient B",
-            recipientName: "Recipient B",
+            recipientName: hebrewRecipient,
             line1: "202 Simcha Street",
             city: "Brooklyn",
             region: "NY",
@@ -127,7 +128,10 @@ async function run() {
             recipientSource: "ADDRESS_BOOK" as const,
             recipientNameSnapshot: address.recipientName,
             fulfillmentMethodId: method.id,
-            greetingSnapshot: `A freilichen Purim, ${address.recipientName}!`,
+            greetingSnapshot:
+              address.recipientName === hebrewRecipient
+                ? "פורים שמח מכל הלב!"
+                : `A freilichen Purim, ${address.recipientName}!`,
             productNameSnapshot: product.name,
             skuSnapshot: product.sku,
             unitPriceCentsSnapshot: product.priceCents,
@@ -278,8 +282,18 @@ async function run() {
     batch: { artifacts: Array<{ id: string; payload: unknown }> };
   };
   for (const artifact of orderReprint.batch.artifacts) {
-    const payload = artifact.payload as { orderIds: string[] };
+    const payload = artifact.payload as {
+      orderIds: string[];
+      pages: { recipient: string; greeting: string }[];
+    };
     assert.deepEqual(payload.orderIds, [order.id]);
+    assert(
+      payload.pages.some(
+        (page) =>
+          page.recipient === hebrewRecipient && page.greeting.includes("פורים שמח"),
+      ),
+      "Reprint payload must preserve Hebrew recipient and greeting text.",
+    );
   }
   const printablePackage = await prisma.package.findFirstOrThrow({
     where: { orderId: order.id, id: { not: statusPackage.id } },
@@ -290,7 +304,9 @@ async function run() {
   );
   assert.equal(pdfResponse.status, 200);
   assert.equal(pdfResponse.headers.get("content-type"), "application/pdf");
-  assert.match(Buffer.from(await pdfResponse.arrayBuffer()).subarray(0, 8).toString(), /^%PDF-1\./);
+  const pdf = Buffer.from(await pdfResponse.arrayBuffer());
+  assert.match(pdf.subarray(0, 8).toString(), /^%PDF-1\./);
+  assert.match(pdf.toString("latin1"), /\/ToUnicode/);
   const boardResponse = await request("/admin/fulfillment");
   assert.equal(boardResponse.status, 200);
   assert.match(await boardResponse.text(), /Package production/);

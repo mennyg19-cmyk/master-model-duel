@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import bidiFactory from "bidi-js";
+import PDFDocument from "pdfkit";
 import {
   PrintArtifactKind,
   PrintBatchKind,
@@ -231,14 +235,30 @@ export async function reprintOrder(
   });
 }
 
-function escapePdfText(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/[^\x20-\x7E]/g, "")
-    .replace(/([\\()])/g, "\\$1");
+const bidi = bidiFactory();
+const unicodeFontPath = join(
+  process.cwd(),
+  "node_modules",
+  "@expo-google-fonts",
+  "noto-sans-hebrew",
+  "400Regular",
+  "NotoSansHebrew_400Regular.ttf",
+);
+const unicodeFont = readFileSync(unicodeFontPath);
+
+function reorderForPdf(value: string) {
+  const embeddingLevels = bidi.getEmbeddingLevels(value);
+  let reordered = value;
+  for (const [start, end] of bidi.getReorderSegments(value, embeddingLevels)) {
+    reordered =
+      reordered.slice(0, start) +
+      Array.from(reordered.slice(start, end + 1)).reverse().join("") +
+      reordered.slice(end + 1);
+  }
+  return reordered;
 }
 
-export function renderArtifactPdf(payload: Prisma.JsonValue) {
+export async function renderArtifactPdf(payload: Prisma.JsonValue) {
   const printable = payload as {
     heading: string;
     pages: Array<{
@@ -260,38 +280,22 @@ export function renderArtifactPdf(payload: Prisma.JsonValue) {
       `Package: ${page.packageId}`,
       "",
     ]),
-  ].slice(0, 48);
-  const stream = [
-    "BT",
-    "/F1 11 Tf",
-    "50 750 Td",
-    ...lines.flatMap((line, index) => [
-      index === 0 ? "" : "0 -14 Td",
-      `(${escapePdfText(line)}) Tj`,
-    ]),
-    "ET",
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
   ];
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
-  objects.forEach((object, index) => {
-    offsets.push(Buffer.byteLength(pdf));
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+
+  return new Promise<Buffer>((resolve, reject) => {
+    const document = new PDFDocument({
+      font: unicodeFontPath,
+      margin: 50,
+      size: "LETTER",
+    });
+    const chunks: Buffer[] = [];
+    document.on("data", (chunk: Buffer) => chunks.push(chunk));
+    document.on("end", () => resolve(Buffer.concat(chunks)));
+    document.on("error", reject);
+    document.font(unicodeFont).fontSize(11);
+    for (const line of lines) {
+      document.text(reorderForPdf(line), { lineGap: 2 });
+    }
+    document.end();
   });
-  const xrefOffset = Buffer.byteLength(pdf);
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  pdf += offsets
-    .slice(1)
-    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
-    .join("");
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  return Buffer.from(pdf);
 }

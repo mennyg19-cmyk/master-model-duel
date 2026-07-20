@@ -59,12 +59,22 @@ See `shared/phases/PHASE-P5-EXPECTED.md`. arm-01 P5 **gated** · arm-02 P5 in pr
 
 See `shared/phases/PHASE-P6-EXPECTED.md`. arm-01 P6 **gated**.
 
-## P7 (next)
+## P7
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Package split/group | | |
-| S2 | Print vs status | | |
-| S3 | Batch idempotency | | |
+| S1 | Package split/group | ✓ | |
+| S2 | Print vs status | ✓ | |
+| S3 | Batch idempotency | ✓ | |
 
-See `shared/phases/PHASE-P7-EXPECTED.md`.
+See `shared/phases/PHASE-P7-EXPECTED.md`. arm-01 P7 **gated**.
+
+## P8 (next)
+
+| # | Check | arm-01 | arm-02 |
+|---|---|---|---|
+| S1 | Margin math | | |
+| S2 | Void + rebuy | | |
+| S3 | Unshipped label guard | | |
+
+See `shared/phases/PHASE-P8-EXPECTED.md`.
