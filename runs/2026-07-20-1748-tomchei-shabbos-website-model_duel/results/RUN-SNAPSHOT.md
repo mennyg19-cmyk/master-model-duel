@@ -21,7 +21,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- arm-02 P9: build pending spawn
+- arm-02 P9: [arm-02 Test4 P9 build](ec17c8da-ddb9-4eb9-9bfd-4afb98e7a90e)
 
 ## P8 gate (arm-02)
 
