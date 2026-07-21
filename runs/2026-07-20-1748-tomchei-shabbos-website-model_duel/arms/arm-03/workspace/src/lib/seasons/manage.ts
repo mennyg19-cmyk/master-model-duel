@@ -139,7 +139,7 @@ export async function setSeasonStatus(input: {
       if (input.status === SeasonStatus.OPEN) {
         await tx.season.updateMany({
           where: { status: SeasonStatus.OPEN, NOT: { id: input.seasonId } },
-          data: { status: SeasonStatus.CLOSED },
+          data: { status: SeasonStatus.CLOSED, closesAt: new Date() },
         });
       }
       const updated = await tx.season.update({

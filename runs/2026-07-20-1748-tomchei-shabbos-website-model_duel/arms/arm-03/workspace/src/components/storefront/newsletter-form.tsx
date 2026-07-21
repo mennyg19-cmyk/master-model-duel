@@ -12,6 +12,7 @@ export function NewsletterForm({
   const [email, setEmail] = useState(initialEmail);
   const [seasons, setSeasons] = useState(true);
   const [updates, setUpdates] = useState(true);
+  const [promotions, setPromotions] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -23,7 +24,7 @@ export function NewsletterForm({
       const res = await fetch("/api/newsletter/subscribe", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, preferences: { seasons, updates } }),
+        body: JSON.stringify({ email, preferences: { seasons, updates, promotions } }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -58,6 +59,10 @@ export function NewsletterForm({
           <label className="inline-flex items-center gap-2">
             <input type="checkbox" checked={updates} onChange={(e) => setUpdates(e.target.checked)} />
             Community updates
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={promotions} onChange={(e) => setPromotions(e.target.checked)} />
+            Promotions
           </label>
         </div>
       ) : null}

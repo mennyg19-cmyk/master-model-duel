@@ -142,6 +142,20 @@ export async function postOfflinePayment(input: {
       return { payment, orderStatus: refreshed.status, paymentStatus };
     });
 
+    if (
+      result.paymentStatus === CachedPaymentStatus.PAID ||
+      result.paymentStatus === CachedPaymentStatus.OVERPAID
+    ) {
+      const paidOrder = await db.order.findUnique({
+        where: { id: input.orderId },
+        include: { customer: { select: { email: true, displayName: true } } },
+      });
+      if (paidOrder) {
+        const { enqueueOrderConfirmation } = await import("@/lib/email/order-emails");
+        await enqueueOrderConfirmation(paidOrder);
+      }
+    }
+
     return ok(result);
   } catch (error) {
     return err(maskError(error), "Could not post offline payment.");

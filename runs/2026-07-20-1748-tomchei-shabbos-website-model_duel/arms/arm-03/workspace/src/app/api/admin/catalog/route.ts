@@ -141,7 +141,7 @@ export async function POST(request: Request) {
 
     await writeAudit({
       action: "PRODUCT_UPSERTED",
-      actorId: ctx.effectiveStaff.id,
+      actorId: ctx.staff.id,
       meta: { productId: product.id, sku: product.sku },
     });
 
@@ -161,7 +161,7 @@ export async function DELETE(request: Request) {
     });
     await writeAudit({
       action: "PRODUCT_UPSERTED",
-      actorId: ctx.effectiveStaff.id,
+      actorId: ctx.staff.id,
       meta: { productId: product.id, sku: product.sku, deleted: true },
     });
     return NextResponse.json({ ok: true, product });

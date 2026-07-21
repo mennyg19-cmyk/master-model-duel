@@ -1,17 +1,45 @@
 # P10 Fix Notes — arm-03
 
-**Smoke:** 3/3 PASS (`npm run smoke:p10`)
+**Phase:** P10 aggregate fix pass  
+**Tree:** `arms/arm-03/workspace/`  
+**Source:** `AGGREGATE-REVIEW-P10.md`  
+**Smoke:** `npm run smoke:p10` → **3/3 PASS** (S1–S3)
 
-## Fixed majors
+## Fixed
 
-| # | Fix |
+| ID | Fix |
 |---|---|
-| **M3** | Staff Repeat navigates to `/admin/orders/[id]/repeat`; review UI uses `mode:"preview"` / `mode:"confirm"` (shared `RepeatReviewClient` with `audience="staff"`). |
-| **M6** | Bulk repeat requires `confirmReplacements` + `confirmRecipients` (literal `true`); orders list shows a confirm dialog before POST. |
-| **M4** | Added `vercel.json` hourly cron → `/api/cron/season-auto-flip`; route accepts GET (Vercel) and POST (smoke). |
-| **M7** | `createDraftFromChoices` applies `productOption.priceAdjustmentCents` (incl. fallback option). |
-| **M8** | `resolveTargetSeason` throws when no OPEN season — no silent CLOSED fallback. |
+| **B1** | Added `/api/cron(.*)` to Clerk `isPublic` matcher in `src/middleware.ts` so bearer-authed cron handlers (`requireCronBearer`) run in production. |
+| **B2** | `resolveTargetSeason` rejects non-OPEN preferred seasons and never falls back to CLOSED; `createDraftFromChoices` re-asserts `status === OPEN` before minting a draft (customer, staff single, bulk). |
+| **B3** | `POST /api/admin/imports/prior-year-stub` returns 404 unless `AUTH_MODE=dev` and `NODE_ENV !== production`; audit records `actorId`. |
+| **M1** | Staff "Repeat order" navigates to `/admin/orders/[id]/repeat` with shared `RepeatReviewClient` (`audience="staff"`, preview/confirm) — no "draft undefined". |
+| **M3** | Confirmed `vercel.json` hourly cron → `/api/cron/season-auto-flip`. |
+| **M6** | `createDraftFromChoices` applies `productOption.priceAdjustmentCents` and copies allowed `OrderLineAddOn` rows (preview includes `addOns`). |
+| **M7** | Removed duplicate `smoke:p10` key from `package.json`. |
+| **M8** | Deleted byte-identical `src/app/api/cron/season-flip/` (kept `season-auto-flip`). |
+| **M9** | Removed dead `needsReview` / unreachable return / unused `forceAuto` from `repeatOrder` + admin repeat route. |
+| **M12** | Deleted unused exported `pickPriceSmart` from `src/lib/catalog/replacements.ts`. |
 
-## Not in this pass
+## Skipped
 
-M1–M2, M5, M9–M15 and minors left for a later tidy/refactor pass.
+| ID | Why |
+|---|---|
+| **M2** | Impersonation audit actor attribution — not in prioritized list. |
+| **M4** | Past scheduled flip times accepted — medium audit-integrity. |
+| **M5** | Bulk already requires `confirmReplacements`/`confirmRecipients`; deeper per-recipient UX deferred. |
+| **M10** | God-file split of `repeat.ts` — refactor scope. |
+| **M11** | Prior-year-stub unused-by-smoke / seed drift — mitigated by B3 prod guard. |
+| **M13–M20** | Type drift, redundant ternaries, route fold, schedule onChange, N+1 — tidy. |
+| **m1–m20** | All minors deferred. |
+
+## Verification
+
+```text
+npm run smoke:p10
+→ ok: true, passed: 3, failed: 0
+→ S1 PASS (discontinued item + confirm)
+→ S2 PASS (bulkCreated: 2, cronStatus: 200)
+→ S3 PASS (prior-year repeat draft)
+```
+
+Evidence: `PHASE-P10-SMOKE.md`

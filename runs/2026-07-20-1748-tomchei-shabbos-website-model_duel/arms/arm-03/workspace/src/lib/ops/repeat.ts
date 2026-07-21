@@ -30,6 +30,7 @@ export type RepeatLinePreview = {
   };
   fulfillmentMethodId: string | null;
   productOptionId: string | null;
+  addOns: Array<{ addOnId: string; quantity: number; unitPriceCents: number }>;
   replacement: ResolvedReplacement;
   defaultProductId: string | null;
   requiresPick: boolean;
@@ -65,7 +66,11 @@ export type RepeatLineChoice = {
 
 async function resolveTargetSeason(preferredId?: string | null) {
   if (preferredId) {
-    return db.season.findUniqueOrThrow({ where: { id: preferredId } });
+    const preferred = await db.season.findUniqueOrThrow({ where: { id: preferredId } });
+    if (preferred.status !== SeasonStatus.OPEN) {
+      throw new Error(`Target season ${preferred.name} is not OPEN.`);
+    }
+    return preferred;
   }
   const open = await db.season.findFirst({
     where: { status: SeasonStatus.OPEN },
@@ -87,7 +92,7 @@ export async function previewRepeatOrder(input: {
       where: { id: input.sourceOrderId },
       include: {
         lines: {
-          include: { product: true },
+          include: { product: true, addOns: true },
           orderBy: { createdAt: "asc" },
         },
         season: true,
@@ -131,6 +136,11 @@ export async function previewRepeatOrder(input: {
         },
         fulfillmentMethodId: line.fulfillmentMethodId,
         productOptionId: line.productOptionId,
+        addOns: line.addOns.map((a) => ({
+          addOnId: a.addOnId,
+          quantity: a.quantity,
+          unitPriceCents: a.unitPriceCents,
+        })),
         replacement,
         defaultProductId,
         requiresPick,
@@ -207,6 +217,13 @@ async function createDraftFromChoices(
     }
   }
 
+  const targetSeason = await tx.season.findUniqueOrThrow({
+    where: { id: input.targetSeasonId },
+  });
+  if (targetSeason.status !== SeasonStatus.OPEN) {
+    throw new Error(`Target season ${targetSeason.name} is not OPEN.`);
+  }
+
   const order = await tx.order.create({
     data: {
       seasonId: input.targetSeasonId,
@@ -246,6 +263,28 @@ async function createDraftFromChoices(
       optionAdjustCents = opt?.priceAdjustmentCents ?? 0;
     }
 
+    const addOnCreates: Array<{
+      addOnId: string;
+      quantity: number;
+      unitPriceCents: number;
+    }> = [];
+    for (const sourceAddOn of line.addOns) {
+      const allowed = await tx.productAddOnAllow.findFirst({
+        where: {
+          productId: product.id,
+          addOnId: sourceAddOn.addOnId,
+          addOn: { isActive: true },
+        },
+        include: { addOn: true },
+      });
+      if (!allowed) continue;
+      addOnCreates.push({
+        addOnId: allowed.addOnId,
+        quantity: sourceAddOn.quantity,
+        unitPriceCents: allowed.addOn.priceCents,
+      });
+    }
+
     await tx.orderLine.create({
       data: {
         orderId: order.id,
@@ -265,6 +304,7 @@ async function createDraftFromChoices(
         fulfillmentMethodId: line.fulfillmentMethodId ?? undefined,
         greeting: line.greeting ?? input.greetingDefault ?? undefined,
         groupingKey: "unassigned",
+        addOns: addOnCreates.length ? { create: addOnCreates } : undefined,
       },
     });
   }
@@ -324,9 +364,6 @@ export async function confirmRepeatOrder(input: {
           }
         }
       }
-      if (choice.action === "map" && choice.keepRecipient === false) {
-        // Allowed — recipient cleared on confirm.
-      }
     }
 
     // Recipients must be explicitly confirmed when present on kept lines.
@@ -335,13 +372,7 @@ export async function confirmRepeatOrder(input: {
       const removing = choice?.action === "remove";
       if (removing) continue;
       const hasRecipient = Boolean(line.recipient.recipientName);
-      if (hasRecipient && choice && choice.keepRecipient === undefined) {
-        return err(
-          "recipients",
-          "Confirm each recipient (keep or clear) before continuing.",
-        );
-      }
-      if (hasRecipient && !choice) {
+      if (hasRecipient && (!choice || choice.keepRecipient === undefined)) {
         return err(
           "recipients",
           "Confirm each recipient (keep or clear) before continuing.",
@@ -374,6 +405,7 @@ export async function confirmRepeatOrder(input: {
             newOrderId: order.id,
             draftRef,
             mode: input.actorStaffId ? "staff_confirm" : "customer_confirm",
+            customerId: input.actorCustomerId ?? preview.value.customerId,
             targetSeasonId: target.id,
             choices: input.choices,
           },
@@ -397,7 +429,6 @@ export async function repeatOrder(input: {
   sourceOrderId: string;
   staffId: string;
   targetSeasonId?: string | null;
-  forceAuto?: boolean;
 }): Promise<
   Result<
     | { draftRef: string; orderId: string; mode: "auto" }
@@ -411,10 +442,6 @@ export async function repeatOrder(input: {
     });
     if (!preview.ok) return preview;
 
-    const needsReview =
-      preview.value.lines.some((l) => l.requiresPick) || !input.forceAuto;
-
-    // Staff UI historically one-clicked; keep auto when all lines map cleanly OR forceAuto.
     const allMapped = preview.value.lines.every(
       (l) => !l.requiresPick && l.defaultProductId,
     );
@@ -422,26 +449,21 @@ export async function repeatOrder(input: {
       return ok({ needsReview: true, preview: preview.value });
     }
 
-    // When forceAuto (bulk / API convenience) or all mapped — create draft with keep recipients.
-    if (input.forceAuto || allMapped) {
-      const choices: RepeatLineChoice[] = preview.value.lines.map((l) => ({
-        sourceLineId: l.sourceLineId,
-        action: "map" as const,
-        toProductId: l.defaultProductId,
-        keepRecipient: true,
-        savedAddressId: l.recipient.savedAddressId,
-      }));
-      const confirmed = await confirmRepeatOrder({
-        sourceOrderId: input.sourceOrderId,
-        targetSeasonId: preview.value.targetSeasonId,
-        choices,
-        actorStaffId: input.staffId,
-      });
-      if (!confirmed.ok) return confirmed;
-      return ok({ ...confirmed.value, mode: "auto" as const });
-    }
-
-    return ok({ needsReview: true, preview: preview.value });
+    const choices: RepeatLineChoice[] = preview.value.lines.map((l) => ({
+      sourceLineId: l.sourceLineId,
+      action: "map" as const,
+      toProductId: l.defaultProductId,
+      keepRecipient: true,
+      savedAddressId: l.recipient.savedAddressId,
+    }));
+    const confirmed = await confirmRepeatOrder({
+      sourceOrderId: input.sourceOrderId,
+      targetSeasonId: preview.value.targetSeasonId,
+      choices,
+      actorStaffId: input.staffId,
+    });
+    if (!confirmed.ok) return confirmed;
+    return ok({ ...confirmed.value, mode: "auto" as const });
   } catch (error) {
     return err(maskError(error), "Could not repeat order.");
   }

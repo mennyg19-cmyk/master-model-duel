@@ -19,6 +19,7 @@ const isPublic = createRouteMatcher([
   "/api/storefront(.*)",
   "/api/checkout(.*)",
   "/api/webhooks(.*)",
+  "/api/cron(.*)",
   "/api/drafts(.*)",
   "/api/driver(.*)",
   "/d(.*)",

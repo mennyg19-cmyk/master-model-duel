@@ -4,6 +4,7 @@
 **Base:** http://127.0.0.1:3103
 **Passed:** 3 / 3
 **Failed:** 0
+**After:** P10 fix pass (B1–B3 + critical majors)
 
 | ID | Check | Pass |
 |---|---|---|
@@ -23,7 +24,7 @@
     "forcedConfirm": true,
     "defaultProductId": "cmrv6iq73000pqxk45qp3drca",
     "nearPriceId": "cmrv6iq73000pqxk45qp3drca",
-    "draftRef": "D-2026-DA64C90A",
+    "draftRef": "D-2026-AA2D0E72",
     "mappedOk": true,
     "apiPreviewOk": true,
     "candidates": [
@@ -39,7 +40,7 @@
     "conflicts": [],
     "skipped": [],
     "flipOpened": [
-      "cmrv6t59y000mqx68qv5cq1my"
+      "cmrv6zy0i000mqx6sbxoe00da"
     ],
     "flipSeasonStatus": "OPEN",
     "productsCopied": 6,
@@ -49,7 +50,7 @@
     "id": "S3",
     "check": "Imported prior-year repeat",
     "pass": true,
-    "draftRef": "D-2026-D00E7006",
+    "draftRef": "D-2026-55FF3005",
     "productId": "cmrv6iq73000pqxk45qp3drca",
     "recipientName": "Rivky Cohen",
     "savedAddressId": "seed-addr-customer-friend",

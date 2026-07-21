@@ -15,6 +15,7 @@ import { upsertCustomerAddress } from "@/lib/address/book";
  */
 export async function seedImportedPriorYearOrder(input?: {
   customerEmail?: string;
+  actorId?: string | null;
 }): Promise<
   Result<{
     orderId: string;
@@ -132,6 +133,7 @@ export async function seedImportedPriorYearOrder(input?: {
 
     await writeAudit({
       action: AuditAction.IMPORT_COMMITTED,
+      actorId: input?.actorId ?? null,
       meta: {
         kind: "prior_year_order_stub",
         orderId: order.id,

@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       copyFromSeasonId: body.copyFromSeasonId,
       scheduledOpenAt: body.scheduledOpenAt ? new Date(body.scheduledOpenAt) : null,
       scheduledCloseAt: body.scheduledCloseAt ? new Date(body.scheduledCloseAt) : null,
-      staffId: ctx.effectiveStaff.id,
+      staffId: ctx.staff.id,
     });
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });
@@ -69,7 +69,7 @@ export async function PATCH(request: Request) {
           : body.scheduledCloseAt
             ? new Date(body.scheduledCloseAt)
             : null,
-      staffId: ctx.effectiveStaff.id,
+      staffId: ctx.staff.id,
     });
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });

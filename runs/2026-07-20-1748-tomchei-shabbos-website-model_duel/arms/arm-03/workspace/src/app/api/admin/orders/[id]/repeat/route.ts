@@ -10,7 +10,6 @@ const bodySchema = z
   .object({
     mode: z.enum(["auto", "preview", "confirm"]).default("auto"),
     targetSeasonId: z.string().optional(),
-    forceAuto: z.boolean().optional(),
     choices: z
       .array(
         z.object({
@@ -63,7 +62,6 @@ export async function POST(request: Request, ctx: Ctx) {
       sourceOrderId: id,
       staffId: staff.effectiveStaff.id,
       targetSeasonId: body?.targetSeasonId,
-      forceAuto: body?.forceAuto ?? true,
     });
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });

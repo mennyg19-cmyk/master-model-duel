@@ -238,6 +238,20 @@ export async function refundPayment(input: {
       }
     }
 
+    const order = await db.order.findUnique({
+      where: { id: input.orderId },
+      include: { customer: { select: { email: true, displayName: true } } },
+    });
+    if (order) {
+      const { enqueueRefundEmail } = await import("@/lib/email/order-emails");
+      await enqueueRefundEmail({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        refundCents: input.amountCents,
+        customer: order.customer,
+      });
+    }
+
     return ok({
       payment: claimed.payment,
       paymentStatus: claimed.paymentStatus,

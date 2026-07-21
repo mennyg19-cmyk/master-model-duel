@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { normalizeEmail } from "@/lib/normalize";
 import { err, ok, type Result } from "@/lib/result";
 
-const DEFAULT_PREFS = { seasons: true, updates: true } as const;
+const DEFAULT_PREFS = { seasons: true, updates: true, promotions: true } as const;
 const TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 function secret(): string {
@@ -14,7 +14,12 @@ function secret(): string {
   return value;
 }
 
-export type NewsletterPrefs = { seasons: boolean; updates: boolean };
+/** Three preference states (R-018 / P11 S1). */
+export type NewsletterPrefs = {
+  seasons: boolean;
+  updates: boolean;
+  promotions: boolean;
+};
 
 export function signUnsubscribeToken(subscriberId: string, tokenVersion: number, exp: number): string {
   const payload = `${subscriberId}.${tokenVersion}.${exp}`;
@@ -63,6 +68,7 @@ export async function subscribe(
   const prefs: NewsletterPrefs = {
     seasons: preferences?.seasons ?? DEFAULT_PREFS.seasons,
     updates: preferences?.updates ?? DEFAULT_PREFS.updates,
+    promotions: preferences?.promotions ?? DEFAULT_PREFS.promotions,
   };
 
   const row = await db.newsletterSubscriber.upsert({

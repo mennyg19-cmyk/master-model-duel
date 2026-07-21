@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const result = await setSeasonStatus({
       seasonId: body.seasonId,
       status: body.status,
-      staffId: ctx.effectiveStaff.id,
+      staffId: ctx.staff.id,
     });
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });

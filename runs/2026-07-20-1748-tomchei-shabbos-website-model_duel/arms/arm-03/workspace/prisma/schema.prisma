@@ -79,6 +79,11 @@ enum AuditAction {
   PICKUP_STAMPED
   BULK_DELIVERY_SCHEDULED
   NOTIFICATION_CAPTURED
+  NOTIFICATION_SENT
+  NOTIFICATION_FAILED
+  EMAIL_CAMPAIGN_SENT
+  EMAIL_TEST_SENT
+  EMAIL_LOG_PURGED
 }
 
 enum DeliveryRouteStatus {
@@ -102,6 +107,14 @@ enum NotifyChannel {
 
 enum NotifyStatus {
   CAPTURED
+  PENDING
+  CLAIMED
+  SENT
+  FAILED
+}
+
+enum CampaignStatus {
+  DRAFT
   SENT
 }
 
@@ -228,6 +241,7 @@ model StaffUser {
   routesDriven          DeliveryRoute[]        @relation("RouteDriver")
   routesCreated         DeliveryRoute[]        @relation("RouteCreator")
   bulkWindowsScheduled  BulkDeliveryWindow[]
+  emailCampaignsCreated EmailCampaign[]
 }
 
 model PermissionOverride {
@@ -412,6 +426,8 @@ model NewsletterSubscriber {
   tokenVersion   Int       @default(1)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+
+  listMemberships MailingListMember[]
 
   @@index([unsubscribedAt])
 }
@@ -1097,7 +1113,7 @@ model DriverDeliveryEvent {
   @@index([routeStopId])
 }
 
-/// Test-capture + future send outbox for email/SMS (P9 / G-021 channel stub).
+/// Email/SMS outbox — capture (test) or pending→claim→sent/failed (R-088).
 model NotificationOutbox {
   id              String        @id @default(cuid())
   channel         NotifyChannel
@@ -1107,11 +1123,137 @@ model NotificationOutbox {
   subject         String?
   body            String
   status          NotifyStatus  @default(CAPTURED)
+  attempts        Int           @default(0)
+  maxAttempts     Int           @default(5)
+  nextAttemptAt   DateTime?
+  claimedAt       DateTime?
+  claimedBy       String?
+  lastError       String?
+  providerId      String?
+  sentAt          DateTime?
+  emailLogId      String?
   createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
   meta            Json?
 
   @@index([templateKey, createdAt])
   @@index([recipientKey])
+  @@index([status, nextAttemptAt])
+  @@index([claimedAt])
+}
+
+model EmailCampaign {
+  id          String         @id @default(cuid())
+  name        String
+  subject     String
+  htmlBody    String
+  listId      String?
+  status      CampaignStatus @default(DRAFT)
+  sentAt      DateTime?
+  createdById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  list       MailingList?            @relation(fields: [listId], references: [id], onDelete: SetNull)
+  createdBy  StaffUser?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  deliveries EmailCampaignDelivery[]
+
+  @@index([status, createdAt])
+  @@index([listId])
+}
+
+model EmailCampaignDelivery {
+  id             String   @id @default(cuid())
+  campaignId     String
+  recipientKey   String
+  idempotencyKey String   @unique
+  outboxId       String?
+  status         String   @default("queued")
+  createdAt      DateTime @default(now())
+
+  campaign EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, recipientKey])
+  @@index([campaignId])
+}
+
+model MailingList {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members   MailingListMember[]
+  campaigns EmailCampaign[]
+}
+
+model MailingListMember {
+  id           String   @id @default(cuid())
+  listId       String
+  subscriberId String
+  createdAt    DateTime @default(now())
+
+  list       MailingList          @relation(fields: [listId], references: [id], onDelete: Cascade)
+  subscriber NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, subscriberId])
+  @@index([subscriberId])
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  subject   String
+  htmlBody  String
+  branding  Json?
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TriggeredEmailOverride {
+  key       String   @id
+  subject   String?
+  htmlBody  String?
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+/// Durable send log — purgeable without touching active outbox/audit (R-172).
+model EmailLog {
+  id             String        @id @default(cuid())
+  channel        NotifyChannel
+  templateKey    String
+  recipientKey   String
+  subject        String?
+  body           String
+  status         String
+  providerId     String?
+  outboxId       String?
+  campaignId     String?
+  meta           Json?
+  createdAt      DateTime      @default(now())
+  purgeAfter     DateTime
+
+  @@index([purgeAfter, createdAt])
+  @@index([outboxId])
+  @@index([templateKey, createdAt])
+}
+
+/// Cron/job run log (R-163) — overlap claims use unique claimedToken per sweep.
+model CronJobRun {
+  id           String    @id @default(cuid())
+  jobKey       String
+  claimedToken String    @unique
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  ok           Boolean?
+  meta         Json?
+
+  @@index([jobKey, startedAt])
 }
 
 model BulkDeliveryWindow {

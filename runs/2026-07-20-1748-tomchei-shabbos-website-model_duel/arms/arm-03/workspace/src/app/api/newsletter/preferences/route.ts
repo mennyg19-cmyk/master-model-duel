@@ -8,6 +8,7 @@ const bodySchema = z.object({
   preferences: z.object({
     seasons: z.boolean(),
     updates: z.boolean(),
+    promotions: z.boolean(),
   }),
 });
 

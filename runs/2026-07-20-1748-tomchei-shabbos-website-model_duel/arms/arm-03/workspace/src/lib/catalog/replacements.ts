@@ -146,15 +146,3 @@ export async function resolveReplacementChain(
     needsPick: candidates.length === 0,
   };
 }
-
-export function pickPriceSmart(
-  sourcePriceCents: number,
-  candidates: Array<{ productId: string; basePriceCents: number }>,
-): string | null {
-  if (candidates.length === 0) return null;
-  return [...candidates].sort(
-    (a, b) =>
-      Math.abs(a.basePriceCents - sourcePriceCents) -
-      Math.abs(b.basePriceCents - sourcePriceCents),
-  )[0]!.productId;
-}
