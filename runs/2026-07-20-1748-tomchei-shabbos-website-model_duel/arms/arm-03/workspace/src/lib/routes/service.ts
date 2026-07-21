@@ -247,16 +247,29 @@ export async function reassignRoute(input: {
     throw new ApiError("Cannot reassign a completed route", 409);
   }
 
+  let nextStatus = existing.status;
+  if (input.driverStaffId && existing.status === DeliveryRouteStatus.DRAFT) {
+    nextStatus = DeliveryRouteStatus.ASSIGNED;
+  } else if (
+    !input.driverStaffId &&
+    existing.status === DeliveryRouteStatus.ASSIGNED
+  ) {
+    // Unassign must not leave ASSIGNED-with-no-driver.
+    nextStatus = DeliveryRouteStatus.DRAFT;
+  }
+
   const updated = await db.$transaction(async (tx) => {
+    // Reassign/unassign kills prior magic links so the old driver cannot deliver.
+    await tx.driverMagicLink.updateMany({
+      where: { routeId: existing.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
     const row = await tx.deliveryRoute.update({
       where: { id: existing.id },
       data: {
         driverStaffId: input.driverStaffId,
         pinHash: input.pin ? hashPin(input.pin) : existing.pinHash,
-        status:
-          input.driverStaffId && existing.status === DeliveryRouteStatus.DRAFT
-            ? DeliveryRouteStatus.ASSIGNED
-            : existing.status,
+        status: nextStatus,
       },
     });
     await writeAudit(
@@ -266,6 +279,8 @@ export async function reassignRoute(input: {
         meta: {
           routeId: row.id,
           driverStaffId: input.driverStaffId,
+          status: nextStatus,
+          priorLinksRevoked: true,
         },
       },
       tx,
@@ -417,6 +432,13 @@ export async function startRouteViaMagicLink(input: {
     link.route.status === DeliveryRouteStatus.IN_PROGRESS ||
     link.route.status === DeliveryRouteStatus.COMPLETED
   ) {
+    // Recover day-of notify if a prior start committed IN_PROGRESS then failed mid-notify.
+    if (
+      link.route.status === DeliveryRouteStatus.IN_PROGRESS &&
+      !link.route.dayOfNotifiedAt
+    ) {
+      await sendDayOfNotifications(link.routeId);
+    }
     return link.route;
   }
 
@@ -739,6 +761,22 @@ export async function confirmReroute(input: {
     throw new ApiError("Manager confirmation required for reroute", 400);
   }
 
+  const route = await db.deliveryRoute.findFirst({
+    where: { id: input.routeId, seasonId: input.seasonId },
+  });
+  if (!route) throw new ApiError("Route not found", 404);
+  const acceptStatuses: DeliveryRouteStatus[] = [
+    DeliveryRouteStatus.DRAFT,
+    DeliveryRouteStatus.ASSIGNED,
+    DeliveryRouteStatus.IN_PROGRESS,
+  ];
+  if (!acceptStatuses.includes(route.status)) {
+    throw new ApiError(
+      `Cannot reroute onto a ${route.status} route (expected DRAFT, ASSIGNED, or IN_PROGRESS)`,
+      409,
+    );
+  }
+
   const pkg = await db.package.findFirst({
     where: { id: input.packageId, order: { seasonId: input.seasonId } },
     include: {
@@ -762,7 +800,7 @@ export async function confirmReroute(input: {
 
   const geo = await ensureGeocoded(pkg.id);
   const maxSeq = await db.routeStop.aggregate({
-    where: { routeId: input.routeId },
+    where: { routeId: route.id },
     _max: { sequence: true },
   });
   const sequence = (maxSeq._max.sequence ?? 0) + 1;
@@ -770,6 +808,7 @@ export async function confirmReroute(input: {
 
   const stop = await db.$transaction(async (tx) => {
     // Void printed-not-shipped label inside the same tx as method + stop (label integrity).
+    // Shippo call inside voidLabelForPackage is external and irreversible; DB void rolls back with this tx.
     if (pkg.shippingLabels.length > 0) {
       await voidLabelForPackage({
         packageId: pkg.id,
@@ -787,7 +826,7 @@ export async function confirmReroute(input: {
     });
     const created = await tx.routeStop.create({
       data: {
-        routeId: input.routeId,
+        routeId: route.id,
         packageId: pkg.id,
         sequence,
         latitude: geo.latitude,
@@ -807,7 +846,7 @@ export async function confirmReroute(input: {
         action: AuditAction.REROUTE_CONFIRMED,
         actorId: input.actorId,
         meta: {
-          routeId: input.routeId,
+          routeId: route.id,
           packageId: pkg.id,
           fromMethod: pkg.fulfillmentMethod.code,
           toMethod: "PER_PACKAGE_DELIVERY",
@@ -822,8 +861,8 @@ export async function confirmReroute(input: {
   return stop;
 }
 
-/** Printed-fallback delivery — staff marks a stop without the magic link. */
-export async function markStopDeliveredFromPrint(input: {
+/** Remove a pending stop so the package can switch method / leave the route. */
+export async function removeRouteStop(input: {
   seasonId: string;
   routeId: string;
   stopId: string;
@@ -831,8 +870,66 @@ export async function markStopDeliveredFromPrint(input: {
 }) {
   const route = await getRouteDetail(input.seasonId, input.routeId);
   if (!route) throw new ApiError("Route not found", 404);
+  if (route.status === DeliveryRouteStatus.COMPLETED) {
+    throw new ApiError("Cannot remove stops from a completed route", 409);
+  }
+  const stop = route.stops.find((s) => s.id === input.stopId);
+  if (!stop) throw new ApiError("Stop not on this route", 404);
+  if (stop.status === RouteStopStatus.DELIVERED) {
+    throw new ApiError("Cannot remove a delivered stop", 409);
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.routeStop.delete({ where: { id: stop.id } });
+    const remaining = await tx.routeStop.findMany({
+      where: { routeId: route.id },
+      orderBy: { sequence: "asc" },
+    });
+    for (let i = 0; i < remaining.length; i++) {
+      const row = remaining[i]!;
+      if (row.sequence !== i + 1) {
+        await tx.routeStop.update({
+          where: { id: row.id },
+          data: { sequence: i + 1 },
+        });
+      }
+    }
+    await writeAudit(
+      {
+        action: AuditAction.BULK_ACTION_APPLIED,
+        actorId: input.actorId,
+        meta: {
+          kind: "route_stop_removed",
+          routeId: route.id,
+          stopId: stop.id,
+          packageId: stop.packageId,
+        },
+      },
+      tx,
+    );
+  });
+
+  return getRouteDetail(input.seasonId, input.routeId);
+}
+
+/** Printed-fallback delivery — staff marks a stop; PIN required when the route has one. */
+export async function markStopDeliveredFromPrint(input: {
+  seasonId: string;
+  routeId: string;
+  stopId: string;
+  pin?: string | null;
+  actorId?: string | null;
+}) {
+  const route = await getRouteDetail(input.seasonId, input.routeId);
+  if (!route) throw new ApiError("Route not found", 404);
   if (!route.printPayload) {
     throw new ApiError("Print the route before using printed fallback", 409);
+  }
+  // PIN is the second factor for printed fallback — do not bypass when configured.
+  if (route.pinHash) {
+    if (!input.pin || hashPin(input.pin) !== route.pinHash) {
+      throw new ApiError("Invalid PIN for printed delivery", 401);
+    }
   }
   const stop = route.stops.find((s) => s.id === input.stopId);
   if (!stop) throw new ApiError("Stop not on this route", 404);
@@ -858,6 +955,7 @@ export async function markStopDeliveredFromPrint(input: {
           stopId: stop.id,
           packageId: stop.packageId,
           via: "printed_fallback",
+          pinVerified: Boolean(route.pinHash),
           at: new Date().toISOString(),
         },
       },

@@ -10,6 +10,7 @@ import {
   markStopDeliveredFromPrint,
   printRoute,
   reassignRoute,
+  removeRouteStop,
   suggestReroutes,
 } from "@/lib/routes/service";
 import { switchFulfillmentMethod } from "@/lib/routes/method-switch";
@@ -55,6 +56,11 @@ const bodySchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("print-deliver"),
+    stopId: z.string().min(1),
+    pin: z.string().regex(/^\d{4}$/).optional().nullable(),
+  }),
+  z.object({
+    action: z.literal("remove-stop"),
     stopId: z.string().min(1),
   }),
 ]);
@@ -123,9 +129,20 @@ export async function POST(request: Request, ctx: Ctx) {
         seasonId: season.id,
         routeId: id,
         stopId: body.stopId,
+        pin: body.pin ?? null,
         actorId: staff.effectiveStaff.id,
       });
       return NextResponse.json({ ok: true, ...result });
+    }
+
+    if (body.action === "remove-stop") {
+      const route = await removeRouteStop({
+        seasonId: season.id,
+        routeId: id,
+        stopId: body.stopId,
+        actorId: staff.effectiveStaff.id,
+      });
+      return NextResponse.json({ ok: true, route });
     }
 
     const switched = await switchFulfillmentMethod({

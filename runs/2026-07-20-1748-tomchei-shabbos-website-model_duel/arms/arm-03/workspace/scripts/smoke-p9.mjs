@@ -166,8 +166,21 @@ async function main() {
     body: JSON.stringify({ action: "magic-link" }),
   });
   if (!magic.json?.ok) throw new Error(`magic: ${magic.text}`);
-  const token = magic.json.rawToken;
-  const linkId = magic.json.linkId;
+  const firstLinkId = magic.json.linkId;
+
+  // Rotation must revoke the prior active link (EXPECTED S1 security gate).
+  const rotated = await req(`/api/admin/routes/${routeId}`, {
+    method: "POST",
+    headers: { ...cookieHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "magic-link" }),
+  });
+  if (!rotated.json?.ok) throw new Error(`rotate magic: ${rotated.text}`);
+  const priorAfterRotate = await db.driverMagicLink.findUnique({
+    where: { id: firstLinkId },
+  });
+  const rotationRevoked = Boolean(priorAfterRotate?.revokedAt);
+  const token = rotated.json.rawToken;
+  const linkId = rotated.json.linkId;
 
   const scoped = await req(`/api/driver/${token}`);
   const stopIds = (scoped.json?.stops || []).map((s) => s.id);
@@ -228,6 +241,7 @@ async function main() {
     createRoute.json?.ok &&
       reassign.status === 200 &&
       stopCount === 2 &&
+      rotationRevoked &&
       throttled &&
       goodPin.json?.ok &&
       linkExpired &&
@@ -236,10 +250,11 @@ async function main() {
     routeId,
     linkId,
     stopCount,
+    rotationRevoked,
     throttled,
     linkExpired,
     auditHasLink,
-    magicUrl: magic.json.url,
+    magicUrl: rotated.json.url,
   });
 
   // --- S2: Maps + print fallback ---
@@ -254,6 +269,7 @@ async function main() {
     body: JSON.stringify({
       name: `P9 Print ${Date.now()}`,
       packageIds: [d3.pkg.id],
+      pin: "4242",
     }),
   });
   const route2Id = route2.json.route.id;
@@ -271,20 +287,32 @@ async function main() {
       : false;
   const printHasAddress = String(print.json?.printText || "").includes("500 Community Ave");
 
+  // Wrong PIN must fail before correct printed fallback.
+  const badPrintPin = await req(`/api/admin/routes/${route2Id}`, {
+    method: "POST",
+    headers: { ...cookieHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "print-deliver", stopId: stop2Id, pin: "0000" }),
+  });
+
   // Complete via printed fallback only (no magic-link phone path).
   const deliveredPrint = await req(`/api/admin/routes/${route2Id}`, {
     method: "POST",
     headers: { ...cookieHeader(), "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "print-deliver", stopId: stop2Id }),
+    body: JSON.stringify({ action: "print-deliver", stopId: stop2Id, pin: "4242" }),
   });
 
   push("S2", "Maps + print fallback", Boolean(
-    mapsOk && printHasAddress && print.json?.greetingPdfBase64 && deliveredPrint.json?.ok,
+    mapsOk &&
+      printHasAddress &&
+      print.json?.greetingPdfBase64 &&
+      badPrintPin.status === 401 &&
+      deliveredPrint.json?.ok,
   ), {
     mapsOk,
     mapsUrl,
     printHasAddress,
     hasPdf: Boolean(print.json?.greetingPdfBase64),
+    pinRejected: badPrintPin.status === 401,
     delivered: Boolean(deliveredPrint.json?.ok),
     completed: Boolean(deliveredPrint.json?.completed),
   });

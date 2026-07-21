@@ -4,6 +4,7 @@
 **Base:** http://127.0.0.1:3103
 **Passed:** 5 / 5
 **Failed:** 0
+**Note:** Re-run after P9 fix pass (B1–B5 + M5/M6/m1).
 
 | ID | Check | Pass |
 |---|---|---|
@@ -21,13 +22,14 @@
     "id": "S1",
     "check": "Driver magic link",
     "pass": true,
-    "routeId": "cmrv6944z0067qxsgurw0qwz1",
-    "linkId": "cmrv694c8006hqxsgoydhtyvk",
+    "routeId": "cmrv6ddmy00cdqxsgsabvbvzf",
+    "linkId": "cmrv6ddv500cpqxsgksuuvcya",
     "stopCount": 2,
+    "rotationRevoked": true,
     "throttled": true,
     "linkExpired": true,
     "auditHasLink": true,
-    "magicUrl": "http://127.0.0.1:3103/d/69cThIvaRfo5qToXfe8QenL_eLf0gvMKNpCEfK_4FGA"
+    "magicUrl": "http://127.0.0.1:3103/d/hgSJYmaBvGTFRotvPwY4L9SEklXUtjxhktk419u079g"
   },
   {
     "id": "S2",
@@ -37,6 +39,7 @@
     "mapsUrl": "https://www.google.com/maps/dir/?api=1&destination=500%20Community%20Ave%2C%20Brooklyn%2C%20NY%2C%2011218%2C%20US",
     "printHasAddress": true,
     "hasPdf": true,
+    "pinRejected": true,
     "delivered": true,
     "completed": true
   },
