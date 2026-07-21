@@ -1,51 +1,47 @@
+import { test } from "node:test";
 import assert from "node:assert/strict";
-import test from "node:test";
-import { hasPermission } from "../src/lib/permissions";
+import { resolvePermissions, ALL_PERMISSIONS } from "../lib/auth/permissions";
 
-test("manager receives the full role permission set", () => {
-  assert.equal(
-    hasPermission(
-      { role: "MANAGER", grantPermissions: [], denyPermissions: [] },
-      "staff:manage",
-    ),
-    true,
-  );
+test("manager gets every permission by default", () => {
+  const permissions = resolvePermissions("MANAGER", []);
+  for (const permission of ALL_PERMISSIONS) {
+    assert.ok(permissions.has(permission), `manager should have ${permission}`);
+  }
 });
 
-test("driver receives no admin access", () => {
-  assert.equal(
-    hasPermission(
-      { role: "DRIVER", grantPermissions: [], denyPermissions: [] },
-      "admin:view",
-    ),
-    false,
+test("staff baseline is orders/customers/payments day-to-day, no refunds", () => {
+  const permissions = resolvePermissions("STAFF", []);
+  assert.deepEqual(
+    [...permissions],
+    ["orders.view", "customers.manage", "payments.record", "orders.manage", "fulfillment.manage"]
   );
+  assert.ok(!permissions.has("payments.refund"), "refunds stay manager-only");
 });
 
-test("a personal grant adds permission to staff", () => {
-  assert.equal(
-    hasPermission(
-      {
-        role: "STAFF",
-        grantPermissions: ["audit:view"],
-        denyPermissions: [],
-      },
-      "audit:view",
-    ),
-    true,
-  );
+test("driver baseline is empty", () => {
+  assert.equal(resolvePermissions("DRIVER", []).size, 0);
 });
 
-test("a personal deny wins over role and grant permissions", () => {
-  assert.equal(
-    hasPermission(
-      {
-        role: "MANAGER",
-        grantPermissions: ["staff:manage"],
-        denyPermissions: ["staff:manage"],
-      },
-      "staff:manage",
-    ),
-    false,
+test("grant override adds a permission the role lacks", () => {
+  const permissions = resolvePermissions("STAFF", [
+    { permission: "staff.manage", effect: "GRANT" },
+  ]);
+  assert.ok(permissions.has("staff.manage"));
+});
+
+test("deny override removes a role-default permission", () => {
+  const permissions = resolvePermissions("MANAGER", [
+    { permission: "staff.manage", effect: "DENY" },
+  ]);
+  assert.ok(!permissions.has("staff.manage"));
+});
+
+test("unknown override permissions are ignored", () => {
+  const permissions = resolvePermissions("STAFF", [
+    { permission: "not.a.real.permission", effect: "GRANT" },
+  ]);
+  assert.deepEqual(
+    [...permissions],
+    ["orders.view", "customers.manage", "payments.record", "orders.manage", "fulfillment.manage"]
   );
 });

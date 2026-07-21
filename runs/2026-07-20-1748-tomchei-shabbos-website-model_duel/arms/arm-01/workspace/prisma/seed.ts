@@ -1,426 +1,262 @@
-import {
-  OrderStatus,
-  PrismaClient,
-  ProductKind,
-  SeasonStatus,
-  StaffRole,
-  StaffStatus,
-} from "@prisma/client";
-import { ensureMessagingConfiguration } from "../src/domain/messaging";
+import { PrismaClient } from "@prisma/client";
+import { findOrLinkCustomer } from "../lib/customers";
+import { finalizeOrder } from "../lib/domain/finalize";
+import { newDraftReference, wireFormat } from "../lib/domain/draft-reference";
+import { hashPassword } from "../lib/auth/passwords";
+import { normalizedAddressKey } from "../lib/addresses/normalize";
 
-const prisma = new PrismaClient();
+const db = new PrismaClient();
 
-async function seed() {
-  await ensureMessagingConfiguration(prisma);
-  await prisma.appSetting.upsert({
-    where: { key: "organization" },
+// Baseline seed (R-142): reference data only. Staff accounts are created through
+// the first-run setup page so the bootstrap lockout stays testable on a fresh DB.
+async function main() {
+  await db.setting.upsert({
+    where: { key: "org.display_name" },
     update: {},
-    create: {
-      key: "organization",
-      value: {
-        name: "Tomchei Shabbos",
-        timezone: "America/New_York",
-      },
-    },
+    create: { key: "org.display_name", value: "Tomchei Shabbos Mishloach Manos" },
   });
 
-  await prisma.appSetting.upsert({
-    where: { key: "delivery-zips" },
+  await db.concurrencyFixture.upsert({
+    where: { name: "smoke-counter" },
     update: {},
-    create: {
-      key: "delivery-zips",
-      value: ["08701", "08723", "08527"],
-    },
+    create: { name: "smoke-counter" },
   });
 
-  const season = await prisma.season.upsert({
-    where: { year: 2027 },
-    update: {},
-    create: {
-      name: "Purim 2027",
-      year: 2027,
-      status: SeasonStatus.OPEN,
-    },
+  const customer = await findOrLinkCustomer({
+    email: "sample.customer@example.com",
+    name: "Sample Customer",
   });
-
-  await prisma.appSetting.upsert({
-    where: { key: "current-season-id" },
-    update: { value: season.id },
-    create: {
-      key: "current-season-id",
-      value: season.id,
-    },
+  // Second call with an auth id must link, not duplicate (customer identity linking).
+  const linked = await findOrLinkCustomer({
+    email: "sample.customer@example.com",
+    name: "Sample Customer",
+    authUserId: "seed_auth_identity_1",
   });
-
-  const packageProduct = await prisma.product.upsert({
-    where: {
-      seasonId_sku: { seasonId: season.id, sku: "JOY-BOX" },
-    },
-    update: {},
-    create: {
-      seasonId: season.id,
-      sku: "JOY-BOX",
-      name: "Purim Joy Box",
-      description: "A finished mishloach manos package.",
-      category: "Signature",
-      kind: ProductKind.PACKAGE,
-      priceCents: 5400,
-      widthMm: 300,
-      heightMm: 120,
-      depthMm: 220,
-      weightGrams: 1800,
-      isFinishedPackage: true,
-    },
-  });
-
-  await prisma.productOption.upsert({
-    where: {
-      productId_name_value: {
-        productId: packageProduct.id,
-        name: "Size",
-        value: "Classic",
-      },
-    },
-    update: {},
-    create: {
-      productId: packageProduct.id,
-      name: "Size",
-      value: "Classic",
-      isDefault: true,
-    },
-  });
-
-  await prisma.productOption.upsert({
-    where: {
-      productId_name_value: {
-        productId: packageProduct.id,
-        name: "Size",
-        value: "Grand",
-      },
-    },
-    update: {},
-    create: {
-      productId: packageProduct.id,
-      name: "Size",
-      value: "Grand",
-      priceAdjustmentCents: 1800,
-    },
-  });
-
-  const celebrationProduct = await prisma.product.upsert({
-    where: {
-      seasonId_sku: { seasonId: season.id, sku: "CELEBRATE-BOX" },
-    },
-    update: {},
-    create: {
-      seasonId: season.id,
-      sku: "CELEBRATE-BOX",
-      name: "The Celebration Box",
-      description: "A bright collection of sweet and savory favorites for a joyful Purim.",
-      category: "Celebration",
-      kind: ProductKind.PACKAGE,
-      priceCents: 7200,
-      isFinishedPackage: true,
-    },
-  });
-
-  const petiteProduct = await prisma.product.upsert({
-    where: {
-      seasonId_sku: { seasonId: season.id, sku: "PETITE-JOY" },
-    },
-    update: {},
-    create: {
-      seasonId: season.id,
-      sku: "PETITE-JOY",
-      name: "Petite Joy",
-      description: "A compact Purim treat with all the warmth of our signature collection.",
-      category: "Under $50",
-      kind: ProductKind.PACKAGE,
-      priceCents: 3600,
-      isFinishedPackage: true,
-    },
-  });
-
-  const addOn = await prisma.product.upsert({
-    where: {
-      seasonId_sku: { seasonId: season.id, sku: "ADD-CHOC" },
-    },
-    update: {},
-    create: {
-      seasonId: season.id,
-      sku: "ADD-CHOC",
-      name: "Chocolate Add-on",
-      kind: ProductKind.ADD_ON,
-      priceCents: 900,
-    },
-  });
-
-  await prisma.productAllowedAddOn.upsert({
-    where: {
-      productId_addOnId: { productId: packageProduct.id, addOnId: addOn.id },
-    },
-    update: {},
-    create: { productId: packageProduct.id, addOnId: addOn.id },
-  });
-
-  await prisma.inventoryItem.upsert({
-    where: { productId: packageProduct.id },
-    update: {},
-    create: {
-      targetKind: "PRODUCT",
-      productId: packageProduct.id,
-      onHand: 100,
-    },
-  });
-
-  await prisma.inventoryItem.upsert({
-    where: { productId: celebrationProduct.id },
-    update: {},
-    create: {
-      targetKind: "PRODUCT",
-      productId: celebrationProduct.id,
-      onHand: 40,
-    },
-  });
-
-  await prisma.inventoryItem.upsert({
-    where: { productId: petiteProduct.id },
-    update: {},
-    create: {
-      targetKind: "PRODUCT",
-      productId: petiteProduct.id,
-      onHand: 0,
-    },
-  });
-
-  await prisma.inventoryItem.upsert({
-    where: { addOnId: addOn.id },
-    update: {},
-    create: {
-      targetKind: "ADD_ON",
-      addOnId: addOn.id,
-      onHand: 100,
-    },
-  });
-
-  await prisma.fulfillmentMethod.upsert({
-    where: {
-      seasonId_code: { seasonId: season.id, code: "DELIVERY" },
-    },
-    update: { isActive: false },
-    create: {
-      seasonId: season.id,
-      code: "DELIVERY",
-      displayName: "Local delivery",
-      isActive: false,
-    },
-  });
-
-  for (const [sortOrder, fulfillmentMethod] of [
-    { code: "BULK_DELIVERY", displayName: "Bulk delivery", requiresAddress: true },
-    {
-      code: "PACKAGE_DELIVERY",
-      displayName: "Per-package delivery",
-      requiresAddress: true,
-    },
-    { code: "SHIPPING", displayName: "Shipping (estimated rate)", requiresAddress: true },
-    { code: "PICKUP", displayName: "Pickup", requiresAddress: false, isPickup: true },
-  ].entries()) {
-    await prisma.fulfillmentMethod.upsert({
-      where: {
-        seasonId_code: { seasonId: season.id, code: fulfillmentMethod.code },
-      },
-      update: {
-        displayName: fulfillmentMethod.displayName,
-        requiresAddress: fulfillmentMethod.requiresAddress,
-        isPickup: fulfillmentMethod.isPickup ?? false,
-        sortOrder,
-      },
-      create: {
-        seasonId: season.id,
-        code: fulfillmentMethod.code,
-        displayName: fulfillmentMethod.displayName,
-        requiresAddress: fulfillmentMethod.requiresAddress,
-        isPickup: fulfillmentMethod.isPickup ?? false,
-        isShipping: fulfillmentMethod.code === "SHIPPING",
-        sortOrder,
-      },
-    });
+  if (customer.id !== linked.id) {
+    throw new Error("Customer identity linking failed: seed created a duplicate customer");
   }
 
-  await prisma.appSetting.upsert({
-    where: { key: "purim-delivery-days" },
-    update: {},
-    create: {
-      key: "purim-delivery-days",
-      value: ["Purim eve", "Purim day"],
-    },
+  // P4: dev-mode sign-in credential + one saved recipient so the account area
+  // and builder address book have data on a fresh DB.
+  await db.customer.update({
+    where: { id: linked.id },
+    data: { passwordHash: hashPassword("customer-demo-1234") },
   });
-
-  await prisma.packageType.upsert({
-    where: {
-      seasonId_name: { seasonId: season.id, name: "Standard gift carton" },
-    },
-    update: {},
-    create: {
-      seasonId: season.id,
-      name: "Standard gift carton",
-      innerWidthMm: 320,
-      innerHeightMm: 150,
-      innerDepthMm: 240,
-      maxWeightGrams: 3000,
-    },
-  });
-
-  await prisma.pickupLocation.upsert({
-    where: {
-      seasonId_name: { seasonId: season.id, name: "Tomchei Shabbos Center" },
-    },
-    update: {},
-    create: {
-      seasonId: season.id,
-      name: "Tomchei Shabbos Center",
-      address: {
-        line1: "1 Community Way",
-        city: "Lakewood",
-        region: "NJ",
-        postalCode: "08701",
-      },
-      instructions: "Use the side entrance.",
-    },
-  });
-
-  const archivedSeason = await prisma.season.upsert({
-    where: { year: 2026 },
-    update: { status: SeasonStatus.CLOSED },
-    create: {
-      name: "Purim 2026",
-      year: 2026,
-      status: SeasonStatus.CLOSED,
-    },
-  });
-
-  await prisma.product.upsert({
-    where: {
-      seasonId_sku: { seasonId: archivedSeason.id, sku: "2026-CLASSIC" },
-    },
-    update: {},
-    create: {
-      seasonId: archivedSeason.id,
-      sku: "2026-CLASSIC",
-      name: "The 2026 Classic",
-      description: "A favorite from the 2026 Purim collection.",
-      category: "Archive",
-      kind: ProductKind.PACKAGE,
-      priceCents: 5000,
-      tracksInventory: false,
-      isFinishedPackage: true,
-    },
-  });
-
-  const customer = await prisma.customer.upsert({
-    where: { emailNormalized: "seed.customer@example.test" },
-    update: {},
-    create: {
-      displayName: "Seed Customer",
-      email: "seed.customer@example.test",
-      emailNormalized: "seed.customer@example.test",
-      phone: "(732) 555-0100",
-      phoneNormalized: "+17325550100",
-    },
-  });
-
-  await prisma.customerAccount.upsert({
-    where: { clerkUserId: "seed_customer" },
-    update: { customerId: customer.id },
-    create: {
-      clerkUserId: "seed_customer",
-      email: "seed.customer@example.test",
-      customerId: customer.id,
-    },
-  });
-
-  const otherCustomer = await prisma.customer.upsert({
-    where: { emailNormalized: "other.customer@example.test" },
-    update: {},
-    create: {
-      displayName: "Other Customer",
-      email: "other.customer@example.test",
-      emailNormalized: "other.customer@example.test",
-    },
-  });
-  await prisma.customerAccount.upsert({
-    where: { clerkUserId: "other_customer" },
-    update: { customerId: otherCustomer.id },
-    create: {
-      clerkUserId: "other_customer",
-      email: "other.customer@example.test",
-      customerId: otherCustomer.id,
-    },
-  });
-
-  await prisma.customerAddress.upsert({
+  const seededAddress = {
+    recipient: "Rivka Friedman",
+    line1: "12 Main St",
+    city: "Lakewood",
+    state: "NJ",
+    zip: "08701",
+  };
+  await db.customerAddress.upsert({
     where: {
       customerId_normalizedKey: {
-        customerId: customer.id,
-        normalizedKey: "10-main-st|lakewood|nj|08701|us",
+        customerId: linked.id,
+        normalizedKey: normalizedAddressKey(seededAddress),
       },
     },
     update: {},
+    create: { customerId: linked.id, normalizedKey: normalizedAddressKey(seededAddress), ...seededAddress },
+  });
+
+  await seedDomainCore(linked.id);
+
+  const counts = {
+    settings: await db.setting.count(),
+    customers: await db.customer.count(),
+    fixtures: await db.concurrencyFixture.count(),
+    seasons: await db.season.count(),
+    products: await db.product.count(),
+    orders: await db.order.count(),
+    packages: await db.package.count(),
+  };
+  console.log("Seed complete:", counts);
+}
+
+// P2 seed: one open season with a small catalog, and one finalized order so
+// the grouping engine, order numbering, and package audit all run end to end.
+async function seedDomainCore(customerId: string) {
+  const season = await db.season.upsert({
+    where: { name: "Purim 2026" },
+    update: {},
+    create: { name: "Purim 2026", status: "OPEN" },
+  });
+
+  const delivery = await db.fulfillmentMethod.upsert({
+    where: { code: "local_delivery" },
+    update: { kind: "BULK_DELIVERY" },
+    create: { code: "local_delivery", name: "Local Delivery", kind: "BULK_DELIVERY", sortOrder: 1 },
+  });
+  await db.fulfillmentMethod.upsert({
+    where: { code: "per_package_delivery" },
+    update: { kind: "PER_PACKAGE_DELIVERY" },
     create: {
-      customerId: customer.id,
-      label: "Home",
-      recipientName: "Seed Customer",
-      line1: "10 Main St",
-      city: "Lakewood",
-      region: "NJ",
-      postalCode: "08701",
-      normalizedKey: "10-main-st|lakewood|nj|08701|us",
+      code: "per_package_delivery",
+      name: "Purim-Day Delivery",
+      kind: "PER_PACKAGE_DELIVERY",
+      sortOrder: 2,
+    },
+  });
+  await db.fulfillmentMethod.upsert({
+    where: { code: "pickup" },
+    update: { kind: "PICKUP" },
+    create: { code: "pickup", name: "Pickup", kind: "PICKUP", sortOrder: 3 },
+  });
+  await db.fulfillmentMethod.upsert({
+    where: { code: "shipping" },
+    update: { kind: "SHIPPING" },
+    create: { code: "shipping", name: "Shipping", kind: "SHIPPING", sortOrder: 4 },
+  });
+
+  // P8: shipment boxes the bin-packer plans carrier parcels against (R-081).
+  const shipmentBoxes = [
+    { name: "Small shipper", lengthCm: 35, widthCm: 35, heightCm: 30, weightGrams: 250 },
+    { name: "Medium shipper", lengthCm: 45, widthCm: 45, heightCm: 40, weightGrams: 400 },
+    { name: "Large shipper", lengthCm: 60, widthCm: 50, heightCm: 45, weightGrams: 600 },
+  ];
+  for (const box of shipmentBoxes) {
+    await db.shipmentBox.upsert({ where: { name: box.name }, update: {}, create: box });
+  }
+
+  const classicBasket = await db.product.upsert({
+    where: { seasonId_slug: { seasonId: season.id, slug: "classic-basket" } },
+    update: { category: "Baskets" },
+    create: {
+      seasonId: season.id,
+      name: "Classic Basket",
+      slug: "classic-basket",
+      category: "Baskets",
+      description: "Our signature basket: wine, hamantaschen, fruit, and chocolates.",
+      basePriceCents: 3600,
+      widthCm: 30,
+      lengthCm: 30,
+      heightCm: 25,
+      weightGrams: 1500,
+      trackInventory: true,
+      options: {
+        create: { name: "Wine upgrade", priceAdjustmentCents: 1800 },
+      },
     },
   });
 
-  await prisma.order.upsert({
-    where: { draftReference: "D-00000001" },
+  await seedStorefrontCatalog(season.id);
+
+  const wineAddOn = await db.addOn.upsert({
+    where: { seasonId_name: { seasonId: season.id, name: "Extra hamantaschen" } },
     update: {},
     create: {
       seasonId: season.id,
-      customerId: customer.id,
-      status: OrderStatus.DRAFT,
-      draftReference: "D-00000001",
-      subtotalCents: packageProduct.priceCents,
-      totalCents: packageProduct.priceCents,
-      lines: {
-        create: {
-          productId: packageProduct.id,
-          productNameSnapshot: packageProduct.name,
-          skuSnapshot: packageProduct.sku,
-          unitPriceCentsSnapshot: packageProduct.priceCents,
-          quantity: 1,
-        },
-      },
+      name: "Extra hamantaschen",
+      priceCents: 500,
+      trackInventory: true,
+      restrictions: { create: { productId: classicBasket.id } },
     },
   });
 
-  if (process.env.SEED_DEMO_STAFF === "true") {
-    await prisma.staffUser.upsert({
-      where: { email: "manager@example.test" },
+  await db.inventoryItem.upsert({
+    where: { productId: classicBasket.id },
+    update: {},
+    create: { productId: classicBasket.id, quantityOnHand: 100 },
+  });
+  await db.inventoryItem.upsert({
+    where: { addOnId: wineAddOn.id },
+    update: {},
+    create: { addOnId: wineAddOn.id, quantityOnHand: 200 },
+  });
+
+  const existingOrder = await db.order.findFirst({ where: { seasonId: season.id } });
+  if (existingOrder) return;
+
+  const order = await db.order.create({
+    data: {
+      seasonId: season.id,
+      customerId,
+      draftReference: newDraftReference(),
+      totalCents: 7200,
+      lines: {
+        create: [1, 2].map(() => ({
+          productId: classicBasket.id,
+          unitPriceCents: 3600,
+          recipientName: "Rivka Friedman",
+          addressLine1: "12 Main St",
+          city: "Lakewood",
+          state: "NJ",
+          zip: "08701",
+          fulfillmentMethodId: delivery.id,
+          greeting: "A freilichen Purim!",
+        })),
+      },
+    },
+  });
+  const finalized = await finalizeOrder(order.id);
+  console.log(
+    `Seed order ${finalized.draftReference} finalized as #${finalized.orderNumber} (wire: ${wireFormat(finalized.draftReference)})`
+  );
+}
+
+// P3 seed: categories + a sold-out product for the storefront, and one closed
+// past season so the archive has something to browse.
+async function seedStorefrontCatalog(currentSeasonId: string) {
+  const catalog: {
+    slug: string;
+    name: string;
+    category: string;
+    description: string;
+    basePriceCents: number;
+    trackInventory?: boolean;
+    soldOut?: boolean;
+  }[] = [
+    { slug: "deluxe-basket", name: "Deluxe Basket", category: "Baskets", description: "The Classic, upgraded: premium wine, artisan chocolate, and a keepsake tray.", basePriceCents: 7200 },
+    { slug: "wine-duo", name: "Wine Duo", category: "Wine", description: "Two bottles of kosher wine in a gift sleeve.", basePriceCents: 5400 },
+    { slug: "kids-treat-box", name: "Kids Treat Box", category: "Kids", description: "Nosh, groggers, and a Purim mask — sized for little hands.", basePriceCents: 1800 },
+    { slug: "executive-basket", name: "Executive Basket", category: "Baskets", description: "Our largest arrangement. Limited quantity each season.", basePriceCents: 12000, trackInventory: true, soldOut: true },
+  ];
+
+  for (const item of catalog) {
+    const product = await db.product.upsert({
+      where: { seasonId_slug: { seasonId: currentSeasonId, slug: item.slug } },
       update: {},
       create: {
-        clerkUserId: "seed_manager",
-        email: "manager@example.test",
-        displayName: "Demo Manager",
-        role: StaffRole.MANAGER,
-        status: StaffStatus.ACTIVE,
-        confirmedAt: new Date(),
+        seasonId: currentSeasonId,
+        name: item.name,
+        slug: item.slug,
+        category: item.category,
+        description: item.description,
+        basePriceCents: item.basePriceCents,
+        trackInventory: item.trackInventory ?? false,
       },
+    });
+    if (item.trackInventory) {
+      await db.inventoryItem.upsert({
+        where: { productId: product.id },
+        update: {},
+        create: { productId: product.id, quantityOnHand: item.soldOut ? 0 : 50 },
+      });
+    }
+  }
+
+  const pastSeason = await db.season.upsert({
+    where: { name: "Purim 2025" },
+    update: {},
+    create: { name: "Purim 2025", status: "CLOSED" },
+  });
+  const pastCatalog = [
+    { slug: "classic-basket-2025", name: "Classic Basket 2025", category: "Baskets", basePriceCents: 3400 },
+    { slug: "purim-wine-box", name: "Purim Wine Box", category: "Wine", basePriceCents: 5000 },
+  ];
+  for (const item of pastCatalog) {
+    await db.product.upsert({
+      where: { seasonId_slug: { seasonId: pastSeason.id, slug: item.slug } },
+      update: {},
+      create: { seasonId: pastSeason.id, ...item, description: "From the 2025 collection." },
     });
   }
 }
 
-seed()
-  .then(() => prisma.$disconnect())
-  .catch(async (error: unknown) => {
+main()
+  .catch((error) => {
     console.error(error);
-    await prisma.$disconnect();
     process.exit(1);
-  });
+  })
+  .finally(() => db.$disconnect());

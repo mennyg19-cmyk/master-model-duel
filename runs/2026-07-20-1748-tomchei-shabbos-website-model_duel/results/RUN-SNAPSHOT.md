@@ -1,26 +1,24 @@
 # Run snapshot — `2026-07-20-1748-tomchei-shabbos-website-model_duel`
 
-Updated for GitHub/mobile tracking (orchestrator commits after each gate).
-
-**UTC snapshot:** 2026-07-21T09:05:00Z (approx)
+**UTC snapshot:** 2026-07-21T09:45:00Z (approx)
 
 ## Status
 
 | Item | Value |
 |---|---|
-| Test | **5** — residual aggregate |
-| Scoreboard | arm-01 **45.0**/100 · arm-02 **47.0**/100 |
+| Test | **6** — detect phase |
+| Scoreboard | arm-01 **57.0**/100 · arm-02 **59.5**/100 |
 
-## Test 5 residual panel — 8/8 ✓
+## Test 6 setup
 
-| Arm | Specialists | Totals |
-|---|---|---|
-| arm-01 | security 0H·4M · quality 0H·3M · rules 0H·1M · clean-code **3H**·6M | **3 blockers** (clean-code High) |
-| arm-02 | security 0H·5M · quality 0H·1M · rules 0H·1M · clean-code **1H**·3M | **1 blocker** (clean-code High) |
+| Item | Value |
+|---|---|
+| Headline winner (clone source) | **arm-02** (59.5 vs 57.0; Test 3 not run) |
+| Tree | Identical cloned winner + 5 seeded bugs (both arms) |
+| Seeds | B1–B5 (ledger in `.scratch/BUG-LEDGER.md`, gitignored) |
 
 ## In flight
 
-- Residual aggregate **1/2**: [arm-01 ✓](180ce7ca-24fd-4fbb-a9d9-f6ad315f20c9) (3B·14M·25m) · [arm-02](4c39ba96-9f68-43db-a2fb-ecefe5d845e8)
-- Then score Test 5 /15
+- Detect: arm-01 · arm-02
 
-See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)
+**Next:** grade detect → vague fix → score /15 → FINAL-REPORT

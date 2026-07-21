@@ -1,0 +1,10 @@
+order_number,order_date,customer_name,customer_email,customer_phone,product_name,product_price,quantity,recipient_name,address,city,state,zip,method,greeting
+101,2025-03-10,Chaim Gold,chaim.gold@example.com,732-555-0101,Legacy Classic Basket,34.00,1,Rivka Friedman,12 Main Street,Lakewood,NJ,08701,delivery,"Happy Purim, from the Golds"
+101,2025-03-10,Chaim Gold,CHAIM.GOLD@example.com,(732) 555-0101,Legacy Wine Box,50.00,2,Moshe Katz,45 Oak Ave,Lakewood,New Jersey,08701,delivery,A freilichen Purim
+102,2025-03-11,Sara Blum,sara@example.com,732-555-0102,Legacy Classic Basket,34.00,1,"Family ""Blum""",7 Cedar Ln,Lakewood,NJ,8701,pickup,
+,2025-03-11,Devorah Weiss,devorah.weiss@example.com,,Legacy Kids Box,18.00,1,Leah Weiss,9 Pine St,Lakewood,NJ,08701,purim day,With love
+102,2025-03-12,Yanky Roth,yanky.roth@example.com,732-555-0103,Legacy Wine Box,50.00,1,Yanky Roth,88 Elm Street Apt 2,Toms River,NJ,08753,ship,Enjoy!
+103,2025-03-12,S. Blum,,7325550102,Legacy Deluxe Basket,72.00,1,Sara Blum,7 Cedar Lane,Lakewood,NJ,08701,delivery,
+104,2025-03-13,Broken Row,not-an-email,,,"",1,Nobody,1 Nowhere,Lakewood,NJ,08701,delivery,
+105,2025-03-13,Malky Stein,malky@example.com,732-555-0104,Legacy Classic Basket,thirty,1,Malky Stein,3 Birch Ct,Lakewood,NJ,08701,delivery,
+106,2025-03-14,Rina Katz,rina.katz@example.com,,Legacy Classic Basket,34.00,1,Bubby Katz,Corner house near shul,Lakewood,NJ,08701,delivery,Love you Bubby

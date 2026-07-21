@@ -1,183 +1,140 @@
-# Tomchei Shabbos Purim Project
+# Tomchei Shabbos Mishloach Manos — platform
 
-P1 provides the deployable application shell, PostgreSQL persistence, identity
-boundaries, staff authorization, first-run bootstrap, staff tooling, and audit
-trail. P2 adds the schema-first domain core for seasons, catalog, customers,
-orders, packages, payments, shipping records, inventory, and assembly.
-P3 adds the public marketing site, current and archived catalogs, newsletter
-preferences, catalog and media administration, and storefront settings.
-P4 adds the cart-first order builder, saved-recipient workflow, protected
-authenticated and guest drafts, and customer account pages.
-P5 adds recipient-level fulfillment, greeting capture, hosted Stripe Checkout,
-signed payment webhooks, offline staff payments, and final order commitment.
-P6 adds the permission-aware operations dashboard, Today queue, bounded order
-and customer directories, order money actions, shared-builder POS, staged CSV
-imports, audit views, and live settings.
-P7 materializes finalized orders into physical packages, adds the staff
-fulfillment board, and persists idempotent nightly and targeted reprint PDFs.
-P8 adds Shippo rate shopping, margin capture, shipment planning, labels, address
-validation, and tracking. P9 adds delivery routes, scoped driver magic links,
-confirmed map reroutes, pickup operations, and bulk scheduling.
-P10 adds forward replacement chains, reviewed customer and staff repeats,
-bounded bulk repeats, a new-season cloning wizard, and scheduled status changes.
-P11 adds Resend-backed campaigns, preference lists, configurable transactional
-templates, a retrying message outbox, authenticated sweep/purge crons, and test capture.
+Greenfield rebuild. Phase P1: foundation, identity, roles, permissions, staff tooling.
 
-## Local development
+## Stack
 
-1. Copy `.env.example` to `.env` and set `DATABASE_URL`.
-2. Run `npm run db:deploy` and `npm run db:seed`.
-3. Run `npm run dev -- -p 3101`.
-4. Open `/setup` once to create the first manager, then use `/admin`.
+Next.js (App Router) + TypeScript, Tailwind v4, Prisma + PostgreSQL, Zod env validation.
+Route groups: `(storefront)`, `(admin)`, `(driver)`.
 
-Clerk activates when both Clerk environment variables are present. Without
-them, non-production builds use the local identity adapter for smoke testing.
+## Run locally
 
-## Quality gates
+```
+npm install
+npm run db:start        # embedded Postgres on 127.0.0.1:4102 (keep running)
+npm run db:migrate      # apply migrations
+npm run db:seed         # baseline reference data
+npm run dev             # web app on http://127.0.0.1:3102
+```
 
-- `npm run ci`
-- `npm run build`
-- `npm run smoke:concurrency`
-- `npm run smoke:p7`
-- `npm run smoke:p8`
-- `npm run smoke:p9`
-- `npm run smoke:p10`
-- `npm run smoke:p11`
-- `npm run smoke:p12`
+First visit on an empty database: open `/setup` to create the first manager. After that,
+setup locks and staff sign in at `/login`.
 
-The project uses one pattern per concern: server components for reads, route
-handlers for mutations, Prisma for persistence, Tailwind tokens for styling,
-and native `node:test` through `tsx` for unit tests.
+## Auth modes
 
-## P1 routes
+`AUTH_MODE=dev` (default): email/password staff login with DB-backed sessions. Sessions
+die immediately on account revocation.
 
-- `/` branded foundation page
-- `/setup` one-time manager bootstrap
-- `/admin` permission-gated operations shell
-- `/admin/staff` staff, role, override, revocation, and impersonation tooling
-- `/driver` isolated driver route group
-- `/api/health` environment and database health
+`AUTH_MODE=clerk`: Clerk middleware takes over sign-in; requires the two Clerk keys in
+`.env`. Staff/customer records link to Clerk identities via `clerkUserId`. No Clerk keys
+were available in this environment, so dev mode is the tested path.
 
-## P2 domain core
+## Payments
 
-- Package grouping uses recipient, normalized address, fulfillment method, and
-  greeting as its stable key.
-- Order finalization claims per-season sequential numbers in serializable
-  transactions and retries serialization conflicts.
-- Inventory reservation uses one guarded database update, so the final unit
-  cannot be claimed twice.
-- Package stage changes use optimistic versions and write package-level audits.
-- BOM and assembly-batch records are schema-only; no P2 business UI is exposed.
+Stripe hosted checkout with immediate capture. Without `STRIPE_SECRET_KEY` the gateway runs
+in mock mode: `/dev/stripe-checkout` stands in for Stripe's page and posts signed events
+through the real `/api/webhooks/stripe` route, so signatures, idempotency, amount-safety
+auto-refunds, and refund sync run the same code as production. Set `STRIPE_SECRET_KEY` and
+`STRIPE_WEBHOOK_SECRET` in `.env` to go live; the mock page then 404s.
 
-## P3 storefront and catalog
+## Fulfillment & printing
 
-- `/`, `/catalog`, `/catalog/[productId]`, and `/collections` provide the
-  responsive, season-aware storefront.
-- `/order` enforces the current season and configured delivery ZIPs on the
-  server; the cart builder remains intentionally deferred to P4.
-- `/newsletter/preferences` uses signed 30-day HMAC links.
-- `/admin/catalog`, `/admin/media`, and `/admin/settings` provide catalog CRUD,
-  add-on/replacement shells, restricted media uploads, and live store settings.
-- Production media uses Vercel Blob through `BLOB_READ_WRITE_TOKEN`. Local smoke
-  mode stores validated image payloads in the media table when test auth is on.
+Finalized orders explode into packages (grouped by recipient/address/method/greeting).
+Staff work them on `/admin/packages` (split, regroup, stage advance) and `/admin/fulfillment`
+(per-channel counts, bulk stage moves, print production). The nightly print batch is
+idempotent per day and writes one PDF per filing group (= fulfillment method code) for
+slips, labels, and greeting cards, plus a packing slip per order. PDFs come from the
+dependency-free writer in `lib/pdf.ts`; printing never changes a package's stage.
 
-## P4 cart and customer account
+## Shipping (Shippo + margin engine)
 
-- `/order` provides inventory-aware product cards, options, restricted add-ons,
-  autosave, three-way recipient assignment, desktop cart sidebar, and mobile FAB.
-- New recipients are validated and deduplicated into one customer address book;
-  customer edits enforce ownership and staff edits write an audit event.
-- Authenticated drafts are scoped to the linked customer. Guest drafts use an
-  expiring random access token and return 404 without the matching token.
-- `/account`, `/account/orders/[orderId]`, `/account/profile`, and
-  `/account/addresses` expose ownership-enforced customer account views.
-- P4 stops before payment capture and fulfillment commitment.
+Shipping packages get carrier labels through Shippo (`lib/shipping/`). Without
+`SHIPPO_API_TOKEN` the wrapper runs in mock mode with deterministic fixture
+rates (same idea as the Stripe mock); live mode also requires the org's FedEx
+and UPS carrier-account ids. Pricing rule: quote every eligible carrier
+(+USPS for light parcels), charge the customer the highest carrier's best
+rate at checkout, buy the label on the cheapest, and record the spread on the
+`Shipment` row. Contents are bin-packed into the configured shipment boxes.
+Staff buy/void labels and refresh tracking from `/admin/packages` or the
+order detail page; a label stays voidable until the package is marked sent.
 
-## P5 checkout and payments
+## Seasons & repeat orders
 
-- `/checkout/[draftId]` collects fulfillment, manager-configured delivery day,
-  default and recipient greetings, and an optional donation.
-- Bulk delivery charges once per destination; per-package delivery charges per
-  recipient and cannot bypass the configured delivery-ZIP list.
-- `/api/checkout/stripe` revalidates live prices and stock, then redirects to
-  hosted Stripe Checkout with automatic capture. Local test auth uses the
-  production-disabled `/checkout/test` stand-in when Stripe keys are absent.
-- Signed Stripe webhooks are idempotent, commit stock once, assign the seasonal
-  order number, trigger confirmation once, synchronize refunds, and safety-refund
-  a charge when the paid order became stale.
-- Staff with `payments:manage` may post and void cash/check payments with audit
-  entries. Public checkout accepts Stripe only.
-- Live Shippo rates remain deferred to P8; P5 stores deterministic placeholder
-  rate snapshots so later fulfillment changes do not alter the paid total.
+One season sells at a time (Settings → Orders owns the switch). The new-season
+wizard copies a prior catalog and links each old product to its copy, feeding
+the replacement chains (Catalog → "Replaced by", cross-season allowed) that
+repeat orders resolve through. Customers repeat from Account → Orders through a
+review page that confirms replacements and recipients (discontinued items
+default to the closest-priced product but must be picked or removed); staff
+repeat single orders into POS drafts from the order detail page and bulk-repeat
+a whole season from Customers. `opensAt`/`closesAt` schedules are fired once by
+the `/api/cron/season-flip` cron and then cleared.
 
-## P6 admin operations
+## Email & notifications
 
-- `/admin`, `/admin/today`, and `/admin/orders` provide bounded operational
-  queues, KPIs, filters, pagination, bulk repeat, detail, refund, and audit.
-- `/admin/pos` reuses the cart-first builder with customer find-or-create and
-  staff-attributed cash/check payment.
-- `/admin/customers` provides a bounded directory, address book, and order
-  history. `/admin/imports` stages customer/product CSVs and blocks atomic
-  commits until duplicates and invalid rows are corrected.
-- `/admin/settings` persists Orders, Shipping, Email, and Developer values.
-- `npm run smoke:p6` verifies S1-S4, including 1,000 orders and 5,000 packages.
+All outgoing email/SMS goes through one outbox (`Notification` rows). Business
+code only ever enqueues (idempotent by `dedupeKey`); the sweeper cron
+(`/api/cron/notification-sweeper`) delivers with retry/backoff and writes an
+attempt trail. Providers are isolated wrappers: Resend (`lib/email/provider.ts`,
+mock without `RESEND_API_KEY`) and Twilio-class SMS (`lib/sms/provider.ts`).
+`EMAIL_TEST_MODE=true` captures everything instead of contacting providers.
 
-## P7 package fulfillment
+The admin Email hub (`/admin/email`) manages campaigns (draft → preview →
+test-send → send, reruns never duplicate), lists, subscribers, and triggered
+templates (per-key subject/body overrides + enable switch). Order lifecycle
+emails — confirmation, payment link when unpaid, refund notice — enqueue
+inside the same transactions that finalize orders and book refunds. Settings →
+Email owns sender identity, branding footer, a live test sender, and the log
+retention the purge cron (`/api/cron/email-log-purge`) enforces.
 
-- `/admin/fulfillment` provides channel production summaries, package split and
-  regroup controls, audited per-package and bulk status actions, and print jobs.
-- Finalization materializes packages with the P2 recipient/address/method/greeting
-  key. Regrouped source packages remain stored with their package audit history.
-- Nightly batches are idempotent by date. Each fulfillment-method filing group
-  receives slips, labels, and greeting-card PDFs; each order receives a packing slip.
-- Filing-group and order reprints create isolated artifacts. PDF generation never
-  changes `NEW`, `PRINTED`, `PACKED`, `SENT`, or `PICKED_UP` package stages.
+## Reports, exports, reconciliation (P12)
 
-## P9 delivery and pickup
+`/admin/reports` (permission `reports.view`) has multi-season performance, per-season
+drill-downs, and the shipping-margin reconciliation (charged vs paid per label).
+`/admin/exports` downloads audited CSVs (deliveries, year-end, year metrics, item
+sales, lapsed customers — streamed in pages) and runs Stripe payment reconciliation:
+the matcher compares checkout sessions/intents against the posted payment ledger and
+upserts `PaymentReconFlag` rows on unique references, so reruns (button or the
+`stripe-reconciliation` cron) never duplicate a finding.
 
-- `/admin/delivery` builds Mapbox-geocoded routes, reassigns drivers, confirms
-  nearby shipping reroutes, schedules bulk delivery, and runs pickup/follow-up desks.
-- `/driver/routes/[token]` exposes only one route through a hashed, expiring
-  magic link with optional throttled PIN, Google Maps stop links, and delivered-tap audit.
-- Shipping/delivery switches preserve paid totals and void any unshipped label.
-- Route print views contain the complete stop list and per-stop greeting cards.
-- Pickup readiness is inventory-gated and idempotently notifies customers.
-- Pickup-expiry and payment-reminder cron routes require `CRON_SECRET`.
+## Legacy migration
 
-## P10 seasons and repeat orders
+`/admin/import` → Legacy migration (permission `imports.legacy`). Entity map:
+`order_number` → Order.orderNumber (blank/duplicate numbers repaired sequentially);
+`order_date` → Order.finalizedAt + the "Legacy YYYY" closed season; customer columns →
+Customer (dedupe on email, then normalized phone); `product_name`/`product_price` →
+Product in the legacy season, `replacementId` pointed at the closest-priced active
+product so repeat-order works year one; recipient/address columns → OrderLine
+snapshots + CustomerAddress book entries (dedupe on the normalized key, suspect rows
+land in the address review queue); `method` → FulfillmentMethod by keyword.
 
-- Customer and staff repeat flows stop on a review page until replacements and
-  saved recipients are both confirmed; unmapped products must be chosen or removed.
-- Catalog replacements point only into later seasons and resolve across chains.
-- Bulk repeat creates current-season drafts only when every product and recipient
-  resolves without staff judgment; conflicts remain explicit.
-- The settings wizard clones catalog and operating setup with zero stock, closes
-  the new current season, and maps the prior catalog forward.
-- Manual Open/Closed changes and scheduled flips are audited. The storefront
-  applies due flips lazily; `/api/cron/season-status` provides the bearer-auth sweep.
+Dry-run writes nothing and stores a full report on a `LegacyImportRun` keyed by the
+file hash. Commit runs four staged atomic transactions (catalog → customers →
+addresses → orders); each stage records completion inside its own transaction, so an
+interrupted commit resumes at the first missing stage when the same file is committed
+again.
 
-## P11 email and notifications
+## Test mode & console
 
-- `/admin/email` provides campaign drafts, preference lists, test sends,
-  transactional template overrides, and recent outbox status.
-- Confirmation, payment-link, refund, delivery, pickup, and SMS events use one
-  idempotent transactional outbox with retry history.
-- `/api/cron/message-outbox` claims work with PostgreSQL `SKIP LOCKED`;
-  `/api/cron/message-log-purge` removes eligible logs while retaining outbox and audit rows.
-- Resend is isolated in `src/lib/resend.ts`; test mode records captures without
-  contacting Resend or the configured SMS provider.
+Test mode = no `STRIPE_SECRET_KEY` (mock money) or explicit `TEST_MODE=true`. A banner
+shows on every surface; `/admin/test-console` (managers) can wipe the open season's
+transactional data and reseed a demo order. Outside test mode the console page and its
+API return 404. All six crons are registered in `vercel.json` and bearer-authed with
+`CRON_SECRET`. Scale fixtures: `npm run db:seed-scale` (1k finalized orders / 5k
+packages).
 
-## P12 launch readiness
+## Patterns (one per concern)
 
-- `/admin/reports` provides multi-season KPIs, item and fulfillment drill-downs,
-  package-level shipping margin, five audited streaming CSV datasets, and Stripe
-  reconciliation with durable idempotent findings.
-- Historical JSON imports follow `docs/LEGACY-ENTITY-MAP.md`: dry-run validation,
-  checkpoint resume, deterministic order-number repair, normalized customer and
-  address dedupe, one serializable commit, and a staff review queue.
-- The local-only test console seeds or resets the 1,000-order / 5,000-package
-  dress-rehearsal fixture. Production returns 404 for destructive operations.
-- A persistent TEST MODE banner and guided order, fulfillment, delivery, and
-  reporting tours make environment state and launch procedures visible.
-- `vercel.json` registers season, pickup, payment reminder, outbox, purge, and
-  Stripe reconciliation jobs; every route requires `CRON_SECRET`.
+- Data access: Prisma via `lib/db.ts` singleton.
+- Authorization: `requirePermissionPage` (403 via `forbidden()`) / `requirePermissionApi`.
+- Mutations: route handlers under `app/api/*` + client `fetch` + `router.refresh()`.
+- Validation: Zod schemas at every API boundary.
+- Styling: Tailwind + tokens in `globals.css`, shared primitives in `components/ui/`.
+- Audit: `writeAudit` for every security-relevant mutation.
+
+## Checks
+
+```
+npm run ci                 # lint + typecheck + migration guard + unit tests
+npm run smoke:concurrency  # 10 concurrent versioned updates -> 1 commit, 9 conflicts
+```
