@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { parseCsv } from "@/lib/csv";
 import { normalizePhone } from "@/lib/customers";
@@ -32,6 +31,11 @@ export const LEGACY_HEADERS = [
   "city", "state", "zip", "method", "greeting",
 ] as const;
 
+// ponytail: deliberate ceiling — only the nine spelled-out state names seen in
+// the legacy export are mapped; anything else normalizes to null and the row
+// is review-flagged (never coerced). Upgrade path: swap in a full USPS
+// state-name table (or a geocoder) if imports from other regions appear.
+// Logged as DECISION-P12-7.
 const STATE_NAMES: Record<string, string> = {
   "new jersey": "NJ", "new york": "NY", pennsylvania: "PA", connecticut: "CT",
   maryland: "MD", florida: "FL", california: "CA", illinois: "IL", ohio: "OH",
@@ -110,12 +114,16 @@ function normalizeState(raw: string): string | null {
   return STATE_NAMES[trimmed.toLowerCase()] ?? null;
 }
 
-function mapMethodCode(raw: string): string {
+// Returns null for a method keyword it doesn't recognize — the caller defaults
+// to local_delivery but review-flags the row instead of guessing silently
+// (DECISION-P12-8, same posture as normalizeState).
+function mapMethodCode(raw: string): string | null {
   const lower = raw.toLowerCase();
+  if (lower.includes("deliver") || lower.includes("local")) return "local_delivery";
   if (lower.includes("ship")) return "shipping";
   if (lower.includes("pickup") || lower.includes("pick up")) return "pickup";
   if (lower.includes("purim") || lower.includes("day-of")) return "per_package_delivery";
-  return "local_delivery";
+  return null;
 }
 
 /** Parse + normalize + plan. Pure: writes nothing; DB reads only for merge targets. */
@@ -279,10 +287,15 @@ export async function planLegacyImport(csv: string): Promise<LegacyPlan | { erro
       const state = normalizeState(values.state);
       const zipDigits = values.zip.replace(/\D/g, "");
       const zipValid = /^\d{5}$/.test(zipDigits);
+      const mappedMethod = mapMethodCode(values.method);
+      if (mappedMethod === null) {
+        repairs.push({ line, note: `method "${values.method}" not recognized — defaulted to local delivery, review before relying on it` });
+      }
       let reviewReason: string | null = null;
       if (!state) reviewReason = `state "${values.state}" is not recognizable`;
       else if (!zipValid) reviewReason = `zip "${values.zip}" is not 5 digits`;
       else if (values.address.length < 3 || !/\d/.test(values.address)) reviewReason = `street "${values.address}" has no house number`;
+      else if (mappedMethod === null) reviewReason = `method "${values.method}" is not recognizable — defaulted to local delivery`;
 
       const recipient = (values.recipient_name || values.customer_name || "Recipient").replace(/\s+/g, " ").trim();
       const safeState = state ?? values.state.slice(0, 2).toUpperCase().padEnd(2, "X");
@@ -305,7 +318,7 @@ export async function planLegacyImport(csv: string): Promise<LegacyPlan | { erro
         city: addressInput.city,
         state: safeState,
         zip: safeZip,
-        methodCode: mapMethodCode(values.method),
+        methodCode: mappedMethod ?? "local_delivery",
         greeting: values.greeting,
       });
     }
@@ -579,9 +592,4 @@ export async function commitLegacyImport(
 
   await db.legacyImportRun.update({ where: { id: runId }, data: { status: "COMPLETED" } });
   return { runId, completedStages: completed, status: "COMPLETED" };
-}
-
-/** Idempotent Prisma unique-violation check shared by callers. */
-export function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }

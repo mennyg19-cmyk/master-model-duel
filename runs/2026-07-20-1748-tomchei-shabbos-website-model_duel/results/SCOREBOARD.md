@@ -5,7 +5,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 | Arm | 1a /7 | 1b /8 | 2 /15 | 3 /20 | 4 /20 | 5 /15 | 6 /15 | Total /100 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | arm-01 | 5 | 8 | 14 | | 18.0 | | | 45.0 |
-| arm-02 | 7 | 8 | 14 | | 16.5 | | | 45.5 |
+| arm-02 | 7 | 8 | 14 | | 18.0 | | | 47.0 |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -45,6 +45,7 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **P9 arm-02:** **1.5/20** → **13.5/20** ([fix notes](arms/arm-02/results/P9-FIX-NOTES.md); B1–B6 + M1–M6/M10/M15; S1–S5 47/47, CI 66/66)
 - **P10 arm-02:** **1.5/20** → **15.0/20** ([fix notes](arms/arm-02/results/P10-FIX-NOTES.md); B1 + M1–M4; S1–S3 22/22, CI 71/71)
 - **P11 arm-02:** **1.5/20** → **16.5/20** ([fix notes](arms/arm-02/results/P11-FIX-NOTES.md); S-M1–M3 + Q-M1–M3 + R-H1/M1–M3; S1–S5 28/28, CI 74/74)
+- **P12 arm-02:** **1.5/20** → **18.0/20** ([fix notes](arms/arm-02/results/P12-FIX-NOTES.md); S-M1 + Q-M3 + C-M5/H1 + R-M2/M3 + C-M2; S1–S5 46/46, CI 77/77) — **Test 4 complete**
 - **P6 arm-01:** **1.5/20** → **9.0/20** ([fix notes](arms/arm-01/results/P6-FIX-NOTES.md); blocker + priority majors; S1–S4 pass)
 - **P7 arm-01:** **1.5/20** → **10.5/20** ([fix notes](arms/arm-01/results/P7-FIX-NOTES.md); B1–B4 + M1–M2; S1–S3 pass)
 - **P8 arm-01:** **1.5/20** → **12.0/20** ([fix notes](arms/arm-01/results/P8-FIX-NOTES.md); B1–B3 + M1–M6; S1–S3 pass)
@@ -52,7 +53,7 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **P10 arm-01:** **1.5/20** → **15.0/20** ([fix notes](arms/arm-01/results/P10-FIX-NOTES.md); B1 + A-H1/H2/H3 + A-M2/M3/M5/M6/M7; S1–S3 pass)
 - **P11 arm-01:** **1.5/20** → **16.5/20** ([fix notes](arms/arm-01/results/P11-FIX-NOTES.md); A-H1–A-H6 + A-M1/M2/M3/M5/M6/M7; S1–S5 pass)
 - **P12 arm-01:** **1.5/20** → **18.0/20** ([fix notes](arms/arm-01/results/P12-FIX-NOTES.md); B1–B4 + M1/M3/M5–M7/M9–M11; S1–S5 pass) — **Test 4 complete**
-- **Next:** P12 arm-02 review → fix → gate (final) · arm-01 Test 4 complete — [PHASE-P12-EXPECTED.md](../shared/phases/PHASE-P12-EXPECTED.md)
+- **Next:** Tests 5–6 (both arms Test 4 complete) — per `protocol/EXPERIMENT-PLAN.md`
 
 ## Test 2 notes
 

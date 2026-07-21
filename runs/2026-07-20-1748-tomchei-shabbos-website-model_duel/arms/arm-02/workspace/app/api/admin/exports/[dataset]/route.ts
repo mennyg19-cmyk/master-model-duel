@@ -31,17 +31,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ data
   const generator = exportCsv(dataset, seasonId);
   const encoder = new TextEncoder();
   const staff = gate.staff;
+  // Every download leaves an audit row, even when the client aborts mid-stream
+  // (R-092 / S2 detective control) — an aborted pull already delivered rows.
+  let audited = false;
+  const auditExport = async (outcome: "completed" | "aborted") => {
+    if (audited) return;
+    audited = true;
+    await writeAudit(staff, {
+      action: "export.run",
+      targetType: "ExportDataset",
+      targetId: dataset,
+      detail: { seasonId, rows: rowCount, outcome },
+    });
+  };
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
       const next = await generator.next();
       if (next.done) {
-        // Audit with the real row count once the stream finished (R-092 history).
-        await writeAudit(staff, {
-          action: "export.run",
-          targetType: "ExportDataset",
-          targetId: dataset,
-          detail: { seasonId, rows: rowCount },
-        });
+        await auditExport("completed");
         controller.close();
         return;
       }
@@ -50,6 +57,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ data
     },
     async cancel() {
       await generator.return(undefined);
+      await auditExport("aborted");
     },
   });
 

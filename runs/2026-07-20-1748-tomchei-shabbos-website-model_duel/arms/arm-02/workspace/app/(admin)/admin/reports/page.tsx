@@ -76,7 +76,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
       {drillSeason && drilldown && (
         <Card data-testid="season-drilldown">
-          <CardTitle>{drillSeason.seasonName} â€” drill-down</CardTitle>
+          <CardTitle>{drillSeason.seasonName} — drill-down</CardTitle>
           <div className="grid gap-6 md:grid-cols-2">
             <div>
               <h3 className="text-sm font-semibold mb-2">By fulfillment method</h3>
@@ -172,7 +172,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           <tbody>
             {margin.rows.map((row) => (
               <tr key={row.shipmentId} className="border-b border-border/60">
-                <td className="py-1 pr-2">{row.orderNumber ? `#${row.orderNumber}` : "â€”"}</td>
+                <td className="py-1 pr-2">{row.orderNumber ? `#${row.orderNumber}` : "—"}</td>
                 <td className="py-1 pr-2">{row.recipientName}</td>
                 <td className="py-1 pr-2">{row.carrier} {row.service}</td>
                 <td className="py-1 pr-2">{money(row.chargedCents)}</td>

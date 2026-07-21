@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getCustomerContext } from "@/lib/auth/customer-session";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 import { cartSchema, type Cart, type CartLine } from "@/lib/order-builder/cart";
 import { saveToAddressBook } from "@/lib/addresses/book";
 
@@ -103,10 +104,6 @@ export type AppendResult = { appended: true } | { appended: false; reason: "exis
 
 function cartOf(lines: CartLine[]): Cart {
   return { onOrderRecipient: null, lines };
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 function isSerializationFailure(error: unknown): boolean {

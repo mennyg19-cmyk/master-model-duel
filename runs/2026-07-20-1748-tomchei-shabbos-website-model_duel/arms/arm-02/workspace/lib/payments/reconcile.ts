@@ -37,14 +37,32 @@ export async function runPaymentReconciliation(): Promise<ReconcileSummary> {
     include: { order: { select: { id: true, orderNumber: true, totalCents: true, status: true } } },
   });
 
-  for (const session of sessions) {
-    const intentId = session.paymentIntentId ?? `missing_intent_${session.stripeSessionId}`;
-    const posted = await db.payment.aggregate({
-      where: { orderId: session.orderId, stripePaymentIntentId: intentId, amountCents: { gt: 0 }, state: "POSTED" },
+  // One grouped query replaces a per-session aggregate (5k-scale cron: a
+  // handful of round-trips instead of thousands).
+  const postedBySessionKey = new Map<string, { amountCents: number; count: number }>();
+  if (sessions.length > 0) {
+    const grouped = await db.payment.groupBy({
+      by: ["orderId", "stripePaymentIntentId"],
+      where: {
+        orderId: { in: sessions.map((session) => session.orderId) },
+        amountCents: { gt: 0 },
+        state: "POSTED",
+      },
       _sum: { amountCents: true },
       _count: { _all: true },
     });
-    const postedCents = posted._sum.amountCents ?? 0;
+    for (const row of grouped) {
+      postedBySessionKey.set(`${row.orderId}|${row.stripePaymentIntentId}`, {
+        amountCents: row._sum.amountCents ?? 0,
+        count: row._count._all,
+      });
+    }
+  }
+
+  for (const session of sessions) {
+    const intentId = session.paymentIntentId ?? `missing_intent_${session.stripeSessionId}`;
+    const posted = postedBySessionKey.get(`${session.orderId}|${intentId}`) ?? { amountCents: 0, count: 0 };
+    const postedCents = posted.amountCents;
 
     if (session.status === "refund_failed") {
       findings.push({
@@ -60,7 +78,7 @@ export async function runPaymentReconciliation(): Promise<ReconcileSummary> {
       });
       continue;
     }
-    if (posted._count._all === 0) {
+    if (posted.count === 0) {
       // Stripe took the money, the ledger has no charge row.
       findings.push({
         kind: "orphaned_payment",
@@ -93,6 +111,26 @@ export async function runPaymentReconciliation(): Promise<ReconcileSummary> {
     where: { method: "STRIPE", state: "POSTED", amountCents: { gt: 0 } },
     select: { id: true, orderId: true, amountCents: true, stripePaymentIntentId: true },
   });
+  // Batched backing lookup (was two findFirst calls per payment): fetch every
+  // session/intent that could back one of these ledger rows in two queries.
+  const ledgerIntentIds = stripePayments
+    .map((payment) => payment.stripePaymentIntentId)
+    .filter((id): id is string => id !== null);
+  const backingSessionKeys = new Set<string>();
+  const backingIntentIds = new Set<string>();
+  if (ledgerIntentIds.length > 0) {
+    const backingSessions = await db.stripeCheckoutSession.findMany({
+      where: { paymentIntentId: { in: ledgerIntentIds } },
+      select: { orderId: true, paymentIntentId: true },
+    });
+    for (const row of backingSessions) backingSessionKeys.add(`${row.orderId}|${row.paymentIntentId}`);
+    const backingIntents = await db.stripePaymentIntent.findMany({
+      where: { stripeIntentId: { in: ledgerIntentIds } },
+      select: { stripeIntentId: true },
+    });
+    for (const row of backingIntents) backingIntentIds.add(row.stripeIntentId);
+  }
+
   for (const payment of stripePayments) {
     if (!payment.stripePaymentIntentId) {
       findings.push({
@@ -104,14 +142,8 @@ export async function runPaymentReconciliation(): Promise<ReconcileSummary> {
       continue;
     }
     const backed =
-      (await db.stripeCheckoutSession.findFirst({
-        where: { orderId: payment.orderId, paymentIntentId: payment.stripePaymentIntentId },
-        select: { id: true },
-      })) ??
-      (await db.stripePaymentIntent.findFirst({
-        where: { stripeIntentId: payment.stripePaymentIntentId },
-        select: { id: true },
-      }));
+      backingSessionKeys.has(`${payment.orderId}|${payment.stripePaymentIntentId}`) ||
+      backingIntentIds.has(payment.stripePaymentIntentId);
     if (!backed) {
       findings.push({
         kind: "ledger_only_payment",
@@ -130,8 +162,12 @@ export async function runPaymentReconciliation(): Promise<ReconcileSummary> {
   // Upsert on the unique reference: reruns refresh, never duplicate. A flag a
   // staff member already resolved stays resolved — the finding is historical.
   let newFlags = 0;
+  const existingFlags = findings.length
+    ? await db.paymentReconFlag.findMany({ where: { reference: { in: findings.map((finding) => finding.reference) } } })
+    : [];
+  const existingByReference = new Map(existingFlags.map((flag) => [flag.reference, flag]));
   for (const finding of findings) {
-    const existing = await db.paymentReconFlag.findUnique({ where: { reference: finding.reference } });
+    const existing = existingByReference.get(finding.reference);
     if (!existing) {
       await db.paymentReconFlag.create({
         data: { kind: finding.kind, reference: finding.reference, orderId: finding.orderId, detail: finding.detail },

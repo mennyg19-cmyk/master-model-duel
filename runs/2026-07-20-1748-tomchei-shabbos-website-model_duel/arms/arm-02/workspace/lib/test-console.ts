@@ -5,9 +5,11 @@ import { finalizeOrder } from "@/lib/domain/finalize";
 // Test-environment console actions (R-014, R-103). Destructive by design and
 // therefore ONLY reachable in test mode (the API route enforces isTestMode).
 // Wipe clears every transactional row for the open season — orders, packages,
-// prints, routes, shipments, drafts, notifications — but never touches the
-// catalog, customers, staff, settings, or audit log, so wipe + seed restores
-// a clean test season without rebuilding reference data.
+// prints, routes, shipments, drafts, notifications, this season's recon flags
+// and inventory reservations — but never touches the catalog, customers,
+// staff, settings, audit log, the webhook idempotency ledger, or any other
+// season's rows, so wipe + seed restores a clean test season without
+// rebuilding reference data or erasing cross-season history.
 
 export type WipeCounts = Record<string, number>;
 
@@ -46,14 +48,18 @@ export async function wipeOpenSeason(): Promise<{ seasonName: string; counts: Wi
     record("payments", await tx.payment.deleteMany({ where: { order: { seasonId } } }));
     record("checkoutSessions", await tx.stripeCheckoutSession.deleteMany({ where: { order: { seasonId } } }));
     record("paymentIntents", await tx.stripePaymentIntent.deleteMany({ where: { order: { seasonId } } }));
-    record("webhookEvents", await tx.stripeWebhookEvent.deleteMany({}));
-    record("reconFlags", await tx.paymentReconFlag.deleteMany({}));
+    // StripeWebhookEvent is a global idempotency ledger with no season link —
+    // like the audit log it survives a wipe (new test flows mint new event ids).
+    record("reconFlags", await tx.paymentReconFlag.deleteMany({ where: { orderId: { in: orderIds } } }));
     record("orders", await tx.order.deleteMany({ where: { seasonId } }));
     record("drafts", await tx.orderDraft.deleteMany({ where: { seasonId } }));
     record("bulkSchedules", await tx.bulkDeliverySchedule.deleteMany({ where: { seasonId } }));
-    // Fresh counters: order numbers restart, reservations release.
+    // Fresh counters: order numbers restart, this season's reservations release.
     await tx.season.update({ where: { id: seasonId }, data: { orderCounter: 0 } });
-    await tx.inventoryItem.updateMany({ data: { reserved: 0 } });
+    await tx.inventoryItem.updateMany({
+      where: { OR: [{ product: { seasonId } }, { addOn: { seasonId } }] },
+      data: { reserved: 0 },
+    });
   }, { timeout: 120_000 });
 
   return { seasonName: season.name, counts };
