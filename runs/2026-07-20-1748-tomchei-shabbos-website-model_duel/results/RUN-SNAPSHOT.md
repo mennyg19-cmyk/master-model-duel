@@ -2,14 +2,14 @@
 
 Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
-**UTC snapshot:** 2026-07-21T05:35:00Z (approx)
+**UTC snapshot:** 2026-07-21T05:45:00Z (approx)
 
 ## Status
 
 | Item | Value |
 |---|---|
 | Test | 4 — build with review |
-| Phase | arm-01 **Test 4 complete** · arm-02 **P9 aggregate** |
+| Phase | arm-01 **Test 4 complete** · arm-02 **P9 fix** |
 | Scoreboard | arm-01 **45.0**/100 · arm-02 **41.0**/100 (Test 4: **18.0/20** vs **12.0/20**) |
 
 ## Phase gates
@@ -17,19 +17,16 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 | Arm | Last gated | Next |
 |---|---|---|
 | arm-01 | P12 ✓ (**18.0/20**) | Tests 5–6 after arm-02 finishes Test 4 |
-| arm-02 | P8 ✓ (**12.0/20**) | P9 aggregate → fix → gate (+1.5 → **13.5/20**) |
+| arm-02 | P8 ✓ (**12.0/20**) | P9 fix → gate (+1.5 → **13.5/20**) |
 
 ## In flight
 
-- arm-02 P9 aggregate: [arm-02 P9 aggregate review](3a88d385-1913-4f22-8d8a-3f1c7576dc3b)
+- arm-02 P9: fix pass pending spawn
 
-## P9 review panel (arm-02) — complete
+## P9 aggregate (arm-02)
 
-| Specialist | Findings | Agent |
-|---|---:|---|
-| Security | 14 (0H) | [arm-02 P9 security review](8878c4a1-1a1a-4c66-bb6c-d892dd76c8a2) |
-| Quality | 15 (4H) | [arm-02 P9 quality review](63128f2e-e834-4c04-bf63-4570331713bb) |
-| Rules | 13 (2H) | [arm-02 P9 rules review](f79008f9-2486-4e6d-b7eb-63eed46ab640) |
-| Clean-code | 13 (1H) | [arm-02 P9 clean-code review](157b7b35-d91f-4421-b912-372d16b1e798) |
+[arm-02 P9 aggregate review](3a88d385-1913-4f22-8d8a-3f1c7576dc3b) → **6 blockers · 17 majors · 24 minors · 47 total** in `arms/arm-02/results/AGGREGATE-REVIEW-P9.md`
+
+Blockers: B1 PIN hash non-atomic · B2 pickup ready-before-notify · B3 reroute position race · B4 cron bearer timing · B5 method-switch void outside txn · B6 route-handler boilerplate
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)
