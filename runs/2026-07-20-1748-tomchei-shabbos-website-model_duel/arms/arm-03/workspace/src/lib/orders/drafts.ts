@@ -512,7 +512,7 @@ export async function assignDraftLine(input: {
   });
 }
 
-/** P4 stand-in for checkout success: revoke guest access + clear cookie responsibility to client. */
+/** Clear guest access only after order is PLACED (post-finalize). */
 export async function markGuestDraftSuccess(
   orderId: string,
 ): Promise<Result<{ draftRef: string }>> {
@@ -520,6 +520,20 @@ export async function markGuestDraftSuccess(
   if (!order) return err("not_found", "Draft not found.");
   if (order.customerId) {
     return err("not_guest", "Only guest drafts clear via guest success.");
+  }
+  if (order.status === OrderStatus.DRAFT || order.status === OrderStatus.DISCARDED) {
+    return err(
+      "not_placed",
+      "Guest success requires a finalized (PLACED+) order.",
+    );
+  }
+  if (
+    order.status !== OrderStatus.PLACED &&
+    order.status !== OrderStatus.PAID &&
+    order.status !== OrderStatus.FULFILLING &&
+    order.status !== OrderStatus.COMPLETED
+  ) {
+    return err("status", `Cannot clear guest access from status ${order.status}.`);
   }
   const nextVersion = order.guestTokenVersion + 1;
   await db.order.update({
@@ -534,7 +548,7 @@ export async function markGuestDraftSuccess(
   await db.auditLog.create({
     data: {
       action: AuditAction.DRAFT_GUEST_CLEARED,
-      meta: { orderId, draftRef: order.draftRef },
+      meta: { orderId, draftRef: order.draftRef, status: order.status },
     },
   });
   return ok({ draftRef: order.draftRef });

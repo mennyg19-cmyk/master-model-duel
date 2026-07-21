@@ -29,10 +29,12 @@ export function CartSidebar({
   draft,
   onAssign,
   onRefresh,
+  checkoutMode = "storefront",
 }: {
   draft: DraftState | null;
   onAssign: (lineId: string) => void;
   onRefresh: (draft: DraftState) => void;
+  checkoutMode?: "storefront" | "pos";
 }) {
   async function updateQty(lineId: string, quantity: number) {
     if (!draft) return;
@@ -136,9 +138,18 @@ export function CartSidebar({
           {draft.unassignedCount} line(s) still need a recipient.
         </p>
       ) : (
-        <p className="mt-3 text-xs text-[var(--color-leaf)]" data-testid="all-assigned">
-          All lines assigned. Checkout comes in the next phase.
-        </p>
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-[var(--color-leaf)]" data-testid="all-assigned">
+            All lines assigned.
+          </p>
+          <a
+            href={`/checkout?draft=${encodeURIComponent(draft.draftRef)}${checkoutMode === "pos" ? "&mode=pos" : ""}`}
+            className="inline-flex w-full items-center justify-center rounded bg-[var(--color-leaf)] px-3 py-2 text-sm font-semibold text-white"
+            data-testid="go-checkout"
+          >
+            Continue to checkout
+          </a>
+        </div>
       )}
     </div>
   );

@@ -5,6 +5,8 @@ export const STORE_SETTINGS = {
   shippingRates: "shipping.rates",
   shippingRules: "shipping.rules",
   deliveryZips: "shipping.deliveryZips",
+  deliveryFees: "shipping.deliveryFees",
+  purimWeekDays: "shipping.purimWeekDays",
   emailFrom: "email.from",
   emailReplyTo: "email.replyTo",
   developerNotes: "developer.notes",

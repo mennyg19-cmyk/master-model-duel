@@ -205,11 +205,34 @@ async function main() {
     where: { code: "DELIVERY" },
     create: {
       code: "DELIVERY",
-      label: "Volunteer delivery",
-      description: "Local volunteer route",
+      label: "Volunteer delivery (legacy)",
+      description: "Legacy seed code — prefer BULK_DELIVERY",
+      sortOrder: 3,
+      isActive: false,
+    },
+    update: { isActive: false },
+  });
+
+  await db.fulfillmentMethod.upsert({
+    where: { code: "BULK_DELIVERY" },
+    create: {
+      code: "BULK_DELIVERY",
+      label: "Bulk delivery",
+      description: "One fee per destination; staff-scheduled",
       sortOrder: 3,
     },
-    update: { isActive: true },
+    update: { isActive: true, label: "Bulk delivery" },
+  });
+
+  await db.fulfillmentMethod.upsert({
+    where: { code: "PER_PACKAGE_DELIVERY" },
+    create: {
+      code: "PER_PACKAGE_DELIVERY",
+      label: "Per-package delivery",
+      description: "Fee per recipient; hard zip block",
+      sortOrder: 4,
+    },
+    update: { isActive: true, label: "Per-package delivery" },
   });
 
   const product = await db.product.upsert({
@@ -548,14 +571,46 @@ async function main() {
   });
 
   await db.appSetting.upsert({
-    where: { key: SETUP_LOCK_KEY },
+    where: { key: "shipping.deliveryFees" },
     create: {
-      key: SETUP_LOCK_KEY,
-      value: { complete: true, seeded: true, phase: "P4" },
+      key: "shipping.deliveryFees",
+      value: {
+        bulkDestinationFeeCents: 500,
+        perPackageFeeCents: 800,
+        placeholderShipRateCents: 1200,
+      },
       version: 1,
     },
     update: {
-      value: { complete: true, seeded: true, phase: "P4" },
+      value: {
+        bulkDestinationFeeCents: 500,
+        perPackageFeeCents: 800,
+        placeholderShipRateCents: 1200,
+      },
+    },
+  });
+
+  await db.appSetting.upsert({
+    where: { key: "shipping.purimWeekDays" },
+    create: {
+      key: "shipping.purimWeekDays",
+      value: { days: ["2026-03-13", "2026-03-14", "2026-03-15"] },
+      version: 1,
+    },
+    update: {
+      value: { days: ["2026-03-13", "2026-03-14", "2026-03-15"] },
+    },
+  });
+
+  await db.appSetting.upsert({
+    where: { key: SETUP_LOCK_KEY },
+    create: {
+      key: SETUP_LOCK_KEY,
+      value: { complete: true, seeded: true, phase: "P5" },
+      version: 1,
+    },
+    update: {
+      value: { complete: true, seeded: true, phase: "P5" },
     },
   });
 

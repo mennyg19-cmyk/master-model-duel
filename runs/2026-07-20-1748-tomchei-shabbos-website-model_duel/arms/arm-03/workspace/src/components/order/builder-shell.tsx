@@ -37,9 +37,11 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 export function OrderBuilderShell({
   mode = "storefront",
   initialCustomerId = null,
+  onDraftChange,
 }: {
   mode?: BuilderMode;
   initialCustomerId?: string | null;
+  onDraftChange?: (draft: DraftState | null) => void;
 }) {
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [products, setProducts] = useState<BuilderProduct[]>([]);
@@ -49,6 +51,10 @@ export function OrderBuilderShell({
   const [assignLineId, setAssignLineId] = useState<string | null>(null);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [signedIn, setSignedIn] = useState(Boolean(initialCustomerId));
+
+  useEffect(() => {
+    onDraftChange?.(draft);
+  }, [draft, onDraftChange]);
 
   const refreshAddresses = useCallback(async () => {
     try {
@@ -202,6 +208,7 @@ export function OrderBuilderShell({
           draft={draft}
           onAssign={(lineId) => setAssignLineId(lineId)}
           onRefresh={setDraft}
+          checkoutMode={mode}
         />
       </aside>
 
@@ -242,6 +249,7 @@ export function OrderBuilderShell({
                 setMobileCartOpen(false);
               }}
               onRefresh={setDraft}
+              checkoutMode={mode}
             />
           </div>
         </div>

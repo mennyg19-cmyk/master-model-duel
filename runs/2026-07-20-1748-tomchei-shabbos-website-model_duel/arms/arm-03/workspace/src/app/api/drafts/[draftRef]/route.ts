@@ -10,6 +10,7 @@ import {
 } from "@/lib/orders/drafts";
 import { GUEST_DRAFT_COOKIE } from "@/lib/orders/guest-token";
 import { db } from "@/lib/db";
+import { OrderStatus } from "@prisma/client";
 
 type Ctx = { params: Promise<{ draftRef: string }> };
 
@@ -36,6 +37,28 @@ export async function PATCH(request: Request, ctx: Ctx) {
   try {
     const { draftRef } = await ctx.params;
     const body = patchSchema.parse(await request.json());
+
+    if (body.action === "guest_success") {
+      // Must not use assertCanMutateDraft — order is PLACED after finalize.
+      const { order, actor } = await loadDraftForAccess(draftRef, request);
+      if (actor.kind !== "guest" && actor.kind !== "staff") {
+        return NextResponse.json({ ok: false, error: "Guest draft required" }, { status: 400 });
+      }
+      if (order.status === OrderStatus.DRAFT) {
+        return NextResponse.json(
+          { ok: false, error: "Guest success requires a finalized (PLACED+) order." },
+          { status: 409 },
+        );
+      }
+      const result = await markGuestDraftSuccess(order.id);
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });
+      }
+      const res = NextResponse.json({ ok: true, cleared: true, draftRef: result.value.draftRef });
+      res.cookies.set(GUEST_DRAFT_COOKIE, "", { path: "/", maxAge: 0 });
+      return res;
+    }
+
     const { order, actor } = await assertCanMutateDraft(draftRef, request);
 
     if (body.action === "greeting") {
@@ -59,19 +82,6 @@ export async function PATCH(request: Request, ctx: Ctx) {
       if (actor.kind === "guest") {
         res.cookies.set(GUEST_DRAFT_COOKIE, "", { path: "/", maxAge: 0 });
       }
-      return res;
-    }
-
-    if (body.action === "guest_success") {
-      if (actor.kind !== "guest" && actor.kind !== "staff") {
-        return NextResponse.json({ ok: false, error: "Guest draft required" }, { status: 400 });
-      }
-      const result = await markGuestDraftSuccess(order.id);
-      if (!result.ok) {
-        return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });
-      }
-      const res = NextResponse.json({ ok: true, cleared: true, draftRef: result.value.draftRef });
-      res.cookies.set(GUEST_DRAFT_COOKIE, "", { path: "/", maxAge: 0 });
       return res;
     }
 

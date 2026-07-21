@@ -213,3 +213,10 @@
 2026-07-21T16:32:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P4,review_clean_code,glm-5.2-high,476a693d-2d3e-4540-a172-873b6bc5abe7,,,,,,,,11 findings; usage_missing
 2026-07-21T16:36:38Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P4,review_aggregate,glm-5.2-high,027894f7-8af1-46fd-9836-f1a45395cff5,,,,,,,,41 deduped 1 blocker; usage_missing
 2026-07-21T16:45:15Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P4,fix,cursor-grok-4.5-high,78d09488-16e8-44bd-ad2a-138329a55661,,,,,,,,B1 M1-M3 M5-M8 M10 fixed smoke 16/16; usage_missing
+2026-07-21T20:02:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P5,builder,cursor-grok-4.5-high,85c2ac46-b1d3-44c2-8af9-534cbbf15ed0,,,,,,,,checkout stripe POS lifecycle; smoke 5/5; usage_missing
+2026-07-21T20:04:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P5,review_security,glm-5.2-high,31c14feb-1b93-4dbc-a955-0ef690c9fd72,,,,,,,,3 high; usage_missing
+2026-07-21T20:04:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P5,review_quality,glm-5.2-high,efbe7221-8db8-4512-80f2-1106d8174e2c,,,,,,,,13 findings; usage_missing
+2026-07-21T20:04:47Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P5,review_rules,glm-5.2-high,53f52e80-5ca9-4092-bedd-5b857063f2f5,,,,,,,,13 findings; usage_missing
+2026-07-21T20:04:47Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P5,review_clean_code,glm-5.2-high,4f5e00ad-e06b-4270-9fe5-04c16a30e277,,,,,,,,12 findings; usage_missing
+2026-07-21T20:07:01Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P5,review_aggregate,glm-5.2-high,4965c2ae-d4d6-4a5f-a6c9-18c26bffb0a5,,,,,,,,41 deduped 3 blockers; usage_missing
+2026-07-21T20:12:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P5,fix,cursor-grok-4.5-high,388dea7f-a69a-4479-92e6-661b0ac189a8,,,,,,,,B1-B3 majors fixed smoke 5/5; usage_missing

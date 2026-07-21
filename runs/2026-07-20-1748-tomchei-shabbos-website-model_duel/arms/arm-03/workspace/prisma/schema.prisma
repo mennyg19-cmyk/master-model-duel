@@ -48,6 +48,37 @@ enum AuditAction {
   DRAFT_CREATED
   DRAFT_UPDATED
   DRAFT_GUEST_CLEARED
+  CHECKOUT_STARTED
+  PAYMENT_POSTED
+  PAYMENT_VOIDED
+  PAYMENT_REFUNDED
+  SAFETY_REFUND
+  ORDER_PAID
+  ORDER_REPEATED
+  BULK_ACTION_APPLIED
+  CUSTOMER_UPSERTED
+  IMPORT_STAGED
+  IMPORT_COMMITTED
+  ADMIN_BANNER_UPDATED
+}
+
+enum ImportKind {
+  CUSTOMERS
+  PRODUCTS
+}
+
+enum ImportBatchStatus {
+  STAGED
+  COMMITTED
+  CANCELLED
+}
+
+enum ImportRowStatus {
+  VALID
+  DUPLICATE
+  INVALID
+  COMMITTED
+  SKIPPED
 }
 
 enum SeasonStatus {
@@ -130,6 +161,8 @@ model StaffUser {
   paymentsPosted        Payment[]              @relation("PaymentPoster")
   paymentsVoided        Payment[]              @relation("PaymentVoider")
   assemblyBatches       AssemblyBatch[]
+  importBatchesStaged   ImportBatch[]          @relation("ImportStagedBy")
+  importBatchesCommitted ImportBatch[]         @relation("ImportCommittedBy")
 }
 
 model PermissionOverride {
@@ -157,10 +190,27 @@ model Customer {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  addresses SavedAddress[]
-  orders    Order[]
+  addresses       SavedAddress[]
+  orders          Order[]
+  greetingMemories RecipientGreetingMemory[]
 
   @@index([phoneNorm])
+}
+
+/// Last greeting used for a recipient — carried into next season (UR-013 / G-020).
+model RecipientGreetingMemory {
+  id            String   @id @default(cuid())
+  customerId    String
+  recipientKey  String
+  greeting      String
+  lastSeasonId  String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, recipientKey])
+  @@index([customerId])
 }
 
 model AppSetting {
@@ -415,6 +465,12 @@ model Order {
   guestTokenVersion    Int                 @default(1)
   greetingDefault      String?
   paymentStatusCached  CachedPaymentStatus @default(UNPAID)
+  /// Subtotal + fulfillment fees + donation expected at checkout (stale-total guard).
+  expectedTotalCents   Int?
+  donationCents        Int                 @default(0)
+  /// Snapshot of fulfillment fees charged at checkout (UR-002 / paid snapshots).
+  fulfillmentFeeCents  Int                 @default(0)
+  checkoutSnapshot     Json?
   version              Int                 @default(1)
   placedAt             DateTime?
   discardedAt          DateTime?
@@ -423,13 +479,14 @@ model Order {
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
-  season          Season           @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  lines           OrderLine[]
-  packages        Package[]
-  payments        Payment[]
-  stripeIntents   StripePaymentIntent[]
-  shippingQuotes  ShippingQuote[]
+  season            Season                 @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  customer          Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  lines             OrderLine[]
+  packages          Package[]
+  payments          Payment[]
+  stripeIntents     StripePaymentIntent[]
+  stripeSessions    StripeCheckoutSession[]
+  shippingQuotes    ShippingQuote[]
 
   @@unique([seasonId, orderNumber])
   @@index([seasonId, status])
@@ -547,18 +604,20 @@ model PackageAuditLog {
 }
 
 model Payment {
-  id          String        @id @default(cuid())
-  orderId     String
-  method      PaymentMethod
-  state       PaymentState  @default(POSTED)
-  amountCents Int
-  reference   String?
-  postedById  String?
-  voidedById  String?
-  postedAt    DateTime      @default(now())
-  voidedAt    DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  orderId         String
+  method          PaymentMethod
+  state           PaymentState  @default(POSTED)
+  amountCents     Int
+  refundedCents   Int           @default(0)
+  reference       String?
+  stripeChargeId  String?
+  postedById      String?
+  voidedById      String?
+  postedAt        DateTime      @default(now())
+  voidedAt        DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   order    Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   postedBy StaffUser? @relation("PaymentPoster", fields: [postedById], references: [id], onDelete: SetNull)
@@ -581,6 +640,30 @@ model StripePaymentIntent {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
+}
+
+model StripeCheckoutSession {
+  id              String   @id @default(cuid())
+  orderId         String
+  stripeSessionId String   @unique
+  amountCents     Int
+  status          String   @default("open")
+  url             String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+/// Stripe webhook idempotency (R-125).
+model StripeWebhookEvent {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  type        String
+  processedAt DateTime @default(now())
+  meta        Json?
 }
 
 model ShippingQuote {
@@ -726,4 +809,44 @@ model AssemblyBatch {
   createdBy StaffUser? @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([productId, createdAt])
+}
+
+/// Staged CSV import (customers/products) — preview then atomic commit (R-063, R-143).
+model ImportBatch {
+  id            String            @id @default(cuid())
+  kind          ImportKind
+  status        ImportBatchStatus @default(STAGED)
+  filename      String?
+  stagedById    String?
+  committedById String?
+  stagedAt      DateTime          @default(now())
+  committedAt   DateTime?
+  summary       Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  stagedBy    StaffUser?  @relation("ImportStagedBy", fields: [stagedById], references: [id], onDelete: SetNull)
+  committedBy StaffUser?  @relation("ImportCommittedBy", fields: [committedById], references: [id], onDelete: SetNull)
+  rows        ImportRow[]
+
+  @@index([kind, status])
+  @@index([stagedAt])
+}
+
+model ImportRow {
+  id        String          @id @default(cuid())
+  batchId   String
+  rowNumber Int
+  status    ImportRowStatus
+  raw       Json
+  errors    Json?
+  /// Dedupe key: emailNorm for customers, seasonSku for products.
+  targetKey String?
+  createdAt DateTime        @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@index([targetKey])
 }

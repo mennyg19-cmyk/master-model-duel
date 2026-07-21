@@ -20,7 +20,10 @@
     "ci": "npm run lint && npm run typecheck && npm run ci:migrate-guard && npm run test:permissions && npm run test:domain-p2",
     "smoke": "node --env-file=.env scripts/smoke.mjs",
     "smoke:p3": "node --env-file=.env scripts/smoke-p3.mjs",
-    "smoke:p4": "node --env-file=.env scripts/smoke-p4.mjs"
+    "smoke:p4": "node --env-file=.env scripts/smoke-p4.mjs",
+    "smoke:p5": "node --env-file=.env scripts/smoke-p5.mjs",
+    "smoke:p6": "node --env-file=.env scripts/smoke-p6.mjs",
+    "db:seed-scale-p6": "node --env-file=.env --import tsx scripts/seed-scale-p6.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "6.12.0",
@@ -29,6 +32,7 @@
     "next": "15.1.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
+    "stripe": "17.7.0",
     "tailwind-merge": "3.0.2",
     "zod": "3.24.2"
   },
