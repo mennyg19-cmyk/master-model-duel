@@ -70,6 +70,23 @@ repeat single orders into POS drafts from the order detail page and bulk-repeat
 a whole season from Customers. `opensAt`/`closesAt` schedules are fired once by
 the `/api/cron/season-flip` cron and then cleared.
 
+## Email & notifications
+
+All outgoing email/SMS goes through one outbox (`Notification` rows). Business
+code only ever enqueues (idempotent by `dedupeKey`); the sweeper cron
+(`/api/cron/notification-sweeper`) delivers with retry/backoff and writes an
+attempt trail. Providers are isolated wrappers: Resend (`lib/email/provider.ts`,
+mock without `RESEND_API_KEY`) and Twilio-class SMS (`lib/sms/provider.ts`).
+`EMAIL_TEST_MODE=true` captures everything instead of contacting providers.
+
+The admin Email hub (`/admin/email`) manages campaigns (draft → preview →
+test-send → send, reruns never duplicate), lists, subscribers, and triggered
+templates (per-key subject/body overrides + enable switch). Order lifecycle
+emails — confirmation, payment link when unpaid, refund notice — enqueue
+inside the same transactions that finalize orders and book refunds. Settings →
+Email owns sender identity, branding footer, a live test sender, and the log
+retention the purge cron (`/api/cron/email-log-purge`) enforces.
+
 ## Patterns (one per concern)
 
 - Data access: Prisma via `lib/db.ts` singleton.

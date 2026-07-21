@@ -3,6 +3,7 @@ import type { PaymentMethod } from "@prisma/client";
 import { db } from "@/lib/db";
 import { recalcPaymentStatus } from "@/lib/domain/payment-status";
 import { writeAudit } from "@/lib/audit";
+import { enqueueRefundEmail } from "@/lib/email/transactional";
 import type { StaffContext } from "@/lib/auth/current-user";
 
 // All payment writes go through here so every row is followed by a payment-
@@ -58,6 +59,11 @@ export async function recordRefund(entry: {
       },
     });
     await recalcPaymentStatus(tx, entry.orderId);
+    // P11: refund notice queues with the ledger row, deduped by refund id.
+    await enqueueRefundEmail(
+      { orderId: entry.orderId, amountCents: entry.amountCents, stripeRefundId: entry.stripeRefundId },
+      tx
+    );
     return refund;
   });
 }
@@ -137,7 +143,10 @@ export async function beginStaffRefund(entry: {
 /** Swap the placeholder for Stripe's real refund id once the gateway confirms. */
 export async function resolveStaffRefund(paymentId: string, stripeRefundId: string): Promise<void> {
   try {
-    await db.payment.update({ where: { id: paymentId }, data: { stripeRefundId } });
+    const payment = await db.payment.update({ where: { id: paymentId }, data: { stripeRefundId } });
+    // Deduped on the real refund id, so a webhook sync of this same refund
+    // can never email the customer a second time.
+    await enqueueRefundEmail({ orderId: payment.orderId, amountCents: payment.amountCents, stripeRefundId });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       // The webhook already recorded this refund under its real id — drop our

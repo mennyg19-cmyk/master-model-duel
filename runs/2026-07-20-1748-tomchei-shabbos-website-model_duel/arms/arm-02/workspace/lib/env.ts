@@ -56,6 +56,19 @@ const envSchema = z
     // Mapbox geocoding (P9, R-179). Without a token the geocoder falls back to
     // the local deterministic provider — same swap point as Stripe/Shippo mocks.
     MAPBOX_ACCESS_TOKEN: z.string().optional(),
+    // Resend (P11, R-171). Without a key the email provider runs in mock mode
+    // (simulated delivery) — same swap point as the other provider wrappers.
+    RESEND_API_KEY: z.string().optional(),
+    // Test mode (R-178): outgoing email/SMS is CAPTURED in the outbox instead
+    // of ever contacting a provider — even when live keys are configured.
+    EMAIL_TEST_MODE: z
+      .string()
+      .optional()
+      .transform((value) => value === "true" || value === "1"),
+    // Twilio-class SMS (P11, G-021). All three required together for live mode.
+    TWILIO_ACCOUNT_SID: z.string().optional(),
+    TWILIO_AUTH_TOKEN: z.string().optional(),
+    TWILIO_FROM_NUMBER: z.string().optional(),
   })
   .refine(
     (vars) => vars.AUTH_MODE !== "clerk" || (vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && vars.CLERK_SECRET_KEY),
@@ -103,6 +116,25 @@ const envSchema = z
         code: "custom",
         path: ["STRIPE_SECRET_KEY"],
         message: "STRIPE_SECRET_KEY is required in production — the mock payment gateway is dev-only",
+      });
+    }
+    // Half-configured Twilio would fail at first send instead of at startup.
+    const twilioVars = [vars.TWILIO_ACCOUNT_SID, vars.TWILIO_AUTH_TOKEN, vars.TWILIO_FROM_NUMBER];
+    const twilioSet = twilioVars.filter(Boolean).length;
+    if (twilioSet > 0 && twilioSet < 3) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["TWILIO_ACCOUNT_SID"],
+        message: "Live SMS needs all three of TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER",
+      });
+    }
+    // Production must never "send" through the mock email provider (customers
+    // would silently get nothing) — require a real key or explicit test mode.
+    if (process.env.NODE_ENV === "production" && !isBuildPhase && !vars.RESEND_API_KEY && !vars.EMAIL_TEST_MODE) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["RESEND_API_KEY"],
+        message: "RESEND_API_KEY is required in production (or set EMAIL_TEST_MODE=true to capture instead of send)",
       });
     }
   });

@@ -6,7 +6,7 @@ import { SettingsHub } from "@/components/admin/settings-hub";
 export default async function SettingsPage() {
   await requirePermissionPage("settings.manage");
 
-  const [seasons, packageTypes, pickupLocations, followupDays, closedMessage, deliveryZips, shippingRates, shippingRules, purimDayChoices, emailFrom, emailReplyTo] =
+  const [seasons, packageTypes, pickupLocations, followupDays, closedMessage, deliveryZips, shippingRates, shippingRules, purimDayChoices, emailFrom, emailReplyTo, emailBrandingFooter, emailLogRetentionDays] =
     await Promise.all([
       db.season.findMany({
         select: { id: true, name: true, status: true, opensAt: true, closesAt: true },
@@ -22,6 +22,8 @@ export default async function SettingsPage() {
       getSetting("delivery.purim_day_choices"),
       getSetting("email.from_address"),
       getSetting("email.reply_to"),
+      getSetting("email.branding_footer"),
+      getSetting("email.log_retention_days"),
     ]);
 
   return (
@@ -44,6 +46,8 @@ export default async function SettingsPage() {
           purimDayChoices,
           emailFrom,
           emailReplyTo,
+          emailBrandingFooter,
+          emailLogRetentionDays,
         }}
       />
     </div>

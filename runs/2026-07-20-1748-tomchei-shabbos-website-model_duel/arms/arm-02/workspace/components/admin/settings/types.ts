@@ -40,6 +40,8 @@ export type SettingsHubData = {
   purimDayChoices: string[];
   emailFrom: string;
   emailReplyTo: string;
+  emailBrandingFooter: string;
+  emailLogRetentionDays: number;
 };
 
 /** Runs a mutation, surfaces the outcome message, and refreshes on success. */

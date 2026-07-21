@@ -1,9 +1,10 @@
 import type { NotificationChannel, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
-// Captured-notification outbox (P9). No email/SMS provider exists until P11,
-// so every send lands as a CAPTURED Notification row — visible, countable, and
-// already deduped, so P11 only swaps the delivery layer.
+// Notification outbox (P9 enqueue, P11 delivery). Every send lands as a
+// PENDING Notification row inside the caller's transaction; the sweeper cron
+// (lib/email/dispatch.ts) delivers it through the real providers with retry.
+// Idempotency is unchanged: a colliding dedupeKey is a skipped duplicate.
 
 export type NotificationInput = {
   channel: NotificationChannel;
@@ -18,13 +19,13 @@ export type NotificationInput = {
   packageId?: string;
 };
 
-/** Returns true when captured, false when the dedupeKey already existed. */
+/** Returns true when enqueued, false when the dedupeKey already existed. */
 export async function captureNotification(
   input: NotificationInput,
   tx: Prisma.TransactionClient = db
 ): Promise<boolean> {
   try {
-    await tx.notification.create({ data: { ...input, status: "captured" } });
+    await tx.notification.create({ data: input });
     return true;
   } catch (error) {
     // P2002 on dedupeKey = this exact notification already went out.

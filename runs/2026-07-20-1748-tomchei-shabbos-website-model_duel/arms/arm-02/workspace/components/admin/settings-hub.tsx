@@ -72,7 +72,16 @@ export function SettingsHub({ data }: { data: SettingsHubData }) {
           saveSetting={saveSetting}
         />
       )}
-      {tab === "Email" && <EmailTab emailFrom={data.emailFrom} emailReplyTo={data.emailReplyTo} saveSetting={saveSetting} />}
+      {tab === "Email" && (
+        <EmailTab
+          emailFrom={data.emailFrom}
+          emailReplyTo={data.emailReplyTo}
+          brandingFooter={data.emailBrandingFooter}
+          logRetentionDays={data.emailLogRetentionDays}
+          act={act}
+          saveSetting={saveSetting}
+        />
+      )}
       {tab === "Developer" && <DeveloperTab />}
     </div>
   );

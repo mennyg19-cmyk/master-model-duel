@@ -17,6 +17,7 @@ const NAV_ITEMS: { href: string; label: string; permission: Permission | null }[
   { href: "/admin/pickup", label: "Pickup", permission: "fulfillment.manage" },
   { href: "/admin/follow-up", label: "Follow-up", permission: "orders.view" },
   { href: "/admin/customers", label: "Customers", permission: "customers.manage" },
+  { href: "/admin/email", label: "Email", permission: "email.manage" },
   { href: "/admin/import", label: "Import", permission: "customers.manage" },
   { href: "/admin/catalog", label: "Catalog", permission: "catalog.manage" },
   { href: "/admin/media", label: "Media", permission: "media.manage" },

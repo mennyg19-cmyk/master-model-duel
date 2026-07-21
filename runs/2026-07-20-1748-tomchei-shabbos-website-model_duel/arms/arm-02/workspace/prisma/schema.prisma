@@ -758,9 +758,10 @@ model NewsletterSubscriber {
   status              NewsletterStatus @default(SUBSCRIBED)
   wantsSeasonOpening  Boolean          @default(true)
   wantsPurimReminders Boolean          @default(true)
-  subscribedAt        DateTime         @default(now())
+  subscribedAt        DateTime          @default(now())
   unsubscribedAt      DateTime?
-  updatedAt           DateTime         @updatedAt
+  updatedAt           DateTime          @updatedAt
+  listMemberships     EmailListMember[]
 }
 
 // ---------------------------------------------------------------------------
@@ -872,25 +873,104 @@ enum NotificationChannel {
   SMS
 }
 
-// Captured-notification outbox (G-021 channel wiring). Until P11 wires real
-// providers, every send is CAPTURED here — the test-visible record the smoke
-// checks count. dedupeKey is the idempotency rule: an insert that collides is
-// a skipped duplicate, never a second send.
+// Notification outbox (G-021 channel wiring). P9 wrote every send as a
+// CAPTURED row; P11 turned this into the real dispatch queue. dedupeKey stays
+// the idempotency rule: an insert that collides is a skipped duplicate, never
+// a second send. Lifecycle: pending -> sending (claimed by one sweep) ->
+// sent / failed (terminal after max attempts) / captured (test mode).
 model Notification {
-  id         String              @id @default(cuid())
-  channel    NotificationChannel
-  recipient  String
-  kind       String
-  subject    String?
-  body       String
-  dedupeKey  String?             @unique
-  customerId String?
-  orderId    String?
-  packageId  String?
-  status     String              @default("captured")
-  createdAt  DateTime            @default(now())
+  id                String                @id @default(cuid())
+  channel           NotificationChannel
+  recipient         String
+  kind              String
+  subject           String?
+  body              String
+  dedupeKey         String?               @unique
+  customerId        String?
+  orderId           String?
+  packageId         String?
+  status            String                @default("pending")
+  attempts          Int                   @default(0)
+  // When this row becomes due for (re)dispatch — backoff pushes it forward.
+  nextAttemptAt     DateTime              @default(now())
+  // Claim stamp: a sweep owns a "sending" row until this goes stale.
+  claimedAt         DateTime?
+  sentAt            DateTime?
+  lastError         String?
+  providerMessageId String?
+  createdAt         DateTime              @default(now())
+  attemptLog        NotificationAttempt[]
 
   @@index([kind, createdAt])
+  @@index([status, nextAttemptAt])
+}
+
+// Auditable delivery trail (R-088): one row per dispatch attempt, kept even
+// after success so a forced failure -> retry -> delivery is reconstructable.
+model NotificationAttempt {
+  id                String       @id @default(cuid())
+  notificationId    String
+  notification      Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  outcome           String // sent | failed | captured
+  error             String?
+  providerMessageId String?
+  createdAt         DateTime     @default(now())
+
+  @@index([notificationId, createdAt])
+}
+
+// Per-key overrides for triggered/transactional emails (R-086, R-178).
+// Defaults live in code (lib/email/templates.ts); a row only stores what a
+// manager changed. isEnabled=false silences the key without losing the text.
+model EmailTemplate {
+  key       String   @id
+  subject   String?
+  body      String?
+  isEnabled Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+}
+
+// Named audiences for campaigns (R-084). Members reference newsletter
+// subscribers; a campaign with no list targets every SUBSCRIBED address.
+model EmailList {
+  id        String            @id @default(cuid())
+  name      String            @unique
+  createdAt DateTime          @default(now())
+  members   EmailListMember[]
+  campaigns Campaign[]
+}
+
+model EmailListMember {
+  listId       String
+  list         EmailList            @relation(fields: [listId], references: [id], onDelete: Cascade)
+  subscriberId String
+  subscriber   NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  addedAt      DateTime             @default(now())
+
+  @@id([listId, subscriberId])
+}
+
+enum CampaignStatus {
+  DRAFT
+  SENT
+}
+
+// One bulk email (R-083). Sending queues an outbox row per recipient with
+// dedupeKey campaign|{id}|{email}, so a rerun of send can never duplicate a
+// delivery — the DB skips every address already queued.
+model Campaign {
+  id               String         @id @default(cuid())
+  name             String
+  subject          String
+  body             String
+  listId           String?
+  list             EmailList?     @relation(fields: [listId], references: [id])
+  status           CampaignStatus @default(DRAFT)
+  sentAt           DateTime?
+  queuedCount      Int            @default(0)
+  createdByStaffId String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 }
 
 // One staff scheduling act for bulk delivery (R-078): the chosen date/window

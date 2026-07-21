@@ -4,6 +4,7 @@ import { assertTransition } from "@/lib/domain/order-state";
 import { claimNextOrderNumber } from "@/lib/domain/order-numbers";
 import { groupByPackageKey } from "@/lib/domain/grouping";
 import { reserveInventory } from "@/lib/domain/inventory";
+import { enqueueOrderLifecycleEmails } from "@/lib/email/transactional";
 
 const lineInclude = {
   product: { include: { inventoryItem: true } },
@@ -42,6 +43,9 @@ export async function finalizeOrder(orderId: string, actorStaffId?: string, oute
     await tx.order.update({ where: { id: orderId }, data: { orderNumber } });
 
     await assignLinesToPackages(tx, order.seasonId, order.lines, actorStaffId);
+    // P11: confirmation (+ payment link when unpaid) queue atomically with the
+    // finalize — the outbox sweeper delivers them after commit (R-087, R-088).
+    await enqueueOrderLifecycleEmails(tx, orderId);
     return tx.order.findUniqueOrThrow({ where: { id: orderId } });
   };
   return outerTx ? run(outerTx) : db.$transaction(run);

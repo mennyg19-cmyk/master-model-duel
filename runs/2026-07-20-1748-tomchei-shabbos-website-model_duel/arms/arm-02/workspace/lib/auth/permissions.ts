@@ -13,6 +13,7 @@ export const PERMISSIONS = {
   "payments.refund": "Issue Stripe refunds (audited)",
   "orders.manage": "Finalize and discard orders on behalf of customers",
   "fulfillment.manage": "Work the package board: split, regroup, statuses, print batches",
+  "email.manage": "Run the email hub: campaigns, lists, subscribers, templates",
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
