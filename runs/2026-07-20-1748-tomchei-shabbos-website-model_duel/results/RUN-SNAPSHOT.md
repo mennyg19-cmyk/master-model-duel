@@ -21,6 +21,6 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- arm-02 P8: build pending spawn
+- arm-02 P8: [arm-02 Test4 P8 build](09cce5c1-51a0-45cf-899f-df318828a47f)
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)
