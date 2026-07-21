@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { addressInputSchema } from "@/lib/addresses/normalize";
 import type { Cart, CartLine } from "@/lib/order-builder/cart";
-import { findActiveDraft, saveDraft, applyAssignmentRules, posDraftOwner, parseCart } from "@/lib/order-builder/draft-store";
+import { appendLinesToDraft, applyAssignmentRules, posDraftOwner, type DraftOwner } from "@/lib/order-builder/draft-store";
 
 // Repeat orders (UR-007, R-057, R-058) + replacement chains (R-048, G-013).
 // A repeat copies a prior order's lines into a builder draft in the OPEN
@@ -140,6 +140,15 @@ export async function loadRepeatableOrder(orderId: string): Promise<RepeatableOr
   return db.order.findUnique({ where: { id: orderId }, include: orderInclude });
 }
 
+export type CatalogProduct = ChainProduct & { name: string; basePriceCents: number };
+
+/** The catalog-wide product list the plan builder needs. Fetch once and pass it through when planning in a loop (bulk repeat). */
+export async function loadRepeatCatalog(): Promise<CatalogProduct[]> {
+  return db.product.findMany({
+    select: { id: true, name: true, seasonId: true, isActive: true, replacementId: true, basePriceCents: true },
+  });
+}
+
 /**
  * Map every line of a prior order into the target season. One catalog-wide
  * product fetch backs both the chain walk (chains hop across seasons) and the
@@ -147,11 +156,10 @@ export async function loadRepeatableOrder(orderId: string): Promise<RepeatableOr
  */
 export async function buildRepeatPlan(
   order: RepeatableOrder,
-  targetSeason: { id: string; name: string }
+  targetSeason: { id: string; name: string },
+  catalog?: CatalogProduct[]
 ): Promise<RepeatPlan> {
-  const allProducts = await db.product.findMany({
-    select: { id: true, name: true, seasonId: true, isActive: true, replacementId: true, basePriceCents: true },
-  });
+  const allProducts = catalog ?? (await loadRepeatCatalog());
   const productById = new Map(allProducts.map((product) => [product.id, product]));
   const candidates: RepeatCandidate[] = allProducts
     .filter((product) => product.seasonId === targetSeason.id && product.isActive)
@@ -301,20 +309,22 @@ export function buildRepeatCartLines(plan: RepeatPlan, decisions: RepeatDecision
   return { ok: true, cartLines, unassigned };
 }
 
-/** Append repeat lines to whatever draft the owner already has — never clobber in-progress work. */
+/**
+ * Append repeat lines to whatever draft the owner already has — never clobber
+ * in-progress work. Assignment rules run on the NEW lines only (existing
+ * lines were ruled when they were saved); the address-book writes dedupe per
+ * customer, so an optimistic-lock retry re-resolves to the same saved rows.
+ * The draft write itself is atomic — see appendLinesToDraft.
+ */
 async function appendToDraft(
   seasonId: string,
-  owner: Parameters<typeof saveDraft>[1],
+  owner: DraftOwner,
   customerId: string,
-  newLines: CartLine[]
+  newLines: CartLine[],
+  ifDraftExists: "append" | "skip" = "append"
 ) {
-  const existing = await findActiveDraft(seasonId, owner);
-  const cart: Cart = existing
-    ? parseCart(existing.cart)
-    : { onOrderRecipient: null, lines: [] };
-  cart.lines = [...cart.lines, ...newLines];
-  const ruled = await applyAssignmentRules(cart, customerId);
-  return saveDraft(seasonId, owner, ruled);
+  const ruled = await applyAssignmentRules({ onOrderRecipient: null, lines: newLines } satisfies Cart, customerId);
+  return appendLinesToDraft(seasonId, owner, ruled.lines, ifDraftExists);
 }
 
 export async function appendRepeatToCustomerDraft(seasonId: string, customerId: string, newLines: CartLine[]) {
@@ -327,6 +337,8 @@ export type StaffRepeatOutcome = {
   skipped: string[];
   /** Lines mapped by the price-smart fallback rather than an explicit replacement link. */
   suggested: string[];
+  /** Set when ifDraftExists="skip" found an in-progress POS draft — nothing was written. */
+  skippedExistingDraft?: boolean;
 };
 
 /**
@@ -337,9 +349,10 @@ export type StaffRepeatOutcome = {
  */
 export async function repeatOrderIntoPosDraft(
   order: RepeatableOrder,
-  targetSeason: { id: string; name: string }
+  targetSeason: { id: string; name: string },
+  options: { catalog?: CatalogProduct[]; ifDraftExists?: "append" | "skip" } = {}
 ): Promise<StaffRepeatOutcome> {
-  const plan = await buildRepeatPlan(order, targetSeason);
+  const plan = await buildRepeatPlan(order, targetSeason, options.catalog);
   const skipped: string[] = [];
   const suggested: string[] = [];
   const decisions: RepeatDecision[] = plan.lines.map((line) => {
@@ -357,7 +370,14 @@ export async function repeatOrderIntoPosDraft(
   const built = buildRepeatCartLines(plan, decisions);
   if (!built.ok) throw new Error(built.error);
   if (built.cartLines.length > 0) {
-    await appendToDraft(targetSeason.id, posDraftOwner(order.customerId), order.customerId, built.cartLines);
+    const appended = await appendToDraft(
+      targetSeason.id,
+      posDraftOwner(order.customerId),
+      order.customerId,
+      built.cartLines,
+      options.ifDraftExists ?? "append"
+    );
+    if (!appended.appended) return { added: 0, skipped, suggested, skippedExistingDraft: true };
   }
   return { added: built.cartLines.length, skipped, suggested };
 }

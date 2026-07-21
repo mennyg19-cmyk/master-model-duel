@@ -42,10 +42,25 @@ export async function POST(request: Request) {
       });
       for (const [index, season] of dueToOpen.entries()) {
         if (index === 0) {
-          await tx.season.updateMany({
+          // Opening implicitly closes whatever was open — each displaced
+          // season gets its own audit row so the transition stays traceable.
+          const displaced = await tx.season.findMany({
             where: { status: "OPEN", id: { not: season.id } },
-            data: { status: "CLOSED" },
           });
+          for (const openSeason of displaced) {
+            await tx.season.update({ where: { id: openSeason.id }, data: { status: "CLOSED" } });
+            await writeAudit(
+              null,
+              {
+                action: "season.autoflip.close",
+                targetType: "Season",
+                targetId: openSeason.id,
+                detail: { name: openSeason.name, displacedBy: season.name },
+              },
+              tx
+            );
+            closed.push(openSeason.name);
+          }
           await tx.season.update({
             where: { id: season.id },
             data: { status: "OPEN", opensAt: null },

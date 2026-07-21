@@ -95,11 +95,11 @@ See `shared/phases/PHASE-P9-EXPECTED.md`. Both arms P9 **gated**.
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Repeat + replacement | ✓ | |
-| S2 | Bulk repeat + auto-flip | ✓ | |
-| S3 | Imported prior-year repeat | ✓ | |
+| S1 | Repeat + replacement | ✓ | ✓ |
+| S2 | Bulk repeat + auto-flip | ✓ | ✓ |
+| S3 | Imported prior-year repeat | ✓ | ✓ |
 
-See `shared/phases/PHASE-P10-EXPECTED.md`. arm-01 P10 **gated**.
+See `shared/phases/PHASE-P10-EXPECTED.md`. Both arms P10 **gated**.
 
 ## P11
 

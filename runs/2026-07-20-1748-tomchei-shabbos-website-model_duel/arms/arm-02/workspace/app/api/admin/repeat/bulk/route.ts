@@ -4,7 +4,7 @@ import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
 import { getOpenSeason } from "@/lib/season";
 import { findActiveDraft, posDraftOwner } from "@/lib/order-builder/draft-store";
-import { loadRepeatableOrder, repeatOrderIntoPosDraft } from "@/lib/repeat";
+import { loadRepeatableOrder, loadRepeatCatalog, repeatOrderIntoPosDraft } from "@/lib/repeat";
 
 // Keeps one request's blast radius sane; rerun for the next batch.
 const BULK_LIMIT = 200;
@@ -49,28 +49,45 @@ export async function POST(request: Request) {
   let drafted = 0;
   let skippedLines = 0;
   const skippedCustomers: { customerId: string; reason: string }[] = [];
+  const failedCustomers: { customerId: string; reason: string }[] = [];
+  // One catalog fetch for the whole run instead of one per customer.
+  const catalog = await loadRepeatCatalog();
 
   for (const [customerId, source] of entries) {
-    const existingPosDraft = await findActiveDraft(season.id, posDraftOwner(customerId));
-    if (existingPosDraft) {
-      skippedCustomers.push({ customerId, reason: "already has a POS draft in progress" });
-      continue;
+    // Each customer is independent: their draft write is atomic inside
+    // repeatOrderIntoPosDraft, and a failure is recorded instead of aborting
+    // the run — the audit row below always lands, listing any failures.
+    try {
+      // Cheap fast-path only; the race-safe skip is `ifDraftExists: "skip"`
+      // inside the atomic append itself.
+      const existingPosDraft = await findActiveDraft(season.id, posDraftOwner(customerId));
+      if (existingPosDraft) {
+        skippedCustomers.push({ customerId, reason: "already has a POS draft in progress" });
+        continue;
+      }
+      const order = await loadRepeatableOrder(source.id);
+      if (!order) continue;
+      const outcome = await repeatOrderIntoPosDraft(order, season, { catalog, ifDraftExists: "skip" });
+      if (outcome.skippedExistingDraft) {
+        skippedCustomers.push({ customerId, reason: "already has a POS draft in progress" });
+        continue;
+      }
+      if (outcome.added === 0) {
+        skippedCustomers.push({ customerId, reason: "no line could map to a product this season" });
+        continue;
+      }
+      drafted += 1;
+      skippedLines += outcome.skipped.length;
+    } catch (error) {
+      failedCustomers.push({ customerId, reason: error instanceof Error ? error.message : "unexpected failure" });
     }
-    const order = await loadRepeatableOrder(source.id);
-    if (!order) continue;
-    const outcome = await repeatOrderIntoPosDraft(order, season);
-    if (outcome.added === 0) {
-      skippedCustomers.push({ customerId, reason: "no line could map to a product this season" });
-      continue;
-    }
-    drafted += 1;
-    skippedLines += outcome.skipped.length;
   }
 
   const summary = {
     customersConsidered: latestByCustomer.size,
     drafted,
     skippedCustomers: skippedCustomers.length,
+    failedCustomers: failedCustomers.length,
     skippedLines,
     truncated: latestByCustomer.size > BULK_LIMIT,
   };
@@ -78,7 +95,7 @@ export async function POST(request: Request) {
     action: "order.repeat.bulk",
     targetType: "Season",
     targetId: parsed.data.sourceSeasonId,
-    detail: summary,
+    detail: { ...summary, failed: failedCustomers },
   });
-  return Response.json({ ok: true, ...summary, skipped: skippedCustomers });
+  return Response.json({ ok: true, ...summary, skipped: skippedCustomers, failed: failedCustomers });
 }

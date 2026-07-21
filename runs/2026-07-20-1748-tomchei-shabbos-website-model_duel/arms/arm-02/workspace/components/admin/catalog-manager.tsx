@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, type FormEvent } from "react";
+import { apiFetch, type ApiResult } from "@/lib/api-client";
 import { formatCents } from "@/lib/catalog";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -29,15 +30,6 @@ type AddOnRow = {
   restrictions: { product: { id: string; name: string } }[];
 };
 
-async function requestJson(url: string, init?: RequestInit): Promise<{ ok: boolean; error?: string }> {
-  const response = await fetch(url, {
-    ...init,
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-  });
-  const body = await response.json().catch(() => ({}));
-  return { ok: response.ok, error: body.error };
-}
-
 type ReplacementCandidate = { id: string; name: string; seasonId: string; isActive: boolean };
 
 export function CatalogManager({
@@ -57,12 +49,12 @@ export function CatalogManager({
   const [error, setError] = useState<string | null>(null);
 
   const loadSeason = useCallback(async (targetSeasonId: string) => {
-    const [productsResponse, addOnsResponse] = await Promise.all([
-      fetch(`/api/admin/products?seasonId=${targetSeasonId}`),
-      fetch(`/api/admin/add-ons?seasonId=${targetSeasonId}`),
+    const [productsResult, addOnsResult] = await Promise.all([
+      apiFetch<ProductRow[]>(`/api/admin/products?seasonId=${targetSeasonId}`),
+      apiFetch<AddOnRow[]>(`/api/admin/add-ons?seasonId=${targetSeasonId}`),
     ]);
-    if (productsResponse.ok) setProducts(await productsResponse.json());
-    if (addOnsResponse.ok) setAddOns(await addOnsResponse.json());
+    if (productsResult.ok) setProducts(productsResult.body);
+    if (addOnsResult.ok) setAddOns(addOnsResult.body);
   }, []);
 
   function switchSeason(nextSeasonId: string) {
@@ -70,10 +62,10 @@ export function CatalogManager({
     void loadSeason(nextSeasonId);
   }
 
-  async function act(action: () => Promise<{ ok: boolean; error?: string }>) {
+  async function act(action: () => Promise<ApiResult<unknown>>) {
     setError(null);
     const outcome = await action();
-    if (!outcome.ok) setError(outcome.error ?? "Request failed.");
+    if (!outcome.ok) setError(outcome.error);
     await loadSeason(seasonId);
   }
 
@@ -83,16 +75,15 @@ export function CatalogManager({
   async function createProduct(event: FormEvent) {
     event.preventDefault();
     await act(() =>
-      requestJson("/api/admin/products", {
-        method: "POST",
-        body: JSON.stringify({
+      apiFetch("/api/admin/products", {
+        body: {
           seasonId,
           name: newProduct.name,
           slug: newProduct.slug,
           category: newProduct.category || null,
           basePriceCents: Math.round(Number(newProduct.price) * 100),
           trackInventory: newProduct.trackInventory,
-        }),
+        },
       })
     );
     setNewProduct({ name: "", slug: "", category: "", price: "", trackInventory: true });
@@ -104,14 +95,13 @@ export function CatalogManager({
   async function createAddOn(event: FormEvent) {
     event.preventDefault();
     await act(() =>
-      requestJson("/api/admin/add-ons", {
-        method: "POST",
-        body: JSON.stringify({
+      apiFetch("/api/admin/add-ons", {
+        body: {
           seasonId,
           name: newAddOn.name,
           priceCents: Math.round(Number(newAddOn.price) * 100),
           restrictedToProductIds: newAddOn.restrictedIds,
-        }),
+        },
       })
     );
     setNewAddOn({ name: "", price: "", restrictedIds: [] });
@@ -168,9 +158,9 @@ export function CatalogManager({
                     aria-label={`Replacement for ${product.name}`}
                     onChange={(event) =>
                       act(() =>
-                        requestJson(`/api/admin/products/${product.id}`, {
+                        apiFetch(`/api/admin/products/${product.id}`, {
                           method: "PATCH",
-                          body: JSON.stringify({ replacementId: event.target.value || null }),
+                          body: { replacementId: event.target.value || null },
                         })
                       )
                     }
@@ -208,9 +198,9 @@ export function CatalogManager({
                       variant="secondary"
                       onClick={() =>
                         act(() =>
-                          requestJson(`/api/admin/products/${product.id}`, {
+                          apiFetch(`/api/admin/products/${product.id}`, {
                             method: "PATCH",
-                            body: JSON.stringify({ isActive: !product.isActive }),
+                            body: { isActive: !product.isActive },
                           })
                         )
                       }
@@ -219,7 +209,7 @@ export function CatalogManager({
                     </Button>
                     <Button
                       variant="danger"
-                      onClick={() => act(() => requestJson(`/api/admin/products/${product.id}`, { method: "DELETE" }))}
+                      onClick={() => act(() => apiFetch(`/api/admin/products/${product.id}`, { method: "DELETE" }))}
                     >
                       Delete
                     </Button>
@@ -283,16 +273,16 @@ export function CatalogManager({
                   variant="secondary"
                   onClick={() =>
                     act(() =>
-                      requestJson(`/api/admin/add-ons/${addOn.id}`, {
+                      apiFetch(`/api/admin/add-ons/${addOn.id}`, {
                         method: "PATCH",
-                        body: JSON.stringify({ isActive: !addOn.isActive }),
+                        body: { isActive: !addOn.isActive },
                       })
                     )
                   }
                 >
                   {addOn.isActive ? "Deactivate" : "Activate"}
                 </Button>
-                <Button variant="danger" onClick={() => act(() => requestJson(`/api/admin/add-ons/${addOn.id}`, { method: "DELETE" }))}>
+                <Button variant="danger" onClick={() => act(() => apiFetch(`/api/admin/add-ons/${addOn.id}`, { method: "DELETE" }))}>
                   Delete
                 </Button>
               </span>

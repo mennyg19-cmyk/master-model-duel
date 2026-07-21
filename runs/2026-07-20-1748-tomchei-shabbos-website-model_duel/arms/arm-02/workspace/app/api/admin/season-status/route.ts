@@ -23,10 +23,24 @@ export async function PATCH(request: Request) {
 
   await db.$transaction(async (tx) => {
     if (parsed.data.status === "OPEN") {
-      await tx.season.updateMany({
+      // Only one season sells at a time: closing the displaced one is a real
+      // status change, so it gets its own audit row.
+      const displaced = await tx.season.findMany({
         where: { status: "OPEN", id: { not: season.id } },
-        data: { status: "CLOSED" },
       });
+      for (const openSeason of displaced) {
+        await tx.season.update({ where: { id: openSeason.id }, data: { status: "CLOSED" } });
+        await writeAudit(
+          gate.staff,
+          {
+            action: "season.status",
+            targetType: "Season",
+            targetId: openSeason.id,
+            detail: { name: openSeason.name, status: "CLOSED", displacedBy: season.name },
+          },
+          tx
+        );
+      }
     }
     await tx.season.update({ where: { id: season.id }, data: { status: parsed.data.status } });
     await writeAudit(
