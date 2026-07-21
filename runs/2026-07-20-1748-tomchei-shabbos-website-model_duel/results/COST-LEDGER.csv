@@ -179,3 +179,5 @@
 2026-07-21T14:12:55Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,7916a3b4-74c4-4662-a4a2-52edb0d45c02,,,,,,,,Turn 13 final ask live; usage_missing_pending_export
 2026-07-21T14:15:03Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill_inventory,cursor-grok-4.5-high,7ef77561-d30a-400b-8b72-875264e5c834,,,,,,,,13 features 0 OPEN; usage_missing_pending_export
 2026-07-21T14:15:03Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,reviewer,glm-5.2-high,d8d77458-bf6d-4daa-a484-ef0af94c7f05,,,,,,,,grill turns grade 8/8; usage_missing_pending_export
+2026-07-21T14:17:28Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-03,,plan,cursor-grok-4.5-high,0396d4c9-7bd0-42ad-9c7a-c312d3aa8de2,,,,,,,,12 phases BUILD-PLAN; late_join; usage_missing_pending_export
+2026-07-21T14:18:19Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-03,,reviewer,glm-5.2-high,5eafd426-7bd7-4ba8-872f-4ac8ae110dc3,,,,,,,,plan review 15/15 bonus_plan; late_join; usage_missing_pending_export
