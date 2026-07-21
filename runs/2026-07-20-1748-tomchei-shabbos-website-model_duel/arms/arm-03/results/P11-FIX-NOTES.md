@@ -1,34 +1,45 @@
 # P11 Fix Notes — arm-03
 
 **Phase:** P11 — Email & notification platform  
-**Tree:** `arms/arm-03/workspace/`  
-**Source:** `results/AGGREGATE-REVIEW-P11.md`  
-**Smoke after fix:** 5/5 PASS (`PHASE-P11-SMOKE.md`)
+**Scope:** Single fix pass from `AGGREGATE-REVIEW-P11.md`  
+**Ports:** web 3103 / db 4103  
+**Smoke:** `npm run smoke:p11` → **5/5 PASS** (S1–S5)
 
-## Fixed
+## Fixed IDs
 
-| ID | What changed |
-|---|---|
-| **B1** | `renderTemplate` now HTML-escapes all substituted vars (`escapeHtml`). `sanitizeSameOriginUrl` rejects non-http(s) and off-origin URLs. `enqueuePaymentLinkEmail` and admin `trigger_transactional` bind `paymentUrl` to same-origin only (fallback `${APP_URL}/checkout`); admin can no longer inject an external phishing `paymentUrl` via vars spread. |
-| **M1** | Removed capture-only `captureNotification`. Added `enqueueEmailAndSms` that uses mode-aware `enqueueNotification` (`PENDING` in live/mock, `CAPTURED` in capture). Call sites in `pickup/service.ts`, `pickup/bulk.ts`, `routes/service.ts` updated. Live mode can now be swept/delivered. |
-| **M2** | All five cron routes finalize with `finishCronRun({ ok: false, … })` on work failure before rethrowing/`apiErrorResponse`. |
-| **M3** | `enqueueOrderEmail` and `sendCampaign` store `recipientKey` as lowercased email, matching the idempotency key. |
-| **M5** | `sendCampaign` mints tokens via `mintUnsubscribeToken` and appends preferences + unsubscribe footer links to each recipient's HTML body. |
-| **m20** | Deleted unused `writeCronAudit` from `src/lib/cron/runs.ts`. |
-| **M22** | `outbox-sweep`, `purge-email-log`, `pickup-expiry`, and `payment-reminder` now export both `GET` and `POST` (same pattern as `season-auto-flip`) so Vercel Cron GET works. |
+| ID | Title | Change |
+|---|---|---|
+| **B1** | Stored HTML injection in `renderTemplate` | Confirmed/kept: `escapeHtml` on every `{{var}}` substitution; `sanitizeSameOriginUrl` on payment URLs in order + admin transactional paths |
+| **B2** | Duplicate delivery / missing `claimedBy` + non-atomic finalize | `processClaimedMessage(rowId, workerId)` heartbeats lease, requires `claimedBy === workerId`, finalizes log+outbox in `$transaction` with `updateMany` ownership guard; failure path also ownership-gated |
+| **B3** | P11 cron routes POST-only (Vercel GET → 405) | Added `GET`+`POST` to `outbox-sweep` and `purge-email-log` (same pattern as `season-auto-flip`) |
+| **M1** | `mintUnsubscribeToken` unwired for subscribers | Campaign send already appends minted prefs/unsub footer; subscribe now enqueues `newsletter.welcome` via `enqueueSubscribeWelcome` (token never returned on HTTP) |
+| **M7** | `finishCronRun` always `ok: true` | Outbox sweep sets `ok: sweepResult.failed === 0` |
+| **M11** | Cron overlap test-only (Vercel gets random tokens) | Default token is `${jobKey}:inflight`; released to `${runId}:done` on finish; stale inflight reaped after 10m; explicit `?token=` still unique forever for smoke overlap |
+| **M12** | `finishCronRun` missing on failure | Outbox-sweep, purge-email-log, season-auto-flip finalize with `ok: false` in catch (payment-reminder / pickup-expiry already had this) |
 
-## Skipped (not in fix priority / deferred)
+## Smoke result
 
-| ID | Why skipped |
-|---|---|
-| **M4** | Production overlap still relies on shared `?token=` for collision; fixing real Vercel overlap needs a different claim design (e.g. unique open-run per jobKey). Out of prioritized set. |
-| **M6** | Stale-claim duplicate delivery (`claimedBy` check) — not in prioritized list. |
-| **M7** | `purgeEmailLogs` non-transactional delete+audit — not prioritized. |
-| **M8** | Folding residual `capture*` naming into enqueue is done via M1; further outbox dedupe left alone. |
-| **M9–M21** | From-address dedupe, test-send duplicates, bulk cron skeleton dupes, god-file splits, branding casts, magic defaults cleanup beyond phishing binding, etc. — lower priority / larger refactors. |
-| **m1–m19, m21–m26** | Minors (token leak reason codes, audit action name, god UI, magic numbers, etc.) — not in fix pass scope. |
+```
+passed: 5
+failed: 0
+S1 Preferences + tokens — PASS
+S2 Campaign flow + idempotent rerun — PASS
+S3 Transactional + failure trail — PASS
+S4 Cron auth + overlap — PASS (o2 skipped overlap; raceClaimed=1)
+S5 Purge + test mode + SMS — PASS
+```
 
-## Verification
+## Files touched
 
-- `npm run typecheck` — pass
-- `npm run smoke:p11` — **5/5 PASS** (S1–S5)
+- `src/lib/notify/outbox.ts`
+- `src/lib/cron/runs.ts`
+- `src/app/api/cron/outbox-sweep/route.ts`
+- `src/app/api/cron/purge-email-log/route.ts`
+- `src/app/api/cron/season-auto-flip/route.ts`
+- `src/lib/storefront/newsletter.ts`
+- `src/app/api/newsletter/subscribe/route.ts`
+- `src/lib/email/templates.ts` (B1 already present; no further change)
+
+## Not in this pass
+
+Remaining majors/minors from the aggregate (M2–M6, M8–M10, M13–M19, m1–m29) left for later unless promoted.

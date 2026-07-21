@@ -22,13 +22,9 @@ async function runOutboxSweep(request: Request) {
   try {
     const workerId = `cron_${claim.run.id}_${randomBytes(3).toString("hex")}`;
     const sweepResult = await sweepOutbox({ workerId, limit: 40 });
-    await finishCronRun(claim.run.id, { ok: true, meta: sweepResult });
-    return NextResponse.json({
-      ok: true,
-      skipped: false,
-      ...sweepResult,
-      runId: claim.run.id,
-    });
+    const ok = sweepResult.failed === 0;
+    await finishCronRun(claim.run.id, { ok, meta: sweepResult });
+    return NextResponse.json({ ok, skipped: false, ...sweepResult, runId: claim.run.id });
   } catch (error) {
     await finishCronRun(claim.run.id, {
       ok: false,

@@ -1,7 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { NotifyChannel } from "@prisma/client";
 import { db } from "@/lib/db";
+import { escapeHtml } from "@/lib/email/templates";
+import { enqueueNotification } from "@/lib/notify/outbox";
 import { normalizeEmail } from "@/lib/normalize";
 import { err, ok, type Result } from "@/lib/result";
+import { appUrl } from "@/lib/stripe/client";
 
 const DEFAULT_PREFS = { seasons: true, updates: true, promotions: true } as const;
 const TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -59,7 +63,7 @@ export function verifyUnsubscribeToken(token: string): Result<{
 export async function subscribe(
   emailRaw: string,
   preferences?: Partial<NewsletterPrefs>,
-): Promise<Result<{ id: string; email: string }>> {
+): Promise<Result<{ id: string; email: string; tokenVersion: number }>> {
   const email = emailRaw.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return err("bad_email", "Enter a valid email address.");
@@ -91,12 +95,37 @@ export async function subscribe(
   });
 
   // Token is for email delivery only — never returned to the HTTP caller (H3).
-  return ok({ id: row.id, email: row.email });
+  return ok({ id: row.id, email: row.email, tokenVersion: row.tokenVersion });
 }
 
 /** Mint a signed unsubscribe token for a known subscriber (email/ops paths only). */
 export function mintUnsubscribeToken(subscriberId: string, tokenVersion: number): string {
   return signUnsubscribeToken(subscriberId, tokenVersion, Date.now() + TOKEN_TTL_MS);
+}
+
+/** Enqueue welcome email with signed prefs/unsubscribe links (token never on HTTP). */
+export async function enqueueSubscribeWelcome(input: {
+  subscriberId: string;
+  email: string;
+  tokenVersion: number;
+}) {
+  const token = mintUnsubscribeToken(input.subscriberId, input.tokenVersion);
+  const base = appUrl();
+  const prefsHref = escapeHtml(
+    `${base}/newsletter/preferences?token=${encodeURIComponent(token)}`,
+  );
+  const unsubHref = escapeHtml(
+    `${base}/newsletter/unsubscribe?token=${encodeURIComponent(token)}`,
+  );
+  const recipientKey = input.email.trim().toLowerCase();
+  return enqueueNotification({
+    channel: NotifyChannel.EMAIL,
+    templateKey: "newsletter.welcome",
+    recipientKey,
+    idempotencyKey: `newsletter.welcome:${input.subscriberId}:v${input.tokenVersion}`,
+    subject: "You're subscribed — manage preferences",
+    body: `<p>Thanks for subscribing.</p><p><a href="${prefsHref}">Email preferences</a> · <a href="${unsubHref}">Unsubscribe</a></p>`,
+  });
 }
 
 export async function updatePreferencesWithToken(

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { writeAudit } from "@/lib/audit";
-import { subscribe } from "@/lib/storefront/newsletter";
+import { enqueueSubscribeWelcome, subscribe } from "@/lib/storefront/newsletter";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -30,11 +30,30 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return NextResponse.json({ error: result.publicMessage }, { status: 400 });
   }
+
+  // Best-effort welcome with signed links — never return the token (H3).
+  let welcomeQueued = false;
+  let welcomeError: string | undefined;
+  try {
+    await enqueueSubscribeWelcome({
+      subscriberId: result.value.id,
+      email: result.value.email,
+      tokenVersion: result.value.tokenVersion,
+    });
+    welcomeQueued = true;
+  } catch (error) {
+    welcomeError = error instanceof Error ? error.message : "welcome enqueue failed";
+  }
+
   await writeAudit({
     action: "NEWSLETTER_SUBSCRIBED",
-    meta: { email: result.value.email, id: result.value.id },
+    meta: {
+      email: result.value.email,
+      id: result.value.id,
+      welcomeQueued,
+      ...(welcomeError ? { welcomeError } : {}),
+    },
   });
-  // Do not return unsubscribeToken — requires email verification path (H3).
   return NextResponse.json({
     ok: true,
     email: result.value.email,

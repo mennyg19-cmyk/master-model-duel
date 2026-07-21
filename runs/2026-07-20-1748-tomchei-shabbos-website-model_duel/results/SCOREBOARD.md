@@ -6,7 +6,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** | — | no |
 | arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** | — | no |
-| arm-03 | **6** | **8** | **15** | | **15.0** | | | | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
+| arm-03 | **6** | **8** | **15** | | **16.5** | | | | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 

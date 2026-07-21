@@ -4,7 +4,6 @@
 **Base:** http://127.0.0.1:3103
 **Passed:** 5 / 5
 **Failed:** 0
-**After:** P11 fix pass (`P11-FIX-NOTES.md`)
 
 | ID | Check | Pass |
 |---|---|---|
@@ -33,11 +32,11 @@
     "id": "S2",
     "check": "Campaign flow + idempotent rerun",
     "pass": true,
-    "campaignId": "cmrv7tcbn00bfqx4sm5r7k2m8",
-    "created": 13,
-    "skippedRerun": 13,
+    "campaignId": "cmrv7wqx700j4qx4suqy9ytzl",
+    "created": 15,
+    "skippedRerun": 15,
     "rerunCreated": 0,
-    "deliveries": 13
+    "deliveries": 15
   },
   {
     "id": "S3",
@@ -96,18 +95,18 @@
       "o1": {
         "ok": true,
         "skipped": false,
-        "workerId": "cron_cmrv7tdok00hqqx4swet1e4ds_b27c8c",
-        "claimed": 9,
+        "workerId": "cron_cmrv7ws6l00oyqx4s2shvs5oc_b96835",
+        "claimed": 0,
         "sent": 0,
         "failed": 0,
-        "captured": 9,
-        "runId": "cmrv7tdok00hqqx4swet1e4ds"
+        "captured": 0,
+        "runId": "cmrv7ws6l00oyqx4s2shvs5oc"
       },
       "o2": {
         "ok": true,
         "skipped": true,
         "reason": "overlap",
-        "token": "p11-overlap-1784672312689"
+        "token": "p11-overlap-1784672471444"
       }
     },
     "raceClaimed": 1,
