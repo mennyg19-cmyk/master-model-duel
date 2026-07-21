@@ -324,3 +324,4 @@
 2026-07-21T22:58:48Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,6,arm-03,,detect,cursor-grok-4.5-high,fbfa1c16-f3ed-4993-8ab0-f9ada0793fde,,,,,,,,5/5 bugs found; usage_missing
 2026-07-21T23:01:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,residual,reviewer-aggregate,glm-5.2-high,ce3c1368-7994-4996-adf1-24fa5d92e33a,,,,,,,,usage_missing
 2026-07-21T23:03:56Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,6,arm-03,,vague_fix,cursor-grok-4.5-high,96b619c3-5e43-4269-a822-93252665317f,,,,,,,,5/5 symptoms fixed fee tests 13/13; usage_missing
+2026-07-21T23:05:49Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,residual,reviewer-grade,glm-5.2-high,0b9b3bc7-ae4b-4cec-bd4f-64d381e7742d,,,,,,,,residual grade 7.5/15; usage_missing

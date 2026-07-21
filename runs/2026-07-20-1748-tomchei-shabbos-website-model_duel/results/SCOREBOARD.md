@@ -6,7 +6,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** | — | no |
 | arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** | — | no |
-| arm-03 | **6** | **8** | **15** | | **18.0** | **11.0** | **15.0** | **73.0** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
+| arm-03 | **6** | **8** | **15** | | **18.0** | **7.5** | **15.0** | **69.5** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -74,7 +74,7 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **Mode:** single self-review + one fix pass + blind residual panel (`glm-5.2-high`)
 - **arm-01:** **12.0/15** — self-review 1B·6M·1m; fixed SR-01–07; residual **3B·14M·25m** ([aggregate](arms/arm-01/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 3/6 (3 clean-code blockers, 0 security blockers). Fix rate 4/4. Regressions 3/3. Hygiene 2/2.
 - **arm-02:** **12.5/15** — self-review 3M·4m; fixed SR-01–07 (all); residual **1B·11M·20m** ([aggregate](arms/arm-02/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 4.5/6 (1 adoption-debt blocker). Fix rate 4/4. Regressions 2/3 (verify-email flow untested). Hygiene 2/2.
-- **arm-03:** **11.0/15** — self-review 1B·10M·7m; fixed SR-B1 + M1–M3/M5–M7; residual **0B·4H·8M·14L·7I** ([aggregate](arms/arm-03/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 4/6. Fix rate 3/4 (9/12 majors+blockers). Regressions 3/3. Hygiene 1/2 (notes ID drift).
+- **arm-03:** **7.5/15** — [grade](results/reviews/self-review-residual-grade-arm-03.md). Self-review 3B·9M·6m; fixed SR-B1–B3 + M1–M4/M6/M9 (9/12); residual **5B·11M·26m** incl. **1 security blocker** ([aggregate](arms/arm-03/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 1.5/6. Fix rate 3/4. Regressions 1/3 (magic-link refresh lockout). Hygiene 2/2. Corrected from premature 11.0 after residual aggregate + rubric grade landed.
 - **Test 5 winner: arm-02** (fewer residual blockers, full minor fix pass)
 
 ## Test 2 notes

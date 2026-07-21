@@ -11,6 +11,7 @@
 |---|---|---|
 | arm-01 | `gpt-5.6-sol-medium` (gpt-sol) | ponytail, clean-code, workflow, vocabulary, codegraph |
 | arm-02 | `claude-fable-5-thinking-medium` (claude-fable) | ponytail, clean-code, workflow, vocabulary, codegraph |
+| arm-03 | `cursor-grok-4.5-high` (grok) | ponytail, clean-code, workflow, vocabulary, codegraph — **late join** |
 
 ## Dual headlines
 
@@ -26,6 +27,9 @@
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | arm-01 | 5 | 8 | 14 | — | 18.0 | 12.0 | **15.0** | **72.0** |
 | arm-02 | 7 | 8 | 14 | — | 18.0 | 12.5 | **15.0** | **74.5** |
+| arm-03 | 6 | 8 | 15 | — | 18.0 | 7.5 | **15.0** | **69.5** |
+
+Late join **arm-03** (`cursor-grok-4.5-high`): Tests 1a–2 + 4–6 complete; Test 3 skipped. Bonuses: `inv_novel=2`, `bonus_plan`. Test 6 rerun on arm-02 clone + same B1–B5 seeds.
 
 ## Dual inventory
 
@@ -49,5 +53,6 @@ See [COST-LEDGER.csv](./COST-LEDGER.csv). Usage backfill pending (`usage_missing
 | Merged build plan | [shared/MERGED-BUILD-PLAN.md](../shared/MERGED-BUILD-PLAN.md) |
 | arm-01 final workspace | [arms/arm-01/workspace/](../arms/arm-01/workspace/) (post Test 6 fix) |
 | arm-02 final workspace | [arms/arm-02/workspace/](../arms/arm-02/workspace/) (post Test 6 fix) |
+| arm-03 final workspace | [arms/arm-03/workspace/](../arms/arm-03/workspace/) (late join; post Test 6 rerun) |
 
-**Overall winner (full /100, Test 3 excluded): arm-02**
+**Overall winner (original arms, Test 3 excluded): arm-02** at 74.5/100. Late join arm-03 scored **69.5/100** (below both original arms on base total; Test 5 residual 7.5/15 after security-blocker residual panel).
