@@ -60,6 +60,9 @@ enum AuditAction {
   IMPORT_STAGED
   IMPORT_COMMITTED
   ADMIN_BANNER_UPDATED
+  PACKAGE_SPLIT
+  PACKAGE_REGROUPED
+  PRINT_BATCH_CREATED
 }
 
 enum ImportKind {
@@ -117,6 +120,19 @@ enum PackageStage {
   PACKED
   SENT
   PICKED_UP
+}
+
+enum PrintBatchKind {
+  NIGHTLY
+  REPRINT_GROUP
+  REPRINT_ORDER
+}
+
+enum PrintArtifactKind {
+  PACKAGE_SLIPS
+  LABELS
+  GREETING_CARDS
+  PACKING_SLIP
 }
 
 enum PaymentMethod {
@@ -272,8 +288,9 @@ model Season {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
-  products Product[]
-  orders   Order[]
+  products    Product[]
+  orders      Order[]
+  printBatches PrintBatch[]
 
   @@index([year])
   @@index([status])
@@ -601,6 +618,37 @@ model PackageAuditLog {
   actor   StaffUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([packageId, createdAt])
+}
+
+/// Nightly / reprint run (UR-005). runKey makes nightly idempotent per calendar day.
+model PrintBatch {
+  id               String         @id @default(cuid())
+  seasonId         String
+  kind             PrintBatchKind
+  runKey           String         @unique
+  createdByStaffId String?
+  createdAt        DateTime       @default(now())
+
+  season    Season          @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  artifacts PrintArtifact[]
+
+  @@index([seasonId, createdAt])
+}
+
+/// One downloadable PDF snapshot. Printing never mutates Package.stage (G-001..G-004).
+model PrintArtifact {
+  id           String            @id @default(cuid())
+  printBatchId String
+  filingGroup  String
+  kind         PrintArtifactKind
+  orderId      String?
+  payload      Json
+  createdAt    DateTime          @default(now())
+
+  printBatch PrintBatch @relation(fields: [printBatchId], references: [id], onDelete: Cascade)
+
+  @@unique([printBatchId, filingGroup, kind, orderId])
+  @@index([orderId, createdAt])
 }
 
 model Payment {
