@@ -46,11 +46,8 @@ export default async function AccountOrdersPage() {
       ) : (
         <ul className="flex flex-col gap-3">
           {orders.map((order) => (
-            <li key={order.id}>
-              <Link
-                href={`/account/orders/${order.id}`}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface p-4 shadow-sm hover:border-brand"
-              >
+            <li key={order.id} className="rounded-lg border border-border bg-surface p-4 shadow-sm hover:border-brand">
+              <Link href={`/account/orders/${order.id}`} className="flex items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold">
                     {order.orderNumber ? `Order #${order.orderNumber}` : order.draftReference}
@@ -68,6 +65,15 @@ export default async function AccountOrdersPage() {
                   </Badge>
                 </div>
               </Link>
+              {season && order.status === "FINALIZED" && (
+                <Link
+                  href={`/account/orders/${order.id}/repeat`}
+                  className="mt-2 inline-block text-sm text-brand hover:underline"
+                  data-testid={`repeat-link-${order.id}`}
+                >
+                  Repeat this order →
+                </Link>
+              )}
             </li>
           ))}
         </ul>

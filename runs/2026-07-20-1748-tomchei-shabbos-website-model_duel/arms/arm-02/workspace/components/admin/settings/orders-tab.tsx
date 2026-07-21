@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
+import { SeasonStatusCard, NewSeasonCard } from "@/components/admin/settings/season-management";
 import type { ActFn, PackageTypeRow, PickupLocationRow, SaveSettingFn, SeasonRow } from "@/components/admin/settings/types";
 
 export function OrdersTab({
@@ -28,7 +29,6 @@ export function OrdersTab({
   const [newPackageType, setNewPackageType] = useState("");
   const [newLocation, setNewLocation] = useState({ name: "", line1: "", city: "", state: "", zip: "" });
   const [followup, setFollowup] = useState(String(followupDays));
-  const [closed, setClosed] = useState(closedMessage);
 
   async function addPackageType(event: FormEvent) {
     event.preventDefault();
@@ -44,43 +44,8 @@ export function OrdersTab({
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardTitle>Store status</CardTitle>
-        <p className="mb-3 text-sm text-muted">
-          The storefront sells from the open season. Closing it hides checkout everywhere on the next request.
-        </p>
-        <ul className="space-y-2 text-sm">
-          {seasons.map((season) => (
-            <li key={season.id} className="flex items-center gap-3">
-              <span className="font-medium">{season.name}</span>
-              <Badge tone={season.status === "OPEN" ? "success" : "neutral"}>{season.status}</Badge>
-              <Button
-                variant="secondary"
-                className="ml-auto"
-                onClick={() =>
-                  act(
-                    () =>
-                      apiFetch("/api/admin/season-status", {
-                        method: "PATCH",
-                        body: { seasonId: season.id, status: season.status === "OPEN" ? "CLOSED" : "OPEN" },
-                      }),
-                    `${season.name} is now ${season.status === "OPEN" ? "closed" : "open"}.`
-                  )
-                }
-              >
-                {season.status === "OPEN" ? "Close store" : "Open store"}
-              </Button>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-4 border-t border-border pt-3">
-          <label htmlFor="closed-message" className="text-sm font-medium">Storewide closed banner</label>
-          <div className="mt-1 flex gap-2">
-            <Input id="closed-message" value={closed} onChange={(event) => setClosed(event.target.value)} className="flex-1" />
-            <Button onClick={() => saveSetting("store.closed_message", closed)}>Save</Button>
-          </div>
-        </div>
-      </Card>
+      <SeasonStatusCard seasons={seasons} closedMessage={closedMessage} act={act} saveSetting={saveSetting} />
+      <NewSeasonCard seasons={seasons} act={act} />
 
       <Card>
         <CardTitle>Package types</CardTitle>

@@ -8,6 +8,12 @@ export default async function AdminCatalogPage() {
     select: { id: true, name: true, status: true },
     orderBy: { createdAt: "desc" },
   });
+  // Replacement links may point across seasons (R-048), so the picker needs
+  // every product, not just the selected season's.
+  const replacementCandidates = await db.product.findMany({
+    select: { id: true, name: true, seasonId: true, isActive: true },
+    orderBy: { name: "asc" },
+  });
   const firstSeasonId = seasons[0]?.id;
   const [initialProducts, initialAddOns] = firstSeasonId
     ? await Promise.all([
@@ -30,7 +36,12 @@ export default async function AdminCatalogPage() {
       {seasons.length === 0 ? (
         <p className="text-muted">No seasons exist yet. Seed the database or create one via season management (P10).</p>
       ) : (
-        <CatalogManager seasons={seasons} initialProducts={initialProducts} initialAddOns={initialAddOns} />
+        <CatalogManager
+          seasons={seasons}
+          initialProducts={initialProducts}
+          initialAddOns={initialAddOns}
+          replacementCandidates={replacementCandidates}
+        />
       )}
     </div>
   );

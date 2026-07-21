@@ -2,7 +2,9 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermissionPage } from "@/lib/auth/current-user";
 import { customerSearchWhere } from "@/lib/customers";
+import { getOpenSeason } from "@/lib/season";
 import { Card } from "@/components/ui/card";
+import { BulkRepeat } from "@/components/admin/bulk-repeat";
 
 const PAGE_SIZE = 25;
 const MAX_PAGE = 400;
@@ -20,7 +22,7 @@ export default async function AdminCustomersPage({
 
   const where = q ? customerSearchWhere(q) : {};
 
-  const [total, customers] = await Promise.all([
+  const [total, customers, openSeason] = await Promise.all([
     db.customer.count({ where }),
     db.customer.findMany({
       where,
@@ -29,7 +31,16 @@ export default async function AdminCustomersPage({
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
+    getOpenSeason(),
   ]);
+  // Bulk repeat sources: any other season that actually has orders to copy.
+  const repeatSourceSeasons = openSeason
+    ? await db.season.findMany({
+        where: { id: { not: openSeason.id }, orders: { some: { status: "FINALIZED" } } },
+        select: { id: true, name: true },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageLink = (target: number) =>
     `/admin/customers?${new URLSearchParams({ ...(q ? { q } : {}), ...(target > 1 ? { page: `${target}` } : {}) })}`;
@@ -42,6 +53,8 @@ export default async function AdminCustomersPage({
           {total} customer{total === 1 ? "" : "s"} · page {page} of {pageCount}
         </p>
       </div>
+
+      {repeatSourceSeasons.length > 0 && <BulkRepeat seasons={repeatSourceSeasons} />}
 
       <form method="GET" action="/admin/customers" className="mb-4 flex items-end gap-2">
         <label className="flex flex-col text-xs text-muted">

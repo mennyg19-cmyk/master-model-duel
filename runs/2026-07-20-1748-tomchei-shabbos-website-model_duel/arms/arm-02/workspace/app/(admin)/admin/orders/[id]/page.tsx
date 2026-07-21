@@ -9,6 +9,7 @@ import { OrderStatusBadge, PaymentStatusBadge } from "@/components/admin/order-b
 import { OrderMoneyActions } from "@/components/admin/order-money-actions";
 import { FulfillmentActions } from "@/components/admin/fulfillment-actions";
 import { ShipmentActions } from "@/components/admin/shipment-actions";
+import { RepeatOrderButton } from "@/components/admin/repeat-order-button";
 
 const AUDIT_LIMIT = 50;
 
@@ -111,6 +112,9 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
         )}
         {order.status === "FINALIZED" && permissions.has("fulfillment.manage") && (
           <FulfillmentActions mode="order" orderId={order.id} />
+        )}
+        {order.status === "FINALIZED" && permissions.has("orders.manage") && (
+          <RepeatOrderButton orderId={order.id} />
         )}
       </div>
 

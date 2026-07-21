@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCustomerContext } from "@/lib/auth/customer-session";
+import { getOpenSeason } from "@/lib/season";
 import { formatCents } from "@/lib/catalog";
 import { wireFormat } from "@/lib/domain/draft-reference";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,8 @@ export default async function AccountOrderDetailPage({
   });
   if (!order || order.customerId !== customer.id || order.status === "DISCARDED") notFound();
 
+  const openSeason = order.status === "FINALIZED" ? await getOpenSeason() : null;
+
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -45,6 +48,15 @@ export default async function AccountOrderDetailPage({
           <p className="mt-2 text-sm text-muted">
             Paying by bank transfer? Use the reference <strong>{wireFormat(order.draftReference)}</strong>.
           </p>
+        )}
+        {openSeason && (
+          <Link
+            href={`/account/orders/${order.id}/repeat`}
+            className="mt-2 inline-block rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-strong"
+            data-testid="repeat-order-button"
+          >
+            Repeat this order
+          </Link>
         )}
       </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api-client";
 import { formatCents } from "@/lib/catalog";
 import { OrderBuilder } from "@/components/builder/order-builder";
@@ -16,11 +16,26 @@ import { PosCheckout } from "@/components/admin/pos-checkout";
 
 type PosDraft = { cart: Cart | null; priced: PricedCart | null; addressBook: SavedAddress[] };
 
-export function PosClient({ seasonName, catalog }: { seasonName: string; catalog: BuilderCatalog }) {
+export function PosClient({
+  seasonName,
+  catalog,
+  initialCustomer = null,
+}: {
+  seasonName: string;
+  catalog: BuilderCatalog;
+  /** Preselected customer (deep link from staff repeat — R-057). */
+  initialCustomer?: PosCustomer | null;
+}) {
   const [customer, setCustomer] = useState<PosCustomer | null>(null);
   const [draft, setDraft] = useState<PosDraft | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [done, setDone] = useState<{ orderNumber: number | null; totalCents: number } | null>(null);
+
+  useEffect(() => {
+    if (initialCustomer) void selectCustomer(initialCustomer);
+    // Run once on mount — the deep link only picks the starting customer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function selectCustomer(next: PosCustomer) {
     setLoadError(null);

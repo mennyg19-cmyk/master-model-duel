@@ -1,6 +1,13 @@
 // Shared shapes for the settings hub and its tab components.
 
-export type SeasonRow = { id: string; name: string; status: "OPEN" | "CLOSED" };
+export type SeasonRow = {
+  id: string;
+  name: string;
+  status: "OPEN" | "CLOSED";
+  /** ISO strings — Date objects can't cross the server/client boundary. */
+  opensAt: string | null;
+  closesAt: string | null;
+};
 export type PackageTypeRow = {
   id: string;
   name: string;

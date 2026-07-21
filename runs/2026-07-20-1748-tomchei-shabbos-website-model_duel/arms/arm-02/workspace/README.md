@@ -58,6 +58,18 @@ rate at checkout, buy the label on the cheapest, and record the spread on the
 Staff buy/void labels and refresh tracking from `/admin/packages` or the
 order detail page; a label stays voidable until the package is marked sent.
 
+## Seasons & repeat orders
+
+One season sells at a time (Settings → Orders owns the switch). The new-season
+wizard copies a prior catalog and links each old product to its copy, feeding
+the replacement chains (Catalog → "Replaced by", cross-season allowed) that
+repeat orders resolve through. Customers repeat from Account → Orders through a
+review page that confirms replacements and recipients (discontinued items
+default to the closest-priced product but must be picked or removed); staff
+repeat single orders into POS drafts from the order detail page and bulk-repeat
+a whole season from Customers. `opensAt`/`closesAt` schedules are fired once by
+the `/api/cron/season-flip` cron and then cleared.
+
 ## Patterns (one per concern)
 
 - Data access: Prisma via `lib/db.ts` singleton.

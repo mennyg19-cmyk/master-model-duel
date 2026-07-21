@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
+import { wouldCreateReplacementCycle } from "@/lib/repeat";
 
 const updateProductSchema = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -37,15 +38,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (parsed.data.replacementId) {
     const replacement = await db.product.findUnique({
       where: { id: parsed.data.replacementId },
-      select: { seasonId: true, isActive: true },
+      select: { isActive: true },
     });
     if (!replacement) return Response.json({ error: "Replacement product not found" }, { status: 400 });
-    // R-148: replacement links must stay within the season and point at a sellable product.
-    if (replacement.seasonId !== product.seasonId) {
-      return Response.json({ error: "Replacement must belong to the same season" }, { status: 400 });
-    }
+    // R-048/G-013: links may cross seasons (this year's item → next year's item);
+    // they must point at a sellable product and never close a loop.
     if (!replacement.isActive) {
       return Response.json({ error: "Replacement must be an active product" }, { status: 400 });
+    }
+    const chainProducts = await db.product.findMany({
+      select: { id: true, seasonId: true, isActive: true, replacementId: true },
+    });
+    if (wouldCreateReplacementCycle(id, parsed.data.replacementId, new Map(chainProducts.map((row) => [row.id, row])))) {
+      return Response.json({ error: "That replacement would create a loop back to this product" }, { status: 400 });
     }
   }
 

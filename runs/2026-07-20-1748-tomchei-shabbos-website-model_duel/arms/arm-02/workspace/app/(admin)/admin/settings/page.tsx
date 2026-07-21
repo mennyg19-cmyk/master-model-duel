@@ -8,7 +8,10 @@ export default async function SettingsPage() {
 
   const [seasons, packageTypes, pickupLocations, followupDays, closedMessage, deliveryZips, shippingRates, shippingRules, purimDayChoices, emailFrom, emailReplyTo] =
     await Promise.all([
-      db.season.findMany({ select: { id: true, name: true, status: true }, orderBy: { createdAt: "desc" } }),
+      db.season.findMany({
+        select: { id: true, name: true, status: true, opensAt: true, closesAt: true },
+        orderBy: { createdAt: "desc" },
+      }),
       db.packageType.findMany({ orderBy: { name: "asc" } }),
       db.pickupLocation.findMany({ orderBy: { name: "asc" } }),
       getSetting("orders.followup_days"),
@@ -26,7 +29,11 @@ export default async function SettingsPage() {
       <h1 className="mb-6 text-2xl font-semibold">Settings</h1>
       <SettingsHub
         data={{
-          seasons,
+          seasons: seasons.map((season) => ({
+            ...season,
+            opensAt: season.opensAt?.toISOString() ?? null,
+            closesAt: season.closesAt?.toISOString() ?? null,
+          })),
           packageTypes,
           pickupLocations,
           followupDays,

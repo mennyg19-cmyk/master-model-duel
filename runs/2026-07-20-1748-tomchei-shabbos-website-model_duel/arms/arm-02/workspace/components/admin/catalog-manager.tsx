@@ -38,14 +38,18 @@ async function requestJson(url: string, init?: RequestInit): Promise<{ ok: boole
   return { ok: response.ok, error: body.error };
 }
 
+type ReplacementCandidate = { id: string; name: string; seasonId: string; isActive: boolean };
+
 export function CatalogManager({
   seasons,
   initialProducts,
   initialAddOns,
+  replacementCandidates,
 }: {
   seasons: SeasonRow[];
   initialProducts: ProductRow[];
   initialAddOns: AddOnRow[];
+  replacementCandidates: ReplacementCandidate[];
 }) {
   const [seasonId, setSeasonId] = useState(seasons[0]?.id ?? "");
   const [products, setProducts] = useState<ProductRow[]>(initialProducts);
@@ -158,7 +162,7 @@ export function CatalogManager({
                 <td className="pr-2">{product.category ?? "—"}</td>
                 <td className="pr-2">{formatCents(product.basePriceCents)}</td>
                 <td className="pr-2">
-                  {/* Replacement-link editor shell (R-065): full mapping UI lands with repeat orders. */}
+                  {/* Replacement mapping (R-048): may point at any season's active product; repeat orders follow the chain. */}
                   <Select
                     value={product.replacementId ?? ""}
                     aria-label={`Replacement for ${product.name}`}
@@ -170,16 +174,27 @@ export function CatalogManager({
                         })
                       )
                     }
-                    className="max-w-40 text-xs"
+                    className="max-w-44 text-xs"
                   >
                     <option value="">None</option>
-                    {products
-                      .filter((candidate) => candidate.id !== product.id)
-                      .map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>
-                          {candidate.name}
-                        </option>
-                      ))}
+                    {seasons.map((seasonOption) => {
+                      const seasonCandidates = replacementCandidates.filter(
+                        (candidate) =>
+                          candidate.seasonId === seasonOption.id &&
+                          candidate.id !== product.id &&
+                          (candidate.isActive || candidate.id === product.replacementId)
+                      );
+                      if (seasonCandidates.length === 0) return null;
+                      return (
+                        <optgroup key={seasonOption.id} label={seasonOption.name}>
+                          {seasonCandidates.map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {candidate.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
                   </Select>
                 </td>
                 <td className="pr-2">
