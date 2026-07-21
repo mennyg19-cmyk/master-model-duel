@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { err, maskError, ok, type Result } from "@/lib/result";
 import { formatDraftRef } from "@/lib/orders/draft-wire";
 import { writeAudit } from "@/lib/audit";
+import { lockOrderForUpdate } from "@/lib/orders/lock";
+import { assertOrderTransition } from "@/lib/orders/state-machine";
 import { randomBytes } from "node:crypto";
 
 type Tx = Prisma.TransactionClient;
@@ -82,18 +84,20 @@ export async function repeatOrder(input: {
         },
       });
       await cloneLines(tx, source.id, order.id);
-      await tx.auditLog.create({
-        data: {
+      await writeAudit(
+        {
           action: AuditAction.ORDER_REPEATED,
           actorId: input.staffId,
           meta: {
+            orderId: source.id,
             sourceOrderId: source.id,
             newOrderId: order.id,
             draftRef,
             mode: "single",
           },
         },
-      });
+        tx,
+      );
       return order;
     });
 
@@ -105,7 +109,7 @@ export async function repeatOrder(input: {
 
 const MAX_BULK_REPEAT = 25;
 
-/** Bounded bulk-repeat with optimistic version conflict reporting. */
+/** Bounded bulk-repeat with row-lock + version guard (B7). */
 export async function bulkRepeatOrders(input: {
   items: Array<{ orderId: string; expectedVersion: number }>;
   staffId: string;
@@ -153,9 +157,16 @@ export async function bulkRepeatOrders(input: {
       const seasonRow = await db.season.findUniqueOrThrow({ where: { id: source.seasonId } });
       const draftRef = formatDraftRef(seasonRow.year, randomBytes(6).toString("hex"));
       const order = await db.$transaction(async (tx) => {
-        // Re-check version under transaction for concurrency.
-        const locked = await tx.order.findUniqueOrThrow({ where: { id: source.id } });
+        const locked = await lockOrderForUpdate(tx, source.id);
         if (locked.version !== item.expectedVersion) {
+          return null;
+        }
+        // Conditional version bump — second concurrent writer gets count 0.
+        const bumped = await tx.order.updateMany({
+          where: { id: locked.id, version: item.expectedVersion },
+          data: { version: { increment: 1 } },
+        });
+        if (bumped.count !== 1) {
           return null;
         }
         const draft = await tx.order.create({
@@ -168,10 +179,21 @@ export async function bulkRepeatOrders(input: {
           },
         });
         await cloneLines(tx, locked.id, draft.id);
-        await tx.order.update({
-          where: { id: locked.id },
-          data: { version: { increment: 1 } },
-        });
+        await writeAudit(
+          {
+            action: AuditAction.BULK_ACTION_APPLIED,
+            actorId: input.staffId,
+            meta: {
+              action: "bulk_repeat",
+              orderId: locked.id,
+              sourceOrderId: locked.id,
+              newOrderId: draft.id,
+              draftRef,
+              created: [{ sourceOrderId: locked.id, draftRef, orderId: draft.id }],
+            },
+          },
+          tx,
+        );
         return draft;
       });
 
@@ -192,27 +214,13 @@ export async function bulkRepeatOrders(input: {
       });
     }
 
-    await writeAudit({
-      action: AuditAction.BULK_ACTION_APPLIED,
-      actorId: input.staffId,
-      meta: {
-        action: "bulk_repeat",
-        createdCount: created.length,
-        conflictCount: conflicts.length,
-        skippedCount: skipped.length,
-        created,
-        conflicts,
-        skipped,
-      },
-    });
-
     return ok({ created, conflicts, skipped });
   } catch (error) {
     return err(maskError(error), "Bulk repeat failed.");
   }
 }
 
-/** Generic bulk action with deterministic conflict reporting (G-024). */
+/** Generic bulk action with state-machine + version guard (B6, B7). */
 export async function bulkUpdateOrderStatus(input: {
   items: Array<{ orderId: string; expectedVersion: number }>;
   toStatus: OrderStatus;
@@ -243,7 +251,7 @@ export async function bulkUpdateOrderStatus(input: {
 
     for (const item of input.items) {
       const result = await db.$transaction(async (tx) => {
-        const order = await tx.order.findUnique({ where: { id: item.orderId } });
+        const order = await lockOrderForUpdate(tx, item.orderId).catch(() => null);
         if (!order) return { kind: "skipped" as const, reason: "not_found" };
         if (order.version !== item.expectedVersion) {
           return {
@@ -258,10 +266,38 @@ export async function bulkUpdateOrderStatus(input: {
         ) {
           return { kind: "skipped" as const, reason: `status_${order.status}` };
         }
-        await tx.order.update({
-          where: { id: order.id },
+        try {
+          assertOrderTransition(order.status, input.toStatus);
+        } catch {
+          return {
+            kind: "skipped" as const,
+            reason: `illegal_transition_${order.status}_to_${input.toStatus}`,
+          };
+        }
+        const bumped = await tx.order.updateMany({
+          where: { id: order.id, version: item.expectedVersion },
           data: { status: input.toStatus, version: { increment: 1 } },
         });
+        if (bumped.count !== 1) {
+          return {
+            kind: "conflict" as const,
+            reason: "version_conflict",
+            actualVersion: order.version,
+          };
+        }
+        await writeAudit(
+          {
+            action: AuditAction.BULK_ACTION_APPLIED,
+            actorId: input.staffId,
+            meta: {
+              action: "bulk_status",
+              orderId: order.id,
+              toStatus: input.toStatus,
+              updated: [order.id],
+            },
+          },
+          tx,
+        );
         return { kind: "updated" as const };
       });
 
@@ -276,18 +312,6 @@ export async function bulkUpdateOrderStatus(input: {
         skipped.push({ orderId: item.orderId, reason: result.reason });
       }
     }
-
-    await writeAudit({
-      action: AuditAction.BULK_ACTION_APPLIED,
-      actorId: input.staffId,
-      meta: {
-        action: "bulk_status",
-        toStatus: input.toStatus,
-        updated,
-        conflicts,
-        skipped,
-      },
-    });
 
     return ok({ updated, conflicts, skipped });
   } catch (error) {

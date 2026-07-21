@@ -19,15 +19,17 @@ export async function POST(request: Request, ctx: Ctx) {
     const body = bodySchema.parse(await request.json());
     const result = await refundPayment({
       paymentId: body.paymentId,
+      orderId,
       amountCents: body.amountCents,
       staffId: staff.effectiveStaff.id,
       reason: body.reason,
     });
     if (!result.ok) {
-      return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });
-    }
-    if (result.value.payment.orderId !== orderId) {
-      return NextResponse.json({ ok: false, error: "Payment does not belong to this order." }, { status: 400 });
+      const status = result.error === "order" ? 400 : 409;
+      return NextResponse.json(
+        { ok: false, error: result.publicMessage },
+        { status },
+      );
     }
     return NextResponse.json({
       ok: true,

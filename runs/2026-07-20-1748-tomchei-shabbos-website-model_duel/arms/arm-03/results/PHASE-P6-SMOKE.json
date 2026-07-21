@@ -1,0 +1,598 @@
+{
+  "phase": "P6",
+  "at": "2026-07-21T20:36:39.339Z",
+  "passed": 28,
+  "total": 28,
+  "failed": [],
+  "evidence": [
+    {
+      "id": "S1a",
+      "check": "Manager dashboard KPIs",
+      "pass": {
+        "placedToday": 1044,
+        "unpaidOpen": 38,
+        "paidOpen": 1006,
+        "recent": [
+          {
+            "id": "cmrv3qshz0013qxh4zaszt4e1",
+            "seasonId": "cmruro40z0007qx5wepn8bspr",
+            "customerId": "cmrv3pfil0006qxh4s7zbycko",
+            "status": "PAID",
+            "orderNumber": 43,
+            "draftRef": "D-2026-BB576359",
+            "guestAccessTokenHash": null,
+            "guestTokenVersion": 1,
+            "greetingDefault": "Chag Purim Sameach!",
+            "paymentStatusCached": "PAID",
+            "expectedTotalCents": 5400,
+            "donationCents": 0,
+            "fulfillmentFeeCents": 0,
+            "checkoutSnapshot": {
+              "fees": {
+                "blockedZips": [],
+                "bulkFeeCents": 0,
+                "shipFeeCents": 0,
+                "shipLineCount": 0,
+                "totalFeeCents": 0,
+                "perPackageFeeCents": 0,
+                "bulkDestinationCount": 0,
+                "perPackageRecipientCount": 0
+              },
+              "capturedAt": "2026-07-21T20:24:33.737Z",
+              "donationCents": 0,
+              "subtotalCents": 5400,
+              "expectedTotalCents": 5400
+            },
+            "version": 8,
+            "placedAt": "2026-07-21T20:24:33.761Z",
+            "discardedAt": null,
+            "guestClearedAt": null,
+            "createdAt": "2026-07-21T20:24:33.479Z",
+            "updatedAt": "2026-07-21T20:24:33.909Z",
+            "customer": {
+              "displayName": "Walk-in P6",
+              "email": "walkin.p6.1784665409522@tomchei.local"
+            }
+          },
+          {
+            "id": "cmrv3pn0c07pjqx3of5gf7zbx",
+            "seasonId": "cmruro40z0007qx5wepn8bspr",
+            "customerId": "cmruqz3yl0006qxeoja1qanod",
+            "status": "FULFILLING",
+            "orderNumber": 11042,
+            "draftRef": "D-2026-00AFF92C",
+            "guestAccessTokenHash": null,
+            "guestTokenVersion": 1,
+            "greetingDefault": null,
+            "paymentStatusCached": "PAID",
+            "expectedTotalCents": 5400,
+            "donationCents": 0,
+            "fulfillmentFeeCents": 0,
+            "checkoutSnapshot": {
+              "n": 1000,
+              "scaleFixture": "p6"
+            },
+            "version": 2,
+            "placedAt": "2026-07-21T20:23:39.707Z",
+            "discardedAt": null,
+            "guestClearedAt": null,
+            "createdAt": "2026-07-21T20:23:39.708Z",
+            "updatedAt": "2026-07-21T20:23:39.850Z",
+            "customer": {
+              "displayName": "Baseline Customer",
+              "email": "customer@tomchei.local"
+            }
+          },
+          {
+            "id": "cmrv3pn0a07p9qx3o1pbnu367",
+            "seasonId": "cmruro40z0007qx5wepn8bspr",
+            "customerId": "cmruqz3yl0006qxeoja1qanod",
+            "status": "FULFILLING",
+            "orderNumber": 11041,
+            "draftRef": "D-2026-990E29F1",
+            "guestAccessTokenHash": null,
+            "guestTokenVersion": 1,
+            "greetingDefault": null,
+            "paymentStatusCached": "PAID",
+            "expectedTotalCents": 5400,
+            "donationCents": 0,
+            "fulfillmentFeeCents": 0,
+            "checkoutSnapshot": {
+              "n": 999,
+              "scaleFixture": "p6"
+            },
+            "version": 2,
+            "placedAt": "2026-07-21T20:23:39.705Z",
+            "discardedAt": null,
+            "guestClearedAt": null,
+            "createdAt": "2026-07-21T20:23:39.706Z",
+            "updatedAt": "2026-07-21T20:23:39.852Z",
+            "customer": {
+              "displayName": "Baseline Customer",
+              "email": "customer@tomchei.local"
+            }
+          },
+          {
+            "id": "cmrv3pn0807ozqx3oo4kqwt0t",
+            "seasonId": "cmruro40z0007qx5wepn8bspr",
+            "customerId": "cmruqz3yl0006qxeoja1qanod",
+            "status": "FULFILLING",
+            "orderNumber": 11040,
+            "draftRef": "D-2026-98EE6DE5",
+            "guestAccessTokenHash": null,
+            "guestTokenVersion": 1,
+            "greetingDefault": null,
+            "paymentStatusCached": "PARTIAL",
+            "expectedTotalCents": 5400,
+            "donationCents": 0,
+            "fulfillmentFeeCents": 0,
+            "checkoutSnapshot": {
+              "n": 998,
+              "scaleFixture": "p6"
+            },
+            "version": 2,
+            "placedAt": "2026-07-21T20:23:39.703Z",
+            "discardedAt": null,
+            "guestClearedAt": null,
+            "createdAt": "2026-07-21T20:23:39.705Z",
+            "updatedAt": "2026-07-21T20:24:34.803Z",
+            "customer": {
+              "displayName": "Baseline Customer",
+              "email": "customer@tomchei.local"
+            }
+          },
+          {
+            "id": "cmrv3pn0607opqx3o0etgrbu0",
+            "seasonId": "cmruro40z0007qx5wepn8bspr",
+            "customerId": "cmruqz3yl0006qxeoja1qanod",
+            "status": "FULFILLING",
+            "orderNumber": 11039,
+            "draftRef": "D-2026-9734D1F5",
+            "guestAccessTokenHash": null,
+            "guestTokenVersion": 1,
+            "greetingDefault": null,
+            "paymentStatusCached": "PAID",
+            "expectedTotalCents": 5400,
+            "donationCents": 0,
+            "fulfillmentFeeCents": 0,
+            "checkoutSnapshot": {
+              "n": 997,
+              "scaleFixture": "p6"
+            },
+            "version": 2,
+            "placedAt": "2026-07-21T20:23:39.701Z",
+            "discardedAt": null,
+            "guestClearedAt": null,
+            "createdAt": "2026-07-21T20:23:39.703Z",
+            "updatedAt": "2026-07-21T20:24:34.807Z",
+            "customer": {
+              "displayName": "Baseline Customer",
+              "email": "customer@tomchei.local"
+            }
+          },
+          {
+            "id": "cmrv3pn0407ofqx3oezy4a5jb",
+            "seasonId": "cmruro40z0007qx5wepn8bspr",
+            "customerId": "cmruqz3yl0006qxeoja1qanod",
+            "status": "PAID",
+            "orderNumber": 11038,
+            "draftRef": "D-2026-96E2DCF4",
+            "guestAccessTokenHash": null,
+            "guestTokenVersion": 1,
+            "greetingDefault": null,
+            "paymentStatusCached": "PAID",
+            "expectedTotalCents": 5400,
+            "donationCents": 0,
+            "fulfillmentFeeCents": 0,
+            "checkoutSnapshot": {
+              "n": 996,
+              "scaleFixture": "p6"
+            },
+            "version": 1,
+            "placedAt": "2026-07-21T20:23:39.699Z",
+            "discardedAt": null,
+            "guestClearedAt": null,
+            "createdAt": "2026-07-21T20:23:39.700Z",
+            "updatedAt": "2026-07-21T20:23:39.700Z",
+            "customer": {
+              "displayName": "Baseline Customer",
+              "email": "customer@tomchei.local"
+            }
+          },
+          {
+            "id": "cmrv3pn0207o5qx3otokmm3yw",
+            "seasonId": "cmruro40z0007qx5wepn8bspr",
+            "customerId": "cmruqz3yl0006qxeoja1qanod",
+            "status": "PAID",
+            "orderNumber": 11037,
+            "draftRef": "D-2026-95688F5B",
+            "guestAccessTokenHash": null,
+            "guestTokenVersion": 1,
+            "greetingDefault": null,
+            "paymentStatusCached": "PAID",
+            "expectedTotalCents": 5400,
+            "donationCents": 0,
+            "fulfillmentFeeCents": 0,
+            "checkoutSnapshot": {
+              "n": 995,
+              "scaleFixture": "p6"
+            },
+            "version": 1,
+            "placedAt": "2026-07-21T20:23:39.697Z",
+            "discardedAt": null,
+            "guestClearedAt": null,
+            "createdAt": "2026-07-21T20:23:39.698Z",
+            "updatedAt": "2026-07-21T20:23:39.698Z",
+            "customer": {
+              "displayName": "Baseline Customer",
+              "email": "customer@tomchei.local"
+            }
+          },
+          {
+            "id": "cmrv3pn0007nvqx3oe4j25oz1",
+            "seasonId": "cmruro40z0007qx5wepn8bspr",
+            "customerId": "cmruqz3yl0006qxeoja1qanod",
+            "status": "PAID",
+            "orderNumber": 11036,
+            "draftRef": "D-2026-948C2FC9",
+            "guestAccessTokenHash": null,
+            "guestTokenVersion": 1,
+            "greetingDefault": null,
+            "paymentStatusCached": "PAID",
+            "expectedTotalCents": 5400,
+            "donationCents": 0,
+            "fulfillmentFeeCents": 0,
+            "checkoutSnapshot": {
+              "n": 994,
+              "scaleFixture": "p6"
+            },
+            "version": 1,
+            "placedAt": "2026-07-21T20:23:39.695Z",
+            "discardedAt": null,
+            "guestClearedAt": null,
+            "createdAt": "2026-07-21T20:23:39.696Z",
+            "updatedAt": "2026-07-21T20:23:39.696Z",
+            "customer": {
+              "displayName": "Baseline Customer",
+              "email": "customer@tomchei.local"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "S1b",
+      "check": "Restricted Staff dashboard",
+      "pass": true
+    },
+    {
+      "id": "S1c",
+      "check": "Seeded order exists",
+      "pass": true,
+      "orderId": "cmrv3qshz0013qxh4zaszt4e1"
+    },
+    {
+      "id": "S1d",
+      "check": "Order search finds seeded",
+      "pass": true
+    },
+    {
+      "id": "S1e",
+      "check": "Manager order detail",
+      "pass": true
+    },
+    {
+      "id": "S1f",
+      "check": "Staff order detail",
+      "pass": true
+    },
+    {
+      "id": "S1g",
+      "check": "Staff refund path",
+      "pass": true,
+      "status": 200,
+      "body": {
+        "ok": true,
+        "payment": {
+          "id": "cmrv3qsqh001qqxh48890mhfu",
+          "orderId": "cmrv3qshz0013qxh4zaszt4e1",
+          "method": "CASH",
+          "state": "POSTED",
+          "amountCents": 5400,
+          "refundedCents": 100,
+          "reference": "p6-pos-cash",
+          "stripeChargeId": null,
+          "postedById": "cmrurfry50000qxqgjpu7tk6i",
+          "voidedById": null,
+          "postedAt": "2026-07-21T20:24:33.785Z",
+          "voidedAt": null,
+          "createdAt": "2026-07-21T20:24:33.785Z",
+          "updatedAt": "2026-07-21T20:36:33.107Z"
+        },
+        "paymentStatus": "PARTIAL",
+        "stripeRefundId": null
+      }
+    },
+    {
+      "id": "S1h",
+      "check": "Today queue page",
+      "pass": true
+    },
+    {
+      "id": "S1i",
+      "check": "Audit view reachable",
+      "pass": true
+    },
+    {
+      "id": "S2a",
+      "check": "POS page loads",
+      "pass": true
+    },
+    {
+      "id": "S2b",
+      "check": "POS find-or-create customer",
+      "pass": "cmrv3pfil0006qxh4s7zbycko"
+    },
+    {
+      "id": "S2c",
+      "check": "POS draft created",
+      "pass": true,
+      "draftRef": "D-2026-5A718313"
+    },
+    {
+      "id": "S2d",
+      "check": "Attach customer to POS draft",
+      "pass": true
+    },
+    {
+      "id": "S2e",
+      "check": "POS cash audited payment",
+      "pass": true,
+      "status": 200,
+      "body": {
+        "ok": true,
+        "payment": {
+          "id": "cmrv46ahy003iqxh479x2yat9",
+          "orderId": "cmrv469i4002wqxh4l0i352ym",
+          "method": "CASH",
+          "state": "POSTED",
+          "amountCents": 5400,
+          "refundedCents": 0,
+          "reference": "p6-pos-cash",
+          "stripeChargeId": null,
+          "postedById": "cmrurfry50000qxqgjpu7tk6i",
+          "voidedById": null,
+          "postedAt": "2026-07-21T20:36:36.646Z",
+          "voidedAt": null,
+          "createdAt": "2026-07-21T20:36:36.646Z",
+          "updatedAt": "2026-07-21T20:36:36.646Z"
+        },
+        "orderStatus": "PAID",
+        "paymentStatus": "PAID"
+      },
+      "assignOk": true
+    },
+    {
+      "id": "S2f",
+      "check": "Payment audit row",
+      "pass": true
+    },
+    {
+      "id": "S2g",
+      "check": "Repeat one order",
+      "pass": "D-2026-63BD9002",
+      "body": {
+        "ok": true,
+        "draftRef": "D-2026-63BD9002",
+        "orderId": "cmrv46arf003oqxh4x16acbph"
+      },
+      "paidOrderId": "cmrv469i4002wqxh4l0i352ym"
+    },
+    {
+      "id": "S2h",
+      "check": "Bounded bulk-repeat batch",
+      "pass": true,
+      "body": {
+        "ok": true,
+        "created": [
+          {
+            "sourceOrderId": "cmrv469i4002wqxh4l0i352ym",
+            "draftRef": "D-2026-FB3CC32D",
+            "orderId": "cmrv46b0r003uqxh4vuxlwy6b"
+          }
+        ],
+        "conflicts": [],
+        "skipped": []
+      }
+    },
+    {
+      "id": "S3a",
+      "check": "Stage CSV with valid/dup/invalid",
+      "pass": true,
+      "summary": {
+        "total": 3,
+        "valid": 1,
+        "duplicate": 1,
+        "invalid": 1
+      }
+    },
+    {
+      "id": "S3b",
+      "check": "Atomic commit valid rows",
+      "pass": true,
+      "body": {
+        "ok": true,
+        "committed": 1,
+        "skipped": 2,
+        "batch": {
+          "id": "cmrv46bab0040qxh4w4f3m1sp",
+          "kind": "CUSTOMERS",
+          "status": "COMMITTED",
+          "filename": "p6.csv",
+          "stagedById": "cmrurfry50000qxqgjpu7tk6i",
+          "committedById": "cmrurfry50000qxqgjpu7tk6i",
+          "stagedAt": "2026-07-21T20:36:37.668Z",
+          "committedAt": "2026-07-21T20:36:37.697Z",
+          "summary": {
+            "total": 3,
+            "valid": 1,
+            "invalid": 1,
+            "skipped": 2,
+            "committed": 1,
+            "duplicate": 1
+          },
+          "createdAt": "2026-07-21T20:36:37.668Z",
+          "updatedAt": "2026-07-21T20:36:37.698Z",
+          "rows": [
+            {
+              "id": "cmrv46bab0041qxh4kyvas1fc",
+              "batchId": "cmrv46bab0040qxh4w4f3m1sp",
+              "rowNumber": 1,
+              "status": "COMMITTED",
+              "raw": {
+                "email": "valid.p6.1784666197332@tomchei.local",
+                "phone": "5551110001",
+                "displayName": "Valid P6"
+              },
+              "errors": null,
+              "targetKey": "valid.p6.1784666197332@tomchei.local",
+              "createdAt": "2026-07-21T20:36:37.668Z"
+            },
+            {
+              "id": "cmrv46bab0042qxh4u9no1wda",
+              "batchId": "cmrv46bab0040qxh4w4f3m1sp",
+              "rowNumber": 2,
+              "status": "SKIPPED",
+              "raw": {
+                "email": "customer@tomchei.local",
+                "phone": "5559990000",
+                "displayName": "Dup Existing"
+              },
+              "errors": [
+                "already exists"
+              ],
+              "targetKey": "customer@tomchei.local",
+              "createdAt": "2026-07-21T20:36:37.668Z"
+            },
+            {
+              "id": "cmrv46bab0043qxh477boqcqr",
+              "batchId": "cmrv46bab0040qxh4w4f3m1sp",
+              "rowNumber": 3,
+              "status": "SKIPPED",
+              "raw": {
+                "email": "",
+                "phone": "badphone",
+                "displayName": "Bad Row"
+              },
+              "errors": [
+                "email or phone required",
+                "invalid phone"
+              ],
+              "targetKey": null,
+              "createdAt": "2026-07-21T20:36:37.668Z"
+            }
+          ],
+          "stagedBy": {
+            "displayName": "First Manager"
+          },
+          "committedBy": {
+            "displayName": "First Manager"
+          }
+        }
+      }
+    },
+    {
+      "id": "S3c",
+      "check": "Import audit",
+      "pass": true
+    },
+    {
+      "id": "S4a",
+      "check": "Scale seed script",
+      "pass": true,
+      "out": "Scale fixture: have 1000 scale orders, creating 0…\n\n{\"ok\":true,\"scaleOrders\":1000,\"packageCount\":5030}\n",
+      "err": ""
+    },
+    {
+      "id": "S4b",
+      "check": "≥1k scale orders",
+      "pass": true,
+      "scaleOrders": 1000
+    },
+    {
+      "id": "S4c",
+      "check": "≥5k packages",
+      "pass": true,
+      "packages": 5030
+    },
+    {
+      "id": "S4d",
+      "check": "Page 1k-order list",
+      "pass": true,
+      "total": 1054
+    },
+    {
+      "id": "S4e",
+      "check": "Conflicting bulk actions report deterministically",
+      "pass": true,
+      "first": {
+        "ok": true,
+        "updated": [],
+        "conflicts": [
+          {
+            "orderId": "cmrv3pn0407ofqx3oezy4a5jb",
+            "reason": "version_conflict",
+            "actualVersion": 1
+          },
+          {
+            "orderId": "cmrv3pn0207o5qx3otokmm3yw",
+            "reason": "version_conflict",
+            "actualVersion": 1
+          }
+        ],
+        "skipped": []
+      },
+      "second": {
+        "ok": true,
+        "updated": [
+          "cmrv3pn0407ofqx3oezy4a5jb",
+          "cmrv3pn0207o5qx3otokmm3yw"
+        ],
+        "conflicts": [],
+        "skipped": []
+      },
+      "third": {
+        "ok": true,
+        "updated": [],
+        "conflicts": [
+          {
+            "orderId": "cmrv3pn0407ofqx3oezy4a5jb",
+            "reason": "version_conflict",
+            "actualVersion": 2
+          },
+          {
+            "orderId": "cmrv3pn0207o5qx3otokmm3yw",
+            "reason": "version_conflict",
+            "actualVersion": 2
+          }
+        ],
+        "skipped": []
+      }
+    },
+    {
+      "id": "S5a",
+      "check": "Settings hub page",
+      "pass": true
+    },
+    {
+      "id": "S5b",
+      "check": "Alert banner wired",
+      "pass": true
+    },
+    {
+      "id": "S5c",
+      "check": "Admin chrome visit-store + banner",
+      "pass": true
+    }
+  ]
+}

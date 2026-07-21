@@ -60,18 +60,29 @@ export function PosCustomerPanel({
   }
 
   async function findOrCreate() {
+    if (!draftRef) {
+      setMessage("Create a POS draft first (add a product).");
+      return;
+    }
     setMessage(null);
-    const create = await fetch("/api/admin/customers", {
+    const res = await fetch("/api/admin/pos/attach-customer", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: name, email: email || null, phone: phone || null }),
+      body: JSON.stringify({
+        draftRef,
+        displayName: name,
+        email: email || null,
+        phone: phone || null,
+      }),
     });
-    const json = await create.json();
-    if (!create.ok) {
+    const json = await res.json();
+    if (!res.ok) {
       setMessage(json.error || "Find/create failed");
       return;
     }
-    await attach(json.customerId);
+    setAttached(json.customer);
+    onAttached?.(json.customer);
+    setMessage(`Attached ${json.customer.displayName}`);
   }
 
   return (

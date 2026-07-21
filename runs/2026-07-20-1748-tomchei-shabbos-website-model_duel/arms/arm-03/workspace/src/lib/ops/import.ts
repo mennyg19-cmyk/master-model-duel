@@ -207,29 +207,34 @@ export async function stageImport(input: {
       invalid: staged.filter((r) => r.status === ImportRowStatus.INVALID).length,
     };
 
-    const batch = await db.importBatch.create({
-      data: {
-        kind: input.kind,
-        status: ImportBatchStatus.STAGED,
-        filename: input.filename ?? null,
-        stagedById: input.staffId,
-        summary,
-        rows: {
-          create: staged.map((r) => ({
-            rowNumber: r.rowNumber,
-            status: r.status,
-            raw: r.raw,
-            errors: r.errors ?? Prisma.JsonNull,
-            targetKey: r.targetKey,
-          })),
+    const batch = await db.$transaction(async (tx) => {
+      const created = await tx.importBatch.create({
+        data: {
+          kind: input.kind,
+          status: ImportBatchStatus.STAGED,
+          filename: input.filename ?? null,
+          stagedById: input.staffId,
+          summary,
+          rows: {
+            create: staged.map((r) => ({
+              rowNumber: r.rowNumber,
+              status: r.status,
+              raw: r.raw,
+              errors: r.errors ?? Prisma.JsonNull,
+              targetKey: r.targetKey,
+            })),
+          },
         },
-      },
-    });
-
-    await writeAudit({
-      action: AuditAction.IMPORT_STAGED,
-      actorId: input.staffId,
-      meta: { batchId: batch.id, kind: input.kind, summary },
+      });
+      await writeAudit(
+        {
+          action: AuditAction.IMPORT_STAGED,
+          actorId: input.staffId,
+          meta: { batchId: created.id, kind: input.kind, summary },
+        },
+        tx,
+      );
+      return created;
     });
 
     return ok({ batchId: batch.id, summary });
@@ -290,36 +295,90 @@ export async function commitImport(input: {
         }
 
         const raw = row.raw as Record<string, string>;
+        let lateDuplicate = false;
 
         if (batch.kind === ImportKind.CUSTOMERS) {
-          const email = raw.email ? normalizeEmail(raw.email) : null;
+          const emailNorm = raw.email ? normalizeEmail(raw.email) : null;
           const phoneNorm = raw.phone ? normalizePhone(raw.phone) : null;
-          await tx.customer.create({
-            data: {
-              displayName: raw.displayName || raw.name || "Imported",
-              email,
-              emailNorm: email,
-              phone: raw.phone || null,
-              phoneNorm,
-            },
-          });
+          // B5: re-check duplicates under the commit transaction.
+          const existing = emailNorm
+            ? await tx.customer.findFirst({
+                where: { OR: [{ emailNorm }, { email: raw.email }] },
+              })
+            : phoneNorm
+              ? await tx.customer.findFirst({ where: { phoneNorm } })
+              : null;
+          if (existing) {
+            lateDuplicate = true;
+          } else {
+            try {
+              await tx.customer.create({
+                data: {
+                  displayName: raw.displayName || raw.name || "Imported",
+                  email: raw.email || null,
+                  emailNorm,
+                  phone: raw.phone || null,
+                  phoneNorm,
+                },
+              });
+            } catch (createError) {
+              if (
+                createError instanceof Prisma.PrismaClientKnownRequestError &&
+                createError.code === "P2002"
+              ) {
+                lateDuplicate = true;
+              } else {
+                throw createError;
+              }
+            }
+          }
         } else {
           const price = Number.parseInt(raw.basePriceCents || raw.price || "0", 10);
           const kind = (raw.kind || "PACKAGE").toUpperCase() as ProductKind;
           const slug = `${raw.sku}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-          await tx.product.create({
+          const existing = await tx.product.findFirst({
+            where: { seasonId: season!.id, sku: raw.sku },
+          });
+          if (existing) {
+            lateDuplicate = true;
+          } else {
+            try {
+              await tx.product.create({
+                data: {
+                  seasonId: season!.id,
+                  sku: raw.sku,
+                  name: raw.name,
+                  slug,
+                  kind,
+                  basePriceCents: price,
+                  isActive: true,
+                  tracksInventory: true,
+                  inventory: { create: { onHand: 0, reserved: 0 } },
+                },
+              });
+            } catch (createError) {
+              if (
+                createError instanceof Prisma.PrismaClientKnownRequestError &&
+                createError.code === "P2002"
+              ) {
+                lateDuplicate = true;
+              } else {
+                throw createError;
+              }
+            }
+          }
+        }
+
+        if (lateDuplicate) {
+          skipped += 1;
+          await tx.importRow.update({
+            where: { id: row.id },
             data: {
-              seasonId: season!.id,
-              sku: raw.sku,
-              name: raw.name,
-              slug,
-              kind,
-              basePriceCents: price,
-              isActive: true,
-              tracksInventory: true,
-              inventory: { create: { onHand: 0, reserved: 0 } },
+              status: ImportRowStatus.SKIPPED,
+              errors: ["duplicate at commit"],
             },
           });
+          continue;
         }
 
         await tx.importRow.update({
@@ -343,17 +402,26 @@ export async function commitImport(input: {
         },
       });
 
-      return { committed, skipped };
-    });
+      await writeAudit(
+        {
+          action: AuditAction.IMPORT_COMMITTED,
+          actorId: input.staffId,
+          meta: { batchId: batch.id, committed, skipped },
+        },
+        tx,
+      );
 
-    await writeAudit({
-      action: AuditAction.IMPORT_COMMITTED,
-      actorId: input.staffId,
-      meta: { batchId: batch.id, ...result },
+      return { committed, skipped };
     });
 
     return ok(result);
   } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return err("P2002", "Import hit a duplicate key — retry after refresh.");
+    }
     return err(maskError(error), "Could not commit import.");
   }
 }
