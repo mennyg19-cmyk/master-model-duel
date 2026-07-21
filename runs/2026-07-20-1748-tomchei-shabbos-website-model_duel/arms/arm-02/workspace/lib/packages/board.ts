@@ -54,6 +54,8 @@ export async function listPackages(seasonId: string, filters: PackageListFilters
       where,
       include: {
         fulfillmentMethod: { select: { id: true, code: true, name: true, kind: true } },
+        // Latest label attempt drives the board's shipment controls (P8).
+        shipments: { orderBy: { createdAt: "desc" }, take: 1 },
         lines: {
           select: {
             id: true,

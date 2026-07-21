@@ -1,8 +1,10 @@
 import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings";
 import { priceCart, type Cart, type PricedCart } from "@/lib/order-builder/cart";
-import { resolveCheckoutRecipients, type CheckoutRecipient } from "@/lib/checkout/recipients";
+import { destinationKey, resolveCheckoutRecipients, type CheckoutRecipient } from "@/lib/checkout/recipients";
 import { computeFees, type FeeResult, type FeeRuleConfig, type MethodChoice } from "@/lib/checkout/fees";
+import { quoteShipping } from "@/lib/shipping/quotes";
+import type { PackItem } from "@/lib/shipping/bin-packing";
 
 export type CheckoutMethodOption = {
   id: string;
@@ -28,21 +30,89 @@ export function flattenQuoteIssues(priced: PricedCart): string[] {
 }
 
 export async function loadFeeRuleConfig(): Promise<FeeRuleConfig> {
-  const [rules, deliveryZips, purimDayChoices, rates] = await Promise.all([
+  const [rules, deliveryZips, purimDayChoices] = await Promise.all([
     getSetting("shipping.rules"),
     getSetting("shipping.delivery_zips"),
     getSetting("delivery.purim_day_choices"),
-    getSetting("shipping.rates"),
   ]);
   return {
     bulkFeePerDestinationCents: rules.bulkFeePerDestinationCents,
     perPackageFeeCents: rules.perPackageFeeCents,
-    // Placeholder rate resolution (R-032): first configured flat rate stands in
-    // for live Shippo rates until P8 wires the margin engine.
-    shippingPlaceholderCents: rates[0]?.amountCents ?? 1500,
+    // Filled per request by quoteShippingDestinations once method choices exist.
+    shippingRateByDestination: {},
     deliveryZips,
     purimDayChoices,
   };
+}
+
+/**
+ * Live Shippo rates for every destination the customer chose SHIPPING for
+ * (P8, UR-003 — replaces the P5 flat placeholder). Each destination is
+ * bin-packed from its own lines and quoted through the margin engine; the
+ * customer is charged the highest per-carrier best rate. A failed quote simply
+ * stays out of the map — computeFees fails closed with a human message.
+ */
+async function quoteShippingDestinations(
+  priced: PricedCart,
+  recipients: CheckoutRecipient[],
+  choices: MethodChoice[],
+  methods: { id: string; kind: "BULK_DELIVERY" | "PER_PACKAGE_DELIVERY" | "SHIPPING" | "PICKUP" }[]
+): Promise<Record<string, number>> {
+  const shippingMethodIds = new Set(methods.filter((method) => method.kind === "SHIPPING").map((method) => method.id));
+  const choiceByRecipient = new Map(choices.map((choice) => [choice.recipientKey, choice.methodId]));
+  const shippingRecipients = recipients.filter((recipient) => {
+    const methodId = choiceByRecipient.get(recipient.key);
+    return methodId !== undefined && shippingMethodIds.has(methodId);
+  });
+  if (shippingRecipients.length === 0) return {};
+
+  const pricedById = new Map(priced.lines.map((line) => [line.id, line]));
+  const productIds = [
+    ...new Set(
+      shippingRecipients.flatMap((recipient) =>
+        recipient.lineIds.map((lineId) => pricedById.get(lineId)?.productId).filter((id): id is string => Boolean(id))
+      )
+    ),
+  ];
+  const products = await db.product.findMany({
+    where: { id: { in: productIds } },
+    select: { id: true, name: true, lengthCm: true, widthCm: true, heightCm: true, weightGrams: true },
+  });
+  const productById = new Map(products.map((product) => [product.id, product]));
+
+  // Two recipients at one address ship in one consignment — merge their items.
+  const byDestination = new Map<string, { to: CheckoutRecipient; items: PackItem[] }>();
+  for (const recipient of shippingRecipients) {
+    const items: PackItem[] = recipient.lineIds.flatMap((lineId) => {
+      const line = pricedById.get(lineId);
+      const product = line ? productById.get(line.productId) : undefined;
+      if (!line || !product) return [];
+      return [
+        {
+          name: product.name,
+          quantity: line.quantity,
+          lengthCm: product.lengthCm,
+          widthCm: product.widthCm,
+          heightCm: product.heightCm,
+          weightGrams: product.weightGrams,
+        },
+      ];
+    });
+    const destination = destinationKey(recipient.address);
+    const entry = byDestination.get(destination);
+    if (entry) entry.items.push(...items);
+    else byDestination.set(destination, { to: recipient, items });
+  }
+
+  const rates: Record<string, number> = {};
+  for (const [destination, { to, items }] of byDestination) {
+    const quoted = await quoteShipping(
+      { name: to.recipientName, ...to.address },
+      items
+    );
+    if (!("error" in quoted)) rates[destination] = quoted.decision.chargeCents;
+  }
+  return rates;
 }
 
 /**
@@ -69,9 +139,11 @@ export async function buildCheckoutQuote(
     loadFeeRuleConfig(),
   ]);
 
-  const fees = choices
-    ? computeFees(recipients, choices, methods, config, deliveryDay)
-    : null;
+  let fees: FeeResult | null = null;
+  if (choices) {
+    config.shippingRateByDestination = await quoteShippingDestinations(priced, recipients, choices, methods);
+    fees = computeFees(recipients, choices, methods, config, deliveryDay);
+  }
 
   return {
     priced,

@@ -33,6 +33,14 @@ const envSchema = z
     STRIPE_WEBHOOK_SECRET: z.string().default(DEV_WEBHOOK_SECRET),
     // Absolute base URL for Stripe redirect/webhook URLs.
     APP_URL: z.string().default("http://127.0.0.1:3102"),
+    // Shippo (P8). Without a token the shipping wrapper runs in mock mode with
+    // deterministic fixture rates, same philosophy as the Stripe mock gateway.
+    SHIPPO_API_TOKEN: z.string().optional(),
+    // Org-negotiated carrier accounts registered in Shippo. Required together
+    // with the token in live mode; the UPS slot is also the declared home for
+    // UPS credentials (plan P8 declaration-only carry).
+    SHIPPO_FEDEX_ACCOUNT_ID: z.string().optional(),
+    SHIPPO_UPS_ACCOUNT_ID: z.string().optional(),
   })
   .refine(
     (vars) => vars.AUTH_MODE !== "clerk" || (vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && vars.CLERK_SECRET_KEY),
@@ -48,6 +56,16 @@ const envSchema = z
         path: ["STRIPE_WEBHOOK_SECRET"],
         message:
           "STRIPE_SECRET_KEY is set (real mode) but STRIPE_WEBHOOK_SECRET is still the public dev default — set the endpoint secret from the Stripe dashboard",
+      });
+    }
+    // Live Shippo without the org carrier accounts would silently quote retail
+    // rates — refuse the half-configured state (R-183, R-184).
+    if (vars.SHIPPO_API_TOKEN && (!vars.SHIPPO_FEDEX_ACCOUNT_ID || !vars.SHIPPO_UPS_ACCOUNT_ID)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["SHIPPO_API_TOKEN"],
+        message:
+          "SHIPPO_API_TOKEN is set (live mode) but SHIPPO_FEDEX_ACCOUNT_ID / SHIPPO_UPS_ACCOUNT_ID are missing — live rates must use the org's negotiated carrier accounts",
       });
     }
     if (process.env.NODE_ENV === "production" && !isBuildPhase && !vars.STRIPE_SECRET_KEY) {

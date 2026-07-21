@@ -7,6 +7,7 @@ import type { FulfillmentKind, PackageStage } from "@prisma/client";
 import { apiFetch } from "@/lib/api-client";
 import { allowedNextStages } from "@/lib/domain/package-stage";
 import { Badge } from "@/components/ui/badge";
+import { ShipmentActions, type ShipmentSummary } from "@/components/admin/shipment-actions";
 
 // Package board controls (UR-001): per-row stage advance, an expandable split
 // panel, and multi-select regroup. Every action round-trips through the
@@ -30,6 +31,7 @@ export type BoardPackage = {
   greeting: string;
   methodName: string;
   methodKind: FulfillmentKind;
+  shipment: ShipmentSummary | null;
   lines: BoardLine[];
 };
 
@@ -194,6 +196,15 @@ export function PackageBoard({ packages }: { packages: BoardPackage[] }) {
                       </button>
                     )}
                   </div>
+                  {entry.methodKind === "SHIPPING" && (
+                    <div className="mt-2">
+                      <ShipmentActions
+                        packageId={entry.id}
+                        shipment={entry.shipment}
+                        shipped={entry.stage === "SENT" || entry.stage === "PICKED_UP"}
+                      />
+                    </div>
+                  )}
                   {splitting === entry.id && (
                     <div className="mt-2 rounded-md border border-border bg-brand-soft/30 p-2 text-xs" data-testid="split-panel">
                       <p className="mb-1 font-medium">Move into a new package:</p>

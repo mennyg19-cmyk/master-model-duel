@@ -26,6 +26,24 @@ const SETTING_SCHEMAS = {
   "delivery.purim_day_choices": z
     .array(z.string().min(1))
     .default(["Sunday before Purim", "Erev Purim (morning)", "Purim day"]),
+  // Warehouse ship-from address for carrier rate quotes and labels (P8).
+  "shipping.origin": z
+    .object({
+      name: z.string().min(1),
+      line1: z.string().min(1),
+      line2: z.string().nullable(),
+      city: z.string().min(1),
+      state: z.string().min(2),
+      zip: z.string().regex(/^\d{5}$/, "ZIPs are 5 digits"),
+    })
+    .default({
+      name: "Tomchei Shabbos Warehouse",
+      line1: "212 Second Street",
+      line2: null,
+      city: "Lakewood",
+      state: "NJ",
+      zip: "08701",
+    }),
   "email.from_address": z.string().default("purim@tomcheishabbos.example.org"),
   "email.reply_to": z.string().default("office@tomcheishabbos.example.org"),
 } as const;

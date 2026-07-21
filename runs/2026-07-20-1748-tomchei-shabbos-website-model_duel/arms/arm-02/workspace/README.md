@@ -46,6 +46,18 @@ idempotent per day and writes one PDF per filing group (= fulfillment method cod
 slips, labels, and greeting cards, plus a packing slip per order. PDFs come from the
 dependency-free writer in `lib/pdf.ts`; printing never changes a package's stage.
 
+## Shipping (Shippo + margin engine)
+
+Shipping packages get carrier labels through Shippo (`lib/shipping/`). Without
+`SHIPPO_API_TOKEN` the wrapper runs in mock mode with deterministic fixture
+rates (same idea as the Stripe mock); live mode also requires the org's FedEx
+and UPS carrier-account ids. Pricing rule: quote every eligible carrier
+(+USPS for light parcels), charge the customer the highest carrier's best
+rate at checkout, buy the label on the cheapest, and record the spread on the
+`Shipment` row. Contents are bin-packed into the configured shipment boxes.
+Staff buy/void labels and refresh tracking from `/admin/packages` or the
+order detail page; a label stays voidable until the package is marked sent.
+
 ## Patterns (one per concern)
 
 - Data access: Prisma via `lib/db.ts` singleton.

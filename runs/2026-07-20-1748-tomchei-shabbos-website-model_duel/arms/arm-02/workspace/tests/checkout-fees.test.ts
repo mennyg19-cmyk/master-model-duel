@@ -6,7 +6,7 @@ import type { CheckoutRecipient } from "../lib/checkout/recipients";
 const config: FeeRuleConfig = {
   bulkFeePerDestinationCents: 500,
   perPackageFeeCents: 1200,
-  shippingPlaceholderCents: 1500,
+  shippingRateByDestination: {},
   deliveryZips: ["08701"],
   purimDayChoices: ["Purim day"],
 };
@@ -99,20 +99,34 @@ test("missing or unlisted delivery day is refused", () => {
   assert.ok(!badDay.ok);
 });
 
-test("pickup is free and shipping uses the placeholder rate per destination", () => {
+test("pickup is free and shipping charges the live per-destination rate", () => {
+  const shipTo = recipient("b", "10001");
+  const destination = ["b street", "", "lakewood", "nj", "10001"].join("|");
   const result = computeFees(
-    [recipient("a", "08701"), recipient("b", "10001")],
+    [recipient("a", "08701"), shipTo],
     [
       { recipientKey: "a", methodId: "pickup" },
       { recipientKey: "b", methodId: "ship" },
     ],
     methods,
-    config,
+    { ...config, shippingRateByDestination: { [destination]: 1730 } },
     null
   );
   assert.ok(result.ok);
-  assert.equal(result.feesCents, 1500);
+  assert.equal(result.feesCents, 1730);
   assert.equal(result.feeLines.length, 1);
+});
+
+test("a shipping destination without a live rate fails closed", () => {
+  const result = computeFees(
+    [recipient("b", "10001")],
+    [{ recipientKey: "b", methodId: "ship" }],
+    methods,
+    config,
+    null
+  );
+  assert.ok(!result.ok);
+  assert.match(result.errors[0], /Live shipping rates are unavailable/);
 });
 
 test("a recipient without a method choice is an error", () => {

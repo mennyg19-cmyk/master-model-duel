@@ -5,8 +5,9 @@ import { destinationKey, type CheckoutRecipient } from "@/lib/checkout/recipient
 //   one address share a fee); staff schedules the drop later, so no day choice.
 // - PER_PACKAGE_DELIVERY: one fee per recipient; HARD zip block (no override),
 //   and the order must pick one manager-set Purim-week day.
-// - PICKUP: free. SHIPPING: placeholder flat rate per destination until the
-//   live Shippo margin engine lands in P8 (R-032).
+// - PICKUP: free. SHIPPING: the live margin-engine charge per destination
+//   (P8, UR-003) — the caller quotes Shippo and passes the resolved amounts in;
+//   a shipping destination without a live rate fails closed (never a guess).
 // Pure function over plain inputs so the whole matrix is unit-testable.
 
 export type FulfillmentKindValue = "BULK_DELIVERY" | "PER_PACKAGE_DELIVERY" | "SHIPPING" | "PICKUP";
@@ -16,7 +17,8 @@ export type MethodChoice = { recipientKey: string; methodId: string };
 export type FeeRuleConfig = {
   bulkFeePerDestinationCents: number;
   perPackageFeeCents: number;
-  shippingPlaceholderCents: number;
+  /** Live margin-engine charge per destinationKey (P8). */
+  shippingRateByDestination: Record<string, number>;
   deliveryZips: string[];
   purimDayChoices: string[];
 };
@@ -96,7 +98,7 @@ export function computeFees(
         else
           shippingDestinations.set(destination, {
             methodId: method.id,
-            label: `${method.name} (estimated) — ${recipient.address.line1}, ${recipient.address.zip}`,
+            label: `${method.name} — ${recipient.address.line1}, ${recipient.address.zip}`,
             keys: [recipient.key],
           });
         break;
@@ -112,11 +114,17 @@ export function computeFees(
       recipientKeys: entry.keys,
     });
   }
-  for (const entry of shippingDestinations.values()) {
+  for (const [destination, entry] of shippingDestinations) {
+    const liveRate = config.shippingRateByDestination[destination];
+    if (liveRate === undefined) {
+      // Money fails closed: never charge a guessed shipping amount.
+      errors.push(`Live shipping rates are unavailable for ${entry.label} — try again in a moment`);
+      continue;
+    }
     feeLines.push({
       label: entry.label,
       methodId: entry.methodId,
-      amountCents: config.shippingPlaceholderCents,
+      amountCents: liveRate,
       recipientKeys: entry.keys,
     });
   }

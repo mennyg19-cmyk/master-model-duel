@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/admin/order-badges";
 import { OrderMoneyActions } from "@/components/admin/order-money-actions";
 import { FulfillmentActions } from "@/components/admin/fulfillment-actions";
+import { ShipmentActions } from "@/components/admin/shipment-actions";
 
 const AUDIT_LIMIT = 50;
 
@@ -24,8 +25,18 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
       lines: {
         include: {
           product: { select: { name: true } },
-          fulfillmentMethod: { select: { name: true } },
-          package: { select: { id: true, stage: true } },
+          fulfillmentMethod: { select: { name: true, kind: true } },
+          package: {
+            select: {
+              id: true,
+              stage: true,
+              recipientName: true,
+              addressLine1: true,
+              city: true,
+              zip: true,
+              shipments: { orderBy: { createdAt: "desc" }, take: 1 },
+            },
+          },
           options: { include: { productOption: { select: { name: true } } } },
           addOns: { include: { addOn: { select: { name: true } } } },
         },
@@ -62,6 +73,15 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
         payment.amountCents > 0 &&
         payment.stripePaymentIntentId !== null
     );
+  // Shipping labels live on packages; the order shows every shipping package
+  // its lines landed in, deduplicated (R-055).
+  const shippingPackages = [
+    ...new Map(
+      order.lines
+        .filter((line) => line.fulfillmentMethod.kind === "SHIPPING" && line.package)
+        .map((line) => [line.package!.id, line.package!])
+    ).values(),
+  ];
   const feeBreakdown = Array.isArray(order.feeBreakdown)
     ? (order.feeBreakdown as { label: string; amountCents: number }[])
     : [];
@@ -179,6 +199,30 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
               </p>
             </div>
           </Card>
+
+          {shippingPackages.length > 0 && permissions.has("fulfillment.manage") && (
+            <Card>
+              <CardTitle className="mb-3">Shipping labels</CardTitle>
+              <div className="space-y-3">
+                {shippingPackages.map((pkg) => (
+                  <div key={pkg.id} className="rounded-md border border-border p-3">
+                    <p className="mb-1 text-sm">
+                      <span className="font-medium">{pkg.recipientName}</span>{" "}
+                      <span className="text-muted">
+                        — {pkg.addressLine1}, {pkg.city} {pkg.zip}
+                      </span>{" "}
+                      <Badge tone="neutral">{pkg.stage.replace("_", " ")}</Badge>
+                    </p>
+                    <ShipmentActions
+                      packageId={pkg.id}
+                      shipment={pkg.shipments[0] ?? null}
+                      shipped={pkg.stage === "SENT" || pkg.stage === "PICKED_UP"}
+                    />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <Card>
             <CardTitle className="mb-3">Payments</CardTitle>

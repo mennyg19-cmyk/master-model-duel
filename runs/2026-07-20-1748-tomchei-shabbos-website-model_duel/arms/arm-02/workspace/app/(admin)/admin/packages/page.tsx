@@ -116,6 +116,20 @@ export default async function AdminPackagesPage({
             greeting: entry.greeting,
             methodName: entry.fulfillmentMethod.name,
             methodKind: entry.fulfillmentMethod.kind,
+            shipment: entry.shipments[0]
+              ? {
+                  id: entry.shipments[0].id,
+                  status: entry.shipments[0].status,
+                  carrier: entry.shipments[0].carrier,
+                  service: entry.shipments[0].service,
+                  trackingNumber: entry.shipments[0].trackingNumber,
+                  trackingStatus: entry.shipments[0].trackingStatus,
+                  labelUrl: entry.shipments[0].labelUrl,
+                  costCents: entry.shipments[0].costCents,
+                  chargedCents: entry.shipments[0].chargedCents,
+                  marginCents: entry.shipments[0].marginCents,
+                }
+              : null,
             lines: entry.lines.map((line) => ({
               id: line.id,
               quantity: line.quantity,

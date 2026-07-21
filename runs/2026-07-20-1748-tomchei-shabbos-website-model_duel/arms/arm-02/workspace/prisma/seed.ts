@@ -109,6 +109,16 @@ async function seedDomainCore(customerId: string) {
     create: { code: "shipping", name: "Shipping", kind: "SHIPPING", sortOrder: 4 },
   });
 
+  // P8: shipment boxes the bin-packer plans carrier parcels against (R-081).
+  const shipmentBoxes = [
+    { name: "Small shipper", lengthCm: 35, widthCm: 35, heightCm: 30, weightGrams: 250 },
+    { name: "Medium shipper", lengthCm: 45, widthCm: 45, heightCm: 40, weightGrams: 400 },
+    { name: "Large shipper", lengthCm: 60, widthCm: 50, heightCm: 45, weightGrams: 600 },
+  ];
+  for (const box of shipmentBoxes) {
+    await db.shipmentBox.upsert({ where: { name: box.name }, update: {}, create: box });
+  }
+
   const classicBasket = await db.product.upsert({
     where: { seasonId_slug: { seasonId: season.id, slug: "classic-basket" } },
     update: { category: "Baskets" },

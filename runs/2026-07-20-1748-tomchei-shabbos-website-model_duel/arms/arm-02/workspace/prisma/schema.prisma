@@ -299,47 +299,46 @@ enum OrderPaymentStatus {
 // orderNumber is assigned sequentially per season at finalize (R-151).
 // paymentStatus is a cache recomputed from posted payments (R-152).
 model Order {
-  id             String                @id @default(cuid())
-  seasonId       String
-  season         Season                @relation(fields: [seasonId], references: [id])
-  customerId     String
-  customer       Customer              @relation(fields: [customerId], references: [id])
-  status         OrderStatus           @default(DRAFT)
-  draftReference String                @unique
-  orderNumber    Int?
+  id               String                  @id @default(cuid())
+  seasonId         String
+  season           Season                  @relation(fields: [seasonId], references: [id])
+  customerId       String
+  customer         Customer                @relation(fields: [customerId], references: [id])
+  status           OrderStatus             @default(DRAFT)
+  draftReference   String                  @unique
+  orderNumber      Int?
   // totalCents = itemsCents + feesCents + donationCents. feeBreakdown is the
   // per-destination fee list shown at checkout, kept as a paid snapshot so a
   // later staff method change can't retroactively change what was owed (G-028).
-  totalCents     Int                   @default(0)
-  itemsCents     Int                   @default(0)
-  feesCents      Int                   @default(0)
-  donationCents  Int                   @default(0)
-  feeBreakdown   Json?
+  totalCents       Int                     @default(0)
+  itemsCents       Int                     @default(0)
+  feesCents        Int                     @default(0)
+  donationCents    Int                     @default(0)
+  feeBreakdown     Json?
   // Order-default greeting (UR-013); per-recipient overrides live on lines.
-  greetingDefault String               @default("")
+  greetingDefault  String                  @default("")
   // Purim-week delivery day chosen for per-package delivery (UR-009, G-015).
-  deliveryDay    String?
+  deliveryDay      String?
   // The builder draft this order was created from, so an abandoned Stripe
   // session's replacement order can find and discard its predecessor.
-  sourceDraftId  String?
-  paymentStatus  OrderPaymentStatus    @default(UNPAID)
-  finalizedAt    DateTime?
-  discardedAt    DateTime?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  lines          OrderLine[]
-  payments       Payment[]
-  paymentIntents StripePaymentIntent[]
+  sourceDraftId    String?
+  paymentStatus    OrderPaymentStatus      @default(UNPAID)
+  finalizedAt      DateTime?
+  discardedAt      DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  lines            OrderLine[]
+  payments         Payment[]
+  paymentIntents   StripePaymentIntent[]
   checkoutSessions StripeCheckoutSession[]
-  shippingQuotes ShippingQuote[]
+  shippingQuotes   ShippingQuote[]
 
+  @@unique([seasonId, orderNumber])
   @@index([sourceDraftId, status])
   // Admin list/dashboard queries at 1k+ scale (R-105, G-024).
   @@index([status, createdAt])
   @@index([customerId, createdAt])
   @@index([seasonId, createdAt])
-
-  @@unique([seasonId, orderNumber])
 }
 
 // One line = one product going to one recipient. Recipient/address/greeting are
@@ -422,6 +421,7 @@ model Package {
   lines               OrderLine[]
   auditEntries        PackageAudit[]
   shippingQuotes      ShippingQuote[]
+  shipments           Shipment[]
 
   @@index([seasonId, groupingKey])
   // Dashboard stage counts at 5k+ package scale (G-024).
@@ -581,6 +581,47 @@ model ShippingQuoteOption {
   service       String
   amountCents   Int
   estimatedDays Int?
+}
+
+enum ShipmentStatus {
+  PURCHASED
+  VOIDED
+  FAILED
+}
+
+// One carrier label bought for a Package (P8, R-055). Money fields capture the
+// margin engine's outcome (UR-003, G-006): chargedCents is what the customer
+// was quoted (highest per-carrier cheapest rate), costCents is what we paid on
+// the cheaper carrier, marginCents the recorded spread for P12 reconciliation.
+// A FAILED row is the visible trace of a purchase the carrier refused (R-175)
+// — it never blocks a retry. parcels is the bin-packing plan snapshot (R-081).
+model Shipment {
+  id                  String         @id @default(cuid())
+  packageId           String
+  package             Package        @relation(fields: [packageId], references: [id])
+  status              ShipmentStatus
+  carrier             String
+  service             String
+  shippoRateId        String?
+  shippoTransactionId String?        @unique
+  labelUrl            String?
+  trackingNumber      String?
+  trackingStatus      String?
+  trackingUpdatedAt   DateTime?
+  costCents           Int
+  chargedCents        Int
+  marginCents         Int
+  // Per-carrier cheapest quotes the margin decision was made from.
+  quotedRates         Json
+  parcels             Json
+  failureReason       String?
+  createdByStaffId    String?
+  createdAt           DateTime       @default(now())
+  voidedAt            DateTime?
+  voidedByStaffId     String?
+
+  @@index([packageId, createdAt])
+  @@index([status, createdAt])
 }
 
 model PickupLocation {
