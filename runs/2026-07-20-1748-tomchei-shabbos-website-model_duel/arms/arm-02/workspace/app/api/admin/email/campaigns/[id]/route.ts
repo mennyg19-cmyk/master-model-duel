@@ -2,10 +2,14 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
-import { createNewsletterToken } from "@/lib/newsletter-token";
 import { campaignAudience, renderCampaignBody, renderCampaignSubject } from "@/lib/email/campaigns";
 
-/** Detail + preview: the campaign rendered as its first audience member sees it. */
+/**
+ * Detail + preview. The preview always renders for a synthetic sample
+ * subscriber with an inert placeholder token: a live signed token for a real
+ * audience member would let staff act on that subscriber's preferences, and
+ * the sample address would leak a real subscriber email.
+ */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requirePermissionApi("email.manage");
   if ("response" in gate) return gate.response;
@@ -15,8 +19,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!campaign) return Response.json({ error: "Campaign not found" }, { status: 404 });
 
   const audience = await campaignAudience(campaign.listId);
-  const sample = audience[0] ?? { email: "subscriber@example.com", name: "Sample Subscriber" };
-  const token = createNewsletterToken(sample.email);
+  const sample = { email: "subscriber@example.com", name: "Sample Subscriber" };
+  const token = "PREVIEW-TOKEN";
   return Response.json({
     campaign,
     audienceCount: audience.length,

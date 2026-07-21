@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
+import { useHubAct } from "@/components/admin/use-hub-act";
 import { OrdersTab } from "@/components/admin/settings/orders-tab";
 import { ShippingTab } from "@/components/admin/settings/shipping-tab";
 import { EmailTab } from "@/components/admin/settings/email-tab";
@@ -18,16 +18,8 @@ const TABS = ["Orders", "Shipping", "Email", "Developer"] as const;
 type Tab = (typeof TABS)[number];
 
 export function SettingsHub({ data }: { data: SettingsHubData }) {
-  const router = useRouter();
   const [tab, setTab] = useState<Tab>("Orders");
-  const [message, setMessage] = useState<string | null>(null);
-
-  async function act(action: () => Promise<{ ok: boolean; error?: string }>, successMessage = "Saved.") {
-    setMessage(null);
-    const outcome = await action();
-    setMessage(outcome.ok ? successMessage : outcome.error ?? "Request failed.");
-    if (outcome.ok) router.refresh();
-  }
+  const { message, act } = useHubAct();
 
   const saveSetting = (key: string, value: unknown, successMessage?: string) =>
     act(() => apiFetch("/api/admin/settings", { method: "PATCH", body: { key, value } }), successMessage);

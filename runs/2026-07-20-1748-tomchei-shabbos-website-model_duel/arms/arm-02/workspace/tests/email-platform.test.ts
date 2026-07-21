@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renderTemplate, formatCents, TEMPLATE_DEFAULTS } from "../lib/email/templates";
+import { formatCents } from "../lib/catalog";
+import { renderTemplate, TEMPLATE_DEFAULTS } from "../lib/email/templates";
 
 test("renderTemplate fills known placeholders and leaves unknown tokens visible", () => {
   const rendered = renderTemplate("Hi {{name}}, order #{{orderNumber}} — {{mystery}}", {

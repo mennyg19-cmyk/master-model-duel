@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
+import { writeAudit } from "@/lib/audit";
 import { BRAND } from "@/lib/brand";
 import { resolveTemplate, renderTemplate } from "@/lib/email/templates";
 import { dispatchOne } from "@/lib/email/dispatch";
@@ -32,6 +33,12 @@ export async function POST(request: Request) {
     },
   });
   const outcome = await dispatchOne(row);
+  await writeAudit(gate.staff, {
+    action: "email.test_send",
+    targetType: "Notification",
+    targetId: row.id,
+    detail: { to: row.recipient, outcome },
+  });
   const updated = await db.notification.findUniqueOrThrow({ where: { id: row.id } });
   return Response.json({ ok: true, outcome, providerMessageId: updated.providerMessageId, error: updated.lastError });
 }

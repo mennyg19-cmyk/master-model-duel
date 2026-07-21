@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
+import { writeAudit } from "@/lib/audit";
 import { createNewsletterToken } from "@/lib/newsletter-token";
 import { renderCampaignBody, renderCampaignSubject } from "@/lib/email/campaigns";
 import { dispatchOne } from "@/lib/email/dispatch";
@@ -22,7 +23,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const campaign = await db.campaign.findUnique({ where: { id } });
   if (!campaign) return Response.json({ error: "Campaign not found" }, { status: 404 });
 
-  const recipient = { email: parsed.data.email.toLowerCase(), name: gate.staff.realUser.name };
+  // Neutral display name: the body goes to an external address, so it must not
+  // carry the staff member's real name.
+  const recipient = { email: parsed.data.email.toLowerCase(), name: "Test Recipient" };
   const token = createNewsletterToken(recipient.email);
   const row = await db.notification.create({
     data: {
@@ -37,5 +40,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     },
   });
   const outcome = await dispatchOne(row);
+  await writeAudit(gate.staff, {
+    action: "email.campaign.test_send",
+    targetType: "Campaign",
+    targetId: id,
+    detail: { to: recipient.email, outcome },
+  });
   return Response.json({ ok: true, outcome, notificationId: row.id });
 }

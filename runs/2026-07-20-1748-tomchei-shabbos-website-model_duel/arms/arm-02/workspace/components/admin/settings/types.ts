@@ -44,7 +44,5 @@ export type SettingsHubData = {
   emailLogRetentionDays: number;
 };
 
-/** Runs a mutation, surfaces the outcome message, and refreshes on success. */
-export type ActFn = (action: () => Promise<{ ok: boolean; error?: string }>, successMessage?: string) => Promise<void>;
-/** PATCHes one key through /api/admin/settings via ActFn. */
+/** PATCHes one key through /api/admin/settings via the shared hub ActFn. */
 export type SaveSettingFn = (key: string, value: unknown, successMessage?: string) => Promise<void>;

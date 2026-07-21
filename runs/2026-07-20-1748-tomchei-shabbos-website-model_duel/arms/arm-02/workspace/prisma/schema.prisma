@@ -899,6 +899,9 @@ model Notification {
   lastError         String?
   providerMessageId String?
   createdAt         DateTime              @default(now())
+  // Last state change. Terminal rows (sent/captured/failed) purge on this, not
+  // createdAt, so a long-pending row that just failed keeps its fresh trail.
+  updatedAt         DateTime              @default(now()) @updatedAt
   attemptLog        NotificationAttempt[]
 
   @@index([kind, createdAt])

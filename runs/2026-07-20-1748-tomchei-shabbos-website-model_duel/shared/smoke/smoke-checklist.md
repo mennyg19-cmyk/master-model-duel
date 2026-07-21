@@ -105,13 +105,13 @@ See `shared/phases/PHASE-P10-EXPECTED.md`. Both arms P10 **gated**.
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Preferences + tokens | ✓ | |
-| S2 | Campaign flow | ✓ | |
-| S3 | Transactional + failure | ✓ | |
-| S4 | Cron auth + overlap | ✓ | |
-| S5 | Purge + test mode | ✓ | |
+| S1 | Preferences + tokens | ✓ | ✓ |
+| S2 | Campaign flow | ✓ | ✓ |
+| S3 | Transactional + failure | ✓ | ✓ |
+| S4 | Cron auth + overlap | ✓ | ✓ |
+| S5 | Purge + test mode | ✓ | ✓ |
 
-See `shared/phases/PHASE-P11-EXPECTED.md`. arm-01 P11 **gated**.
+See `shared/phases/PHASE-P11-EXPECTED.md`. Both arms P11 **gated**.
 
 ## P12
 

@@ -5,7 +5,8 @@ import { apiFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardTitle } from "@/components/ui/card";
-import type { ActFn, SaveSettingFn } from "@/components/admin/settings/types";
+import type { ActFn } from "@/components/admin/use-hub-act";
+import type { SaveSettingFn } from "@/components/admin/settings/types";
 
 export function EmailTab({
   emailFrom,

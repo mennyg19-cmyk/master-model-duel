@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import { SeasonStatusCard, NewSeasonCard } from "@/components/admin/settings/season-management";
-import type { ActFn, PackageTypeRow, PickupLocationRow, SaveSettingFn, SeasonRow } from "@/components/admin/settings/types";
+import type { ActFn } from "@/components/admin/use-hub-act";
+import type { PackageTypeRow, PickupLocationRow, SaveSettingFn, SeasonRow } from "@/components/admin/settings/types";
 
 export function OrdersTab({
   seasons,

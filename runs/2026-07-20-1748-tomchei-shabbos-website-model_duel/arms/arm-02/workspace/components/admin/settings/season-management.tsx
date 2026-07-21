@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
-import type { ActFn, SeasonRow } from "@/components/admin/settings/types";
+import type { ActFn } from "@/components/admin/use-hub-act";
+import type { SeasonRow } from "@/components/admin/settings/types";
 
 // Season lifecycle (UR-008, R-097): the manual Open/Closed switch, the
 // one-shot auto-flip schedule, and the new-season setup wizard.

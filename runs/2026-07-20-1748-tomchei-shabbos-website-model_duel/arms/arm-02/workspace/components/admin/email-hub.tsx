@@ -1,57 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useHubAct, type ActFn } from "@/components/admin/use-hub-act";
+import type { EmailHubData } from "@/components/admin/email/types";
+
+export type { EmailHubData } from "@/components/admin/email/types";
 
 // Email hub (P11): campaigns, lists, subscribers, triggered templates. Server
 // page loads the data; every mutation goes through the /api/admin/email/*
 // routes and refreshes. Same act() plumbing as the settings hub.
 
-export type EmailHubData = {
-  campaigns: {
-    id: string;
-    name: string;
-    subject: string;
-    body: string;
-    listId: string | null;
-    listName: string | null;
-    status: "DRAFT" | "SENT";
-    queuedCount: number;
-    sentAt: string | null;
-  }[];
-  lists: { id: string; name: string; memberCount: number }[];
-  subscribedCount: number;
-  unsubscribedCount: number;
-  templates: {
-    key: string;
-    label: string;
-    placeholders: string[];
-    subject: string;
-    body: string;
-    isEnabled: boolean;
-  }[];
-  outbox: Record<string, number>;
-};
-
 const TABS = ["Campaigns", "Lists", "Subscribers", "Templates"] as const;
 type Tab = (typeof TABS)[number];
 
 export function EmailHub({ data }: { data: EmailHubData }) {
-  const router = useRouter();
   const [tab, setTab] = useState<Tab>("Campaigns");
-  const [message, setMessage] = useState<string | null>(null);
-
-  async function act(action: () => Promise<{ ok: boolean; error?: string }>, successMessage = "Saved.") {
-    setMessage(null);
-    const outcome = await action();
-    setMessage(outcome.ok ? successMessage : outcome.error ?? "Request failed.");
-    if (outcome.ok) router.refresh();
-  }
+  const { message, act } = useHubAct();
 
   return (
     <div className="space-y-5">
@@ -80,8 +49,6 @@ export function EmailHub({ data }: { data: EmailHubData }) {
     </div>
   );
 }
-
-type ActFn = (action: () => Promise<{ ok: boolean; error?: string }>, successMessage?: string) => Promise<void>;
 
 function CampaignsTab({
   campaigns,

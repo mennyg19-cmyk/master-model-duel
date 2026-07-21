@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { BRAND } from "@/lib/brand";
 import { captureNotification } from "@/lib/notifications";
-import { resolveTemplate, renderTemplate, formatCents, type TemplateKey } from "@/lib/email/templates";
+import { formatCents } from "@/lib/catalog";
+import { resolveTemplate, renderTemplate, type TemplateKey } from "@/lib/email/templates";
 
 // Order lifecycle emails (R-087): confirmation, payment link, refund. Each
 // enqueue rides the caller's transaction and is idempotent through the outbox

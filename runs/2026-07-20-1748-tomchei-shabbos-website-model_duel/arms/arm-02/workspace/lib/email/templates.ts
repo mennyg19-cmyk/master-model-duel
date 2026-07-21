@@ -68,7 +68,3 @@ export async function resolveTemplate(
     isEnabled: override?.isEnabled ?? true,
   };
 }
-
-export function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}

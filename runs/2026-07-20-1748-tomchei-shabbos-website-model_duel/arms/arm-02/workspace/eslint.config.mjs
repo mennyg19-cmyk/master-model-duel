@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Smoke-evidence scratch scripts, not product code.
+    ".scratch/**",
   ]),
 ]);
 

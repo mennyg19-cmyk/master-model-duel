@@ -21,6 +21,23 @@ const BACKOFF_MINUTES = [1, 5, 15, 60];
 
 export type SweepResult = { examined: number; sent: number; captured: number; retried: number; failed: number };
 
+type EmailSendSettings = { from: string; replyTo: string; footer: string };
+
+/**
+ * Lazy, memoized loader for the three branding settings. One loader is shared
+ * across a whole sweep so a 100-row batch reads each setting once, not per row
+ * (Q-M1); capture mode never triggers the read at all.
+ */
+function createEmailSettingsLoader(): () => Promise<EmailSendSettings> {
+  let cached: Promise<EmailSendSettings> | null = null;
+  return () =>
+    (cached ??= Promise.all([
+      getSetting("email.from_address"),
+      getSetting("email.reply_to"),
+      getSetting("email.branding_footer"),
+    ]).then(([from, replyTo, footer]) => ({ from, replyTo, footer })));
+}
+
 export async function sweepNotificationOutbox(now = new Date()): Promise<SweepResult> {
   const staleCutoff = new Date(now.getTime() - STALE_CLAIM_MS);
   const due = await db.notification.findMany({
@@ -35,6 +52,7 @@ export async function sweepNotificationOutbox(now = new Date()): Promise<SweepRe
   });
 
   const result: SweepResult = { examined: due.length, sent: 0, captured: 0, retried: 0, failed: 0 };
+  const loadEmailSettings = createEmailSettingsLoader();
   for (const row of due) {
     const claimed = await db.notification.updateMany({
       where: {
@@ -47,17 +65,20 @@ export async function sweepNotificationOutbox(now = new Date()): Promise<SweepRe
       data: { status: "sending", claimedAt: now },
     });
     if (claimed.count !== 1) continue; // Another sweep owns this row.
-    const outcome = await dispatchOne(row);
+    const outcome = await dispatchOne(row, loadEmailSettings);
     result[outcome] += 1;
   }
   return result;
 }
 
 /** Dispatch a single claimed row. Exported for the settings test sender. */
-export async function dispatchOne(row: Notification): Promise<"sent" | "captured" | "retried" | "failed"> {
+export async function dispatchOne(
+  row: Notification,
+  loadEmailSettings: () => Promise<EmailSendSettings> = createEmailSettingsLoader()
+): Promise<"sent" | "captured" | "retried" | "failed"> {
   const attempt = row.attempts + 1;
   try {
-    const messageId = await sendThroughProvider(row, attempt);
+    const messageId = await sendThroughProvider(row, attempt, loadEmailSettings);
     if (messageId === null) {
       await db.$transaction([
         db.notification.update({
@@ -100,15 +121,15 @@ export async function dispatchOne(row: Notification): Promise<"sent" | "captured
 }
 
 /** Returns the provider message id, or null when test mode captured instead. */
-async function sendThroughProvider(row: Notification, attempt: number): Promise<string | null> {
+async function sendThroughProvider(
+  row: Notification,
+  attempt: number,
+  loadEmailSettings: () => Promise<EmailSendSettings>
+): Promise<string | null> {
   if (row.channel === "EMAIL") {
     const provider = getEmailProvider();
     if (provider.mode === "capture") return null;
-    const [from, replyTo, footer] = await Promise.all([
-      getSetting("email.from_address"),
-      getSetting("email.reply_to"),
-      getSetting("email.branding_footer"),
-    ]);
+    const { from, replyTo, footer } = await loadEmailSettings();
     const outcome = await provider.send(
       {
         to: row.recipient,

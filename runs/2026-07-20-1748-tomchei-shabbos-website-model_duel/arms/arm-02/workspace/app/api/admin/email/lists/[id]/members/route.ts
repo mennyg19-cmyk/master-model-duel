@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
+import { writeAudit } from "@/lib/audit";
 
 const memberSchema = z.object({
   email: z.string().email().max(254),
@@ -34,6 +35,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } else {
     await db.emailListMember.deleteMany({ where: { listId: id, subscriberId: subscriber.id } });
   }
+  // Membership changes alter the reach of a later campaign send — audited (S-M3).
+  await writeAudit(gate.staff, {
+    action: parsed.data.action === "add" ? "email.list.member_add" : "email.list.member_remove",
+    targetType: "EmailList",
+    targetId: id,
+    detail: { email },
+  });
   const memberCount = await db.emailListMember.count({ where: { listId: id } });
   return Response.json({ ok: true, memberCount });
 }
