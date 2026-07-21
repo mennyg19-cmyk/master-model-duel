@@ -70,8 +70,8 @@
       "id": "S4",
       "check": "Imported repeat",
       "pass": true,
-      "importedOrderId": "cmrv8oe0z003eqxqctnowizfm",
-      "draftRef": "D-2026-42C774EE",
+      "importedOrderId": "cmrv8q9vs003eqxpw5csad4st",
+      "draftRef": "D-2026-08013474",
       "reviewPage": 200,
       "accountReview": 200
     },
@@ -79,16 +79,23 @@
       "id": "S5",
       "check": "Dress rehearsal",
       "pass": true,
-      "printBatch": {
-        "artifacts": 98,
-        "created": true
+      "dress": {
+        "orderId": "cmrv8qa0e003uqxpwjsvn5llq",
+        "printBatchId": "cmrv8qa1u004qqxpw8yh5b486",
+        "marginCents": 300
       },
-      "switched": true,
-      "pickup": "stamped",
-      "scalePackages": 5000,
-      "nightlyMs": 65,
+      "dressBeforeWipe": 1,
+      "dressAfterWipe": 0,
+      "scaleAfterWipe": 0,
+      "probe": {
+        "scaleOrders": 1000,
+        "scalePackages": 5000,
+        "newPackagesProcessed": 346,
+        "nightlyMs": 137,
+        "acceptable": true
+      },
       "wipe": {
-        "deletedOrders": 1004,
+        "deletedOrders": 1000,
         "deletedLabels": 1,
         "deletedCustomers": 3
       },
@@ -109,8 +116,7 @@
         401,
         401,
         401
-      ],
-      "labels": 13
+      ]
     }
   ]
 }

@@ -1,46 +1,38 @@
-# P12 FIX NOTES — arm-03
+# P12 Fix Notes — arm-03
 
-**Phase:** P12 fix pass  
-**Ports:** web 3103 / db 4103  
-**Smoke:** `npm run smoke:p12` → **5/5 PASS** (S1–S5)
+**Phase:** P12 — Reporting, exports, reconciliation, historical migration, scale hardening, launch readiness  
+**Tree:** `arms/arm-03/workspace/`  
+**Source:** `results/AGGREGATE-REVIEW-P12.md`
 
-## Blockers fixed
+## Fixed
 
-| ID | Claim | Fix |
-|---|---|---|
-| **B1** | Legacy import dry-run polluted → 0 VALID / no commit | `wipeTestFixtures` now deletes scale/dress/`legacyImport`/`p12Fixture` orders, P12 smoke customers (`p12.*` / `P12 ` display names), `orphan:` reconcile adjustments, and messy-p12 import batches. Smoke S3 enables test mode + wipe before staging. Unique phones per run. S3 evidence: `valid: 3`, `dryCommitted: 3`, resume `COMMITTED`. |
-| **B2** | Test-ops destructive routes lacked env guard | Added `IS_TEST_ENV` to `env.ts` (+ `.env` / `.env.example`). `isTestEnvAllowed()` requires `IS_TEST_ENV` **or** `AUTH_MODE=dev`, and never `NODE_ENV=production`. Gated on `/api/admin/test-ops` GET/POST and inside `setTestMode` / wipe / reseed. |
-| **B3** | Two Stripe reconcile implementations + duplicate cron | Kept single matcher `lib/ops/reconcile.ts` (`fingerprint = orphan:<piId>`). `lib/payments/reconcile.ts` now re-exports that matcher (+ `seedOrphanPaymentIntent` only). Deleted `/api/cron/stripe-reconcile`. Registered cron remains `/api/cron/payment-reconcile`. Admin route uses `listReconcileRuns`. Query capped `take: 2000`. |
-
-## Majors fixed (straightforward)
-
-| ID | Fix |
+| ID | What changed |
 |---|---|
-| Wipe ↔ dress rehearsal mismatch | Wipe matches `dressRehearsal` / `p12Fixture` / `scaleFixture` / `legacyImport` / `dress`; dress rehearsal also sets `scaleFixture: "p12"`. |
-| `reseedTestSeason` stub | Reseed now wipes fixtures, resets `nextOrderNumber`, restores inventory headroom, returns post-wipe counts. |
-| Scale dress vacuous | Smoke S5 runs `db:seed-scale-p6` (~1k orders / 5k NEW packages) before nightly timing; asserts `scalePackages >= 1000`. Evidence: `scalePackages: 5000`. |
-| Dead duplicate modules | Deleted `lib/exports/center.ts`, `lib/reports/{margin,performance}.ts`, `lib/ops/test-ops-keys.ts`, duplicate `api/admin/address-cleanup`. |
-| Dead `test-console` setTestMode/wipe | Removed; console only exports `runDressRehearsal`. Removed false `REROUTE_CONFIRMED` audit. |
-| Import GET PII privilege | `GET ?batchId=` now requires `settings.write`. |
-| Margin privilege | `reports?kind=margin` requires `settings.write` (aligned with CSV export). |
-| ORDERS import Payment gap | `commitOrderRow` creates POSTED CASH `Payment` + wipeable `p12Fixture` snapshot. |
-| Performance DISCARDED | Live performance report excludes `DISCARDED` (aligned with exports). |
-| Reports envelope | Dropped redundant `report: { seasons, totals }` wrapper. |
+| **B1** | `reseedTestSeason` now wipes fixtures, resets `nextOrderNumber` from remaining orders, restores inventory headroom, then returns post-wipe counts (no longer a count-only stub). |
+| **B2** | Added `ensureScaleFixtures` + `scalePrintProbe`: require ≥1k scale orders / ≥5k packages (create deficit + package top-up); mark a 250-package NEW sample and run nightly; fail if fixtures under target or nightly processes fewer than 250 (no vacuous empty-input pass). Wired to `/api/admin/test-ops` `scalePrintProbe`. |
+| **B3** | `wipeTestFixtures` matches `dressRehearsal`, `p12Fixture`, `scaleFixture` p6/p12, `dress`, draftRef prefixes, plus P12 import customers / orphan fingerprints / smoke export audits. |
+| **M1** | Single reconcile path: `lib/ops/reconcile.ts` is canonical; `lib/payments/reconcile.ts` re-exports `runPaymentReconcile` as `runPaymentReconciliation` (+ `seedOrphanPaymentIntent` only). |
+| **M2** | Removed unregistered duplicate `stripe-reconcile` cron route; `payment-reconcile` remains the scheduled job. |
+| **M5** | Deleted dead `lib/exports/center.ts`. |
+| **M6** | Deleted dead `lib/reports/{margin,performance}.ts`. |
+| **M7** | Removed dead `wipeTestSeasonFixtures` / divergent `setTestMode` / `test-ops-keys.ts`; dress rehearsal lives in `test-console.ts`, wipe/reseed/mode/probe in `test-ops.ts`. |
+| **M12** | `isTestEnvAllowed()` — destructive test-ops require non-production and `IS_TEST_ENV` or `AUTH_MODE=dev`; enforced in test-ops lib + route + dress rehearsal. |
+| **M13** | `runPaymentReconcile` loads StripePaymentIntents with `take: 2000`, newest first. |
+| **M19** | Admin reconcile GET uses `listReconcileRuns`. |
+| **Smoke S5** | Uses `runDressRehearsal` + `scalePrintProbe`; asserts wipe clears dress/scale markers; requires scale ≥1k/5k and non-empty nightly sample. |
 
-## Smoke evidence (post-fix)
+## Skipped (out of prioritized fix scope)
 
-| ID | Result | Notes |
-|---|---|---|
-| S1 | PASS | Reports + margin |
-| S2 | PASS | Export auth; orphan flagged; rerun `created:0` / `skipped:1`; cron 200/401 |
-| S3 | PASS | `valid:3`, `duplicate:1`, `invalid:1`, `dryCommitted:3`, interrupted+resume |
-| S4 | PASS | Prior-year repeat review pages 200 |
-| S5 | PASS | `scalePackages:5000`, wipe `deletedOrders:1004`, reseed clean season, crons 401×6 |
+| ID | Why |
+|---|---|
+| **M3** | `import.ts` god-file split — large refactor; not in blocker/critical priority list. |
+| **M4** | Real ORDERS import path vs prior-year stub — not in prioritized critical set for this pass. |
+| **M8** | Duplicate address-cleanup routes — API surface drift; no UI; deferred. |
+| **M9** | ORDERS/PRODUCTS import smoke coverage — deferred with M4. |
+| **M10/M11** | Partially addressed by S5 calling dress rehearsal + scalePrintProbe directly; HTTP button click path not separately exercised. |
+| **M14–M18, M20–M26** | Clean-code duplication / client type drift / schema placement — not blockers; deferred. |
+| **m1–m14** | All minors deferred. |
 
-## Not fixed (left for later)
+## Smoke
 
-- God-file split of `import.ts` (M3) — large refactor, deferred
-- Full ORDERS/PRODUCTS kind smoke coverage beyond CUSTOMERS (M9)
-- UI button paths for dress/scale probe still not the smoke driver (M10/M11) — wipe/markers fixed so UI path is wipeable
-- `CRON_SECRET` still read raw in cron auth (F8) — not boot-validated
-- `money()` / client enum drift cleanups (M15, M22) — low urgency
+`npm run smoke:p12` → **5/5 PASS** (see `results/PHASE-P12-SMOKE.md`).

@@ -371,7 +371,38 @@ export async function ensureScaleFixtures(): Promise<
       });
     }
 
-    const counts = await countScaleFixtures();
+    let counts = await countScaleFixtures();
+    // Top up packages if order count hit target but package count is short
+    // (e.g. older fixtures with fewer packages per order).
+    if (
+      counts.scaleOrders >= SCALE_ORDER_TARGET &&
+      counts.scalePackages < SCALE_PACKAGE_TARGET
+    ) {
+      const deficit = SCALE_PACKAGE_TARGET - counts.scalePackages;
+      const host = await db.order.findFirst({
+        where: scaleFixtureWhere(),
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+      if (host) {
+        await db.package.createMany({
+          data: Array.from({ length: deficit }, (_, p) => ({
+            orderId: host.id,
+            groupingKey: `scale|p12|topup|${Date.now()}|${p}`,
+            recipientName: `Scale Topup ${p}`,
+            addressLine1: "1 Scale Topup St",
+            city: "Brooklyn",
+            state: "NY",
+            postalCode: "11218",
+            country: "US",
+            fulfillmentMethodId: method.id,
+            stage: PackageStage.NEW,
+          })),
+        });
+      }
+      counts = await countScaleFixtures();
+    }
+
     return ok({ ...counts, createdOrders: needOrders });
   } catch (error) {
     return err(maskError(error), "Could not ensure scale fixtures.");
