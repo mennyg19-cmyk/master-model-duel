@@ -15,7 +15,7 @@
 | Test | Status |
 |---|---|
 | 1a inventory vs freeze + bonus | **gated** — 6/7 (164/192); bonus_novel=2 — [grade](344a7406-a4ee-466a-80a1-bea705eb7945) |
-| 1b grill | pending |
+| 1b grill | **gated** — 8/8 (turn_quality 1.985; T12 explain-down dock) — [grade](d8d77458-bf6d-4daa-a484-ef0af94c7f05) |
 | 2 plan (not merged) + bonus_plan | pending |
 | 4 build from merged plan | pending (Test 3 skipped like originals) |
 | 5 self-review | pending |

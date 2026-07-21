@@ -164,3 +164,18 @@
 "2026-07-21T13:35:00Z","2026-07-20-1748-tomchei-shabbos-website-model_duel","1a","arm-03","","inventory_integrations","cursor-grok-4.5-high","e9d5c24b-af69-47b5-9b50-e86f009cba74","","","","","","","","25 features; late_join; usage_missing_pending_export"
 2026-07-21T13:43:09Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1a,arm-03,,inventory_merge,cursor-grok-4.5-high,5426a5ea-6812-4ab1-bc67-7d14809c554c,,,,,,,,125 features 0 conflicts; late_join; usage_missing_pending_export
 2026-07-21T13:43:09Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1a,arm-03,,reviewer,glm-5.2-high,344a7406-a4ee-466a-80a1-bea705eb7945,,,,,,,,inventory grade 6/7 bonus_novel=2; late_join; usage_missing_pending_export
+2026-07-21T13:55:24Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,edfe4280-970b-45ae-b795-83202da768ea,,,,,,,,Turn 1 ask live; frozen replay aborted; usage_missing_pending_export
+2026-07-21T13:56:50Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,d55827ec-eb0c-4c7c-ac93-7643acc46681,,,,,,,,Turn 2 ask live; usage_missing_pending_export
+2026-07-21T13:58:54Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,233abc51-9090-4dd2-aab0-156dfbc44828,,,,,,,,Turn 3 ask live; usage_missing_pending_export
+2026-07-21T14:00:30Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,a0094c22-4d0c-4456-85a0-02fa15f8ae63,,,,,,,,Turn 4 ask live; usage_missing_pending_export
+2026-07-21T14:02:31Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,2041739a-2cdc-4102-b176-14c2d13441f6,,,,,,,,Turn 5 ask live; usage_missing_pending_export
+2026-07-21T14:03:42Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,b4557698-6fcb-4e2e-9efb-eed1815a5b48,,,,,,,,Turn 6 ask live; usage_missing_pending_export
+2026-07-21T14:04:59Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,a8e7ce19-9e37-4ac8-96f2-7ed72d19f695,,,,,,,,Turn 7 ask live; usage_missing_pending_export
+2026-07-21T14:06:14Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,ba66bc58-f50b-4e55-a0cf-740ba9d78f62,,,,,,,,Turn 8 ask live; usage_missing_pending_export
+2026-07-21T14:07:24Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,d0a9132e-3123-4ab5-a82f-04b0fea0ad55,,,,,,,,Turn 9 ask live; usage_missing_pending_export
+2026-07-21T14:08:28Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,8194f19d-0585-4d5b-bf45-95ba38c28eed,,,,,,,,Turn 10 ask live; usage_missing_pending_export
+2026-07-21T14:09:23Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,5ee9c54e-0672-4d71-81f0-75c7d5245958,,,,,,,,Turn 11 ask live; usage_missing_pending_export
+2026-07-21T14:11:08Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,b20b300d-39a4-4928-83ed-9d2bdb0bacb9,,,,,,,,Turn 12 ask live; usage_missing_pending_export
+2026-07-21T14:12:55Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill,cursor-grok-4.5-high,7916a3b4-74c4-4662-a4a2-52edb0d45c02,,,,,,,,Turn 13 final ask live; usage_missing_pending_export
+2026-07-21T14:15:03Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,grill_inventory,cursor-grok-4.5-high,7ef77561-d30a-400b-8b72-875264e5c834,,,,,,,,13 features 0 OPEN; usage_missing_pending_export
+2026-07-21T14:15:03Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,reviewer,glm-5.2-high,d8d77458-bf6d-4daa-a484-ef0af94c7f05,,,,,,,,grill turns grade 8/8; usage_missing_pending_export
