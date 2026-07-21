@@ -20,7 +20,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## P12 gate (arm-02)
 
-[arm-02 P12 fix pass](4ad13eb7-ee9c-4104-a076-bde5f0d9dbb3) — S-M1 + Q-M3 + C-M5/H1 + R-M2/M3 + C-M2; S1–S5 **46/46**, CI **77/77**. Committed with gate **`TBD`**.
+[arm-02 P12 fix pass](4ad13eb7-ee9c-4104-a076-bde5f0d9dbb3) — S-M1 + Q-M3 + C-M5/H1 + R-M2/M3 + C-M2; S1–S5 **46/46**, CI **77/77**. Gate commit **`6b9b9b6`**.
 
 **Next:** Tests 5–6 per `protocol/EXPERIMENT-PLAN.md`.
 
