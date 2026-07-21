@@ -767,6 +767,8 @@ model ShippingLabel {
   /// P9 stub: set when assigned to a delivery route; null ⇒ still voidable.
   routeAssignedAt       DateTime?
   failureReason         String?
+  /// Shippo buy idempotency — unique when set (cleared on void for re-purchase).
+  idempotencyKey        String?             @unique
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
   voidedAt              DateTime?

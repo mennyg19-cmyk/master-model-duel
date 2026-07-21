@@ -158,13 +158,24 @@ async function shippoFetch<T>(
   return (await res.json()) as T;
 }
 
-/** Rate / buy / void / track / validate (R-173). */
+/** Rate / buy / void / track / validate (R-173). Multi-parcel = one shipment quote. */
 export async function getRates(input: {
   addressFrom: ShippoAddress;
   addressTo: ShippoAddress;
-  parcel: ShippoParcel;
+  parcels: ShippoParcel[];
 }): Promise<ShippoRate[]> {
-  if (getShippoMode() === "mock") return mockGroundRates(input.addressTo);
+  const parcelCount = Math.max(1, input.parcels.length);
+  if (getShippoMode() === "mock") {
+    return mockGroundRates(input.addressTo).map((rate) => ({
+      ...rate,
+      amountCents: rate.amountCents * parcelCount,
+    }));
+  }
+
+  const env = getShippoEnv();
+  const carrierAccounts = [env.fedexAccountId, env.upsAccountId].filter(
+    (id): id is string => Boolean(id),
+  );
 
   const shipment = await shippoFetch<{
     rates: Array<{
@@ -173,14 +184,16 @@ export async function getRates(input: {
       servicelevel: { token: string; name: string };
       amount: string;
       currency: string;
+      carrier_account?: string;
     }>;
   }>("/shipments/", {
     method: "POST",
     body: JSON.stringify({
       address_from: toShippoAddress(input.addressFrom),
       address_to: toShippoAddress(input.addressTo),
-      parcels: [toShippoParcel(input.parcel)],
+      parcels: input.parcels.map(toShippoParcel),
       async: false,
+      ...(carrierAccounts.length > 0 ? { carrier_accounts: carrierAccounts } : {}),
     }),
   });
 
@@ -190,10 +203,14 @@ export async function getRates(input: {
     serviceLevel: r.servicelevel.token || r.servicelevel.name,
     amountCents: Math.round(Number.parseFloat(r.amount) * 100),
     currency: r.currency,
+    providerAccount: r.carrier_account,
   }));
 }
 
-export async function buyLabel(rateId: string): Promise<ShippoTransaction> {
+export async function buyLabel(
+  rateId: string,
+  idempotencyKey?: string,
+): Promise<ShippoTransaction> {
   if (getShippoMode() === "mock") {
     if (rateId.startsWith("rate_fail")) {
       return {
@@ -208,8 +225,12 @@ export async function buyLabel(rateId: string): Promise<ShippoTransaction> {
         messages: ["Mock label purchase failure"],
       };
     }
+    // Stable mock txn id when idempotency key present (retry-safe).
+    const objectId = idempotencyKey
+      ? `txn_idem_${idempotencyKey.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}`
+      : mintId("txn");
     return {
-      objectId: mintId("txn"),
+      objectId,
       status: "SUCCESS",
       trackingNumber: `1ZMOCK${randomBytes(6).toString("hex").toUpperCase()}`,
       labelUrl: `https://example.invalid/labels/${rateId}.pdf`,
@@ -231,11 +252,33 @@ export async function buyLabel(rateId: string): Promise<ShippoTransaction> {
     tracking_number: string | null;
     label_url: string | null;
     rate: string;
+    amount?: string;
+    currency?: string;
+    parcel?: unknown;
+    rate_obj?: {
+      provider?: string;
+      servicelevel?: { token?: string; name?: string };
+      amount?: string;
+    };
     messages?: Array<{ text: string }>;
   }>("/transactions/", {
     method: "POST",
-    body: JSON.stringify({ rate: rateId, label_file_type: "PDF", async: false }),
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+    body: JSON.stringify({
+      rate: rateId,
+      label_file_type: "PDF",
+      async: false,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+    }),
   });
+
+  const amountRaw = txn.amount ?? txn.rate_obj?.amount;
+  const amountCents = amountRaw
+    ? Math.round(Number.parseFloat(amountRaw) * 100)
+    : 0;
+  const carrier = (txn.rate_obj?.provider ?? "").toLowerCase();
+  const serviceLevel =
+    txn.rate_obj?.servicelevel?.token || txn.rate_obj?.servicelevel?.name || "";
 
   return {
     objectId: txn.object_id,
@@ -243,9 +286,9 @@ export async function buyLabel(rateId: string): Promise<ShippoTransaction> {
     trackingNumber: txn.tracking_number,
     labelUrl: txn.label_url,
     rateId: txn.rate,
-    carrier: "",
-    serviceLevel: "",
-    amountCents: 0,
+    carrier,
+    serviceLevel,
+    amountCents,
     messages: (txn.messages ?? []).map((m) => m.text),
   };
 }
@@ -255,7 +298,10 @@ export async function voidLabel(transactionId: string): Promise<{ ok: boolean; m
     return { ok: !transactionId.startsWith("txn_fail"), messages: [] };
   }
   try {
-    await shippoFetch(`/transactions/${transactionId}/refund/`, { method: "POST", body: "{}" });
+    await shippoFetch(`/transactions/${encodeURIComponent(transactionId)}/refund/`, {
+      method: "POST",
+      body: "{}",
+    });
     return { ok: true, messages: [] };
   } catch (error) {
     return { ok: false, messages: [error instanceof Error ? error.message : "void failed"] };
@@ -295,6 +341,13 @@ export async function validateAddress(address: ShippoAddress): Promise<ShippoVal
     };
   }
   const result = await shippoFetch<{
+    name?: string;
+    street1?: string;
+    street2?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
     validation_results?: { is_valid?: boolean; messages?: Array<{ text: string }> };
   }>("/addresses/", {
     method: "POST",
@@ -304,7 +357,15 @@ export async function validateAddress(address: ShippoAddress): Promise<ShippoVal
   return {
     isValid: Boolean(vr?.is_valid),
     messages: (vr?.messages ?? []).map((m) => m.text),
-    normalized: address,
+    normalized: {
+      name: result.name ?? address.name,
+      street1: result.street1 ?? address.street1,
+      street2: result.street2 ?? address.street2,
+      city: result.city ?? address.city,
+      state: result.state ?? address.state,
+      zip: result.zip ?? address.zip,
+      country: result.country ?? address.country ?? "US",
+    },
   };
 }
 

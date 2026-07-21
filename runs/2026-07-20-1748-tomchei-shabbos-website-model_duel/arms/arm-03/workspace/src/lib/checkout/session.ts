@@ -5,7 +5,6 @@ import {
   loadAllowedDeliveryZips,
   loadDeliveryFees,
   loadPurimWeekDays,
-  resolveDeliveryFees,
   ZipBlockedError,
   type CheckoutLineForFees,
 } from "@/lib/checkout/delivery";
@@ -22,6 +21,7 @@ import {
 } from "@/lib/checkout/validation";
 import { buildGroupingKey } from "@/lib/orders/grouping";
 import { draftSubtotalCents } from "@/lib/orders/totals";
+import { resolveDeliveryFeesLive } from "@/lib/shipping/checkout-rates";
 import {
   appUrl,
   getStripe,
@@ -79,7 +79,31 @@ function toFeeLines(order: CheckoutOrder): CheckoutLineForFees[] {
     postalCode: l.postalCode,
     country: l.country,
     fulfillmentMethodCode: l.fulfillmentMethod?.code ?? null,
+    quantity: l.quantity,
+    productSku: l.product.sku,
+    weightOz: l.product.weightOz,
+    lengthIn: l.product.lengthIn,
+    widthIn: l.product.widthIn,
+    heightIn: l.product.heightIn,
   }));
+}
+
+/** Shared checkoutSnapshot shape for prepare + hosted checkout (B5). */
+function buildCheckoutSnapshot(input: {
+  fees: Awaited<ReturnType<typeof resolveDeliveryFeesLive>>;
+  subtotalCents: number;
+  donationCents: number;
+  expectedTotalCents: number;
+}): Prisma.InputJsonValue {
+  return {
+    fees: input.fees,
+    liveShip: input.fees.liveShip,
+    shipQuotes: input.fees.shipQuotes,
+    subtotalCents: input.subtotalCents,
+    donationCents: input.donationCents,
+    expectedTotalCents: input.expectedTotalCents,
+    capturedAt: new Date().toISOString(),
+  };
 }
 
 function toValidationLines(order: CheckoutOrder): ValidationLine[] {
@@ -151,7 +175,7 @@ export async function buildCheckoutSummary(orderId: string) {
   });
 
   const feeLines = toFeeLines(order);
-  const breakdown = resolveDeliveryFees(feeLines, fees, zips);
+  const breakdown = await resolveDeliveryFeesLive(feeLines, fees, zips);
   const validation = validateCheckoutLines(toValidationLines(order), {
     feesCents: breakdown.totalFeeCents,
     donationCents: order.donationCents,
@@ -366,15 +390,12 @@ export async function prepareCheckout(
     const expectedTotal =
       validation.subtotalCents + breakdown.totalFeeCents + refreshed.donationCents;
 
-    const snapshot: Prisma.InputJsonValue = {
+    const snapshot = buildCheckoutSnapshot({
       fees: breakdown,
-      liveShip: breakdown.liveShip,
-      shipQuotes: breakdown.shipQuotes,
       subtotalCents: validation.subtotalCents,
       donationCents: refreshed.donationCents,
       expectedTotalCents: expectedTotal,
-      capturedAt: new Date().toISOString(),
-    };
+    });
 
     if (validation.ok) {
       await db.order.update({
@@ -456,12 +477,12 @@ export async function createHostedCheckoutSession(input: {
       data: {
         expectedTotalCents: amountCents,
         fulfillmentFeeCents: breakdown.totalFeeCents,
-        checkoutSnapshot: {
+        checkoutSnapshot: buildCheckoutSnapshot({
           fees: breakdown,
           subtotalCents: validation.subtotalCents,
           donationCents: order.donationCents,
           expectedTotalCents: amountCents,
-        },
+        }),
         version: { increment: 1 },
       },
     });

@@ -602,15 +602,27 @@ async function main() {
     },
   });
 
+  for (const box of [
+    { code: "SMALL", name: "Small box", lengthIn: 12, widthIn: 9, heightIn: 6, maxWeightOz: 320 },
+    { code: "MEDIUM", name: "Medium box", lengthIn: 18, widthIn: 12, heightIn: 10, maxWeightOz: 640 },
+    { code: "LARGE", name: "Large box", lengthIn: 24, widthIn: 16, heightIn: 12, maxWeightOz: 960 },
+  ]) {
+    await db.packageType.upsert({
+      where: { code: box.code },
+      create: { ...box, isActive: true },
+      update: { ...box, isActive: true },
+    });
+  }
+
   await db.appSetting.upsert({
     where: { key: SETUP_LOCK_KEY },
     create: {
       key: SETUP_LOCK_KEY,
-      value: { complete: true, seeded: true, phase: "P5" },
+      value: { complete: true, seeded: true, phase: "P8" },
       version: 1,
     },
     update: {
-      value: { complete: true, seeded: true, phase: "P5" },
+      value: { complete: true, seeded: true, phase: "P8" },
     },
   });
 

@@ -4,22 +4,45 @@ import {
   Prisma,
   ShippingLabelStatus,
 } from "@prisma/client";
+import { ApiError } from "@/lib/api-error";
+import { writeAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { buyLabel, trackShipment, validateAddress, voidLabel } from "@/lib/shippo/client";
 import { quoteMargin } from "@/lib/shipping/margin";
 import {
-  planPackageShipment,
-  planToParcel,
+  computePackageShipmentPlan,
+  planToParcels,
   type ShipmentPlan,
 } from "@/lib/shipping/bin-packing";
 
-export class LabelError extends Error {
-  constructor(
-    message: string,
-    readonly status: number = 409,
-  ) {
-    super(message);
-  }
+function labelBuyIdempotencyKey(packageId: string): string {
+  return `label-buy:${packageId}`;
+}
+
+function labelAuditMeta(
+  label: {
+    id: string;
+    packageId: string;
+    orderId: string;
+    carrier?: string;
+    chargedCents?: number;
+    purchasedCents?: number;
+    marginCents?: number;
+    trackingNumber?: string | null;
+  },
+  extra?: Record<string, unknown>,
+): Prisma.InputJsonValue {
+  return {
+    labelId: label.id,
+    packageId: label.packageId,
+    orderId: label.orderId,
+    ...(label.carrier != null ? { carrier: label.carrier } : {}),
+    ...(label.chargedCents != null ? { chargedCents: label.chargedCents } : {}),
+    ...(label.purchasedCents != null ? { purchasedCents: label.purchasedCents } : {}),
+    ...(label.marginCents != null ? { marginCents: label.marginCents } : {}),
+    ...(label.trackingNumber != null ? { trackingNumber: label.trackingNumber } : {}),
+    ...extra,
+  };
 }
 
 function toAddress(pkg: {
@@ -53,52 +76,64 @@ export function isVoidable(label: {
 export async function createLabelForPackage(input: {
   packageId: string;
   actorId?: string | null;
+  seasonId?: string;
 }): Promise<{
   label: Awaited<ReturnType<typeof db.shippingLabel.create>>;
   margin: Awaited<ReturnType<typeof quoteMargin>>;
   plan: ShipmentPlan;
 }> {
-  const pkg = await db.package.findUnique({
-    where: { id: input.packageId },
+  const pkg = await db.package.findFirst({
+    where: {
+      id: input.packageId,
+      ...(input.seasonId ? { order: { seasonId: input.seasonId } } : {}),
+    },
     include: {
       fulfillmentMethod: true,
       items: { include: { orderLine: { include: { product: true } } } },
     },
   });
-  if (!pkg) throw new LabelError("Package not found", 404);
+  if (!pkg) throw new ApiError("Package not found", 404);
   if (pkg.fulfillmentMethod.code !== "SHIP") {
-    throw new LabelError("Labels only apply to SHIP packages");
+    throw new ApiError("Labels only apply to SHIP packages", 409);
   }
 
+  const idempotencyKey = labelBuyIdempotencyKey(pkg.id);
   const existing = await db.shippingLabel.findFirst({
     where: { packageId: pkg.id, status: ShippingLabelStatus.PURCHASED },
   });
-  if (existing) throw new LabelError("Package already has an active shipping label");
+  if (existing) {
+    throw new ApiError("Package already has an active shipping label", 409);
+  }
 
   const address = toAddress(pkg);
   const validation = await validateAddress(address);
   if (!validation.isValid) {
-    throw new LabelError(`Address invalid: ${validation.messages.join("; ") || "failed"}`);
+    throw new ApiError(
+      `Address invalid: ${validation.messages.join("; ") || "validation failed"}`,
+      400,
+    );
   }
+  const shipTo = validation.normalized ?? address;
 
-  const plan = await planPackageShipment(pkg.id);
-  const fallbackParcel = {
+  // Plan only — persist shipmentPlan after successful purchase (M2).
+  const { plan } = await computePackageShipmentPlan(pkg.id);
+  const fallbackWeight = Math.max(
+    1,
+    pkg.items.reduce(
+      (sum, item) => sum + (item.orderLine.product.weightOz ?? 16) * item.quantity,
+      0,
+    ),
+  );
+  const parcels = planToParcels(plan, {
     lengthIn: 12,
     widthIn: 9,
     heightIn: 6,
-    weightOz: Math.max(
-      1,
-      pkg.items.reduce(
-        (sum, item) => sum + (item.orderLine.product.weightOz ?? 16) * item.quantity,
-        0,
-      ),
-    ),
-  };
-  const parcel = planToParcel(plan, fallbackParcel);
+    weightOz: fallbackWeight,
+  });
 
   let margin: Awaited<ReturnType<typeof quoteMargin>>;
   try {
-    margin = await quoteMargin({ addressTo: address, parcel });
+    margin = await quoteMargin({ addressTo: shipTo, parcels });
   } catch (error) {
     await recordFailedLabel({
       packageId: pkg.id,
@@ -106,12 +141,11 @@ export async function createLabelForPackage(input: {
       reason: error instanceof Error ? error.message : "rate quote failed",
       actorId: input.actorId,
     });
-    throw new LabelError(error instanceof Error ? error.message : "rate quote failed");
+    throw new ApiError("Could not get shipping rates for this package", 502);
   }
 
-  const txn = await buyLabel(margin.buyRate.objectId);
+  const txn = await buyLabel(margin.buyRate.objectId, idempotencyKey);
   if (txn.status !== "SUCCESS") {
-    // R-175: compensate — no PURCHASED row; record FAILED + audit.
     await recordFailedLabel({
       packageId: pkg.id,
       orderId: pkg.orderId,
@@ -121,47 +155,61 @@ export async function createLabelForPackage(input: {
       chargedCents: margin.chargedCents,
       purchasedCents: margin.purchasedCents,
     });
-    throw new LabelError(txn.messages.join("; ") || "Label purchase failed");
+    throw new ApiError("Label purchase failed", 502);
   }
 
-  const label = await db.$transaction(async (tx) => {
-    const created = await tx.shippingLabel.create({
-      data: {
-        packageId: pkg.id,
-        orderId: pkg.orderId,
-        status: ShippingLabelStatus.PURCHASED,
-        carrier: margin.buyRate.carrier,
-        serviceLevel: margin.buyRate.serviceLevel,
-        shippoRateId: margin.buyRate.objectId,
-        shippoTransactionId: txn.objectId,
-        trackingNumber: txn.trackingNumber,
-        labelUrl: txn.labelUrl,
-        chargedCents: margin.chargedCents,
-        purchasedCents: margin.purchasedCents,
-        marginCents: margin.marginCents,
-        quotesJson: margin as unknown as Prisma.InputJsonValue,
-      },
-    });
-    await tx.auditLog.create({
-      data: {
-        action: AuditAction.LABEL_PURCHASED,
-        actorId: input.actorId ?? undefined,
-        targetId: created.id,
-        meta: {
+  const purchasedCents = txn.amountCents > 0 ? txn.amountCents : margin.purchasedCents;
+  const carrier = txn.carrier || margin.buyRate.carrier;
+  const serviceLevel = txn.serviceLevel || margin.buyRate.serviceLevel;
+  const marginCents = margin.chargedCents - purchasedCents;
+  const storedMargin = { ...margin, purchasedCents, marginCents };
+
+  try {
+    const label = await db.$transaction(async (tx) => {
+      await tx.package.update({
+        where: { id: pkg.id },
+        data: { shipmentPlan: plan },
+      });
+      const created = await tx.shippingLabel.create({
+        data: {
           packageId: pkg.id,
           orderId: pkg.orderId,
-          carrier: created.carrier,
-          chargedCents: created.chargedCents,
-          purchasedCents: created.purchasedCents,
-          marginCents: created.marginCents,
-          trackingNumber: created.trackingNumber,
+          status: ShippingLabelStatus.PURCHASED,
+          carrier,
+          serviceLevel,
+          shippoRateId: margin.buyRate.objectId,
+          shippoTransactionId: txn.objectId,
+          trackingNumber: txn.trackingNumber,
+          labelUrl: txn.labelUrl,
+          chargedCents: margin.chargedCents,
+          purchasedCents,
+          marginCents,
+          quotesJson: storedMargin as unknown as Prisma.InputJsonValue,
+          idempotencyKey,
         },
+      });
+      await writeAudit(
+        {
+          action: AuditAction.LABEL_PURCHASED,
+          actorId: input.actorId,
+          meta: labelAuditMeta(created),
+        },
+        tx,
+      );
+      return created;
+    });
+    return { label, margin: storedMargin, plan };
+  } catch (error) {
+    const raced = await db.shippingLabel.findFirst({
+      where: {
+        OR: [{ idempotencyKey }, { packageId: pkg.id, status: ShippingLabelStatus.PURCHASED }],
       },
     });
-    return created;
-  });
-
-  return { label, margin, plan };
+    if (raced?.status === ShippingLabelStatus.PURCHASED) {
+      return { label: raced, margin: storedMargin, plan };
+    }
+    throw error;
+  }
 }
 
 async function recordFailedLabel(input: {
@@ -190,79 +238,95 @@ async function recordFailedLabel(input: {
         failureReason: input.reason,
       },
     });
-    await tx.auditLog.create({
-      data: {
+    await writeAudit(
+      {
         action: AuditAction.LABEL_FAILED,
-        actorId: input.actorId ?? undefined,
-        targetId: failed.id,
-        meta: { packageId: input.packageId, reason: input.reason },
+        actorId: input.actorId,
+        meta: labelAuditMeta(failed, { reason: input.reason }),
       },
-    });
+      tx,
+    );
   });
 }
 
 export async function voidLabelForPackage(input: {
   packageId: string;
   actorId?: string | null;
+  seasonId?: string;
 }): Promise<{ labelId: string }> {
   const label = await db.shippingLabel.findFirst({
-    where: { packageId: input.packageId, status: ShippingLabelStatus.PURCHASED },
+    where: {
+      packageId: input.packageId,
+      status: ShippingLabelStatus.PURCHASED,
+      ...(input.seasonId ? { order: { seasonId: input.seasonId } } : {}),
+    },
     include: { package: true },
   });
-  if (!label) throw new LabelError("No active label to void", 404);
+  if (!label) throw new ApiError("No active label to void", 404);
   if (!isVoidable(label)) {
-    throw new LabelError("Label is assigned to a route and cannot be voided here (P9)");
+    throw new ApiError("Label is assigned to a route and cannot be voided here (P9)", 409);
   }
-  // Printed-but-unshipped (stage PRINTED/PACKED/NEW) remains voidable — S3.
   if (label.package.stage === PackageStage.SENT || label.package.stage === PackageStage.PICKED_UP) {
-    throw new LabelError("Cannot void a label after package is marked sent");
+    throw new ApiError("Cannot void a label after package is marked sent", 409);
   }
 
   if (label.shippoTransactionId) {
     const result = await voidLabel(label.shippoTransactionId);
     if (!result.ok) {
-      throw new LabelError(result.messages.join("; ") || "Shippo void failed");
+      throw new ApiError("Shippo void failed", 502);
     }
   }
 
   await db.$transaction(async (tx) => {
     await tx.shippingLabel.update({
       where: { id: label.id },
-      data: { status: ShippingLabelStatus.VOIDED, voidedAt: new Date() },
+      // Clear key so a later re-purchase can reuse label-buy:{packageId}.
+      data: { status: ShippingLabelStatus.VOIDED, voidedAt: new Date(), idempotencyKey: null },
     });
-    await tx.auditLog.create({
-      data: {
+    await writeAudit(
+      {
         action: AuditAction.LABEL_VOIDED,
-        actorId: input.actorId ?? undefined,
-        targetId: label.id,
-        meta: { packageId: input.packageId, trackingNumber: label.trackingNumber },
+        actorId: input.actorId,
+        meta: labelAuditMeta(label),
       },
-    });
+      tx,
+    );
   });
 
   return { labelId: label.id };
 }
 
-export async function refreshTracking(labelId: string, actorId?: string | null) {
-  const label = await db.shippingLabel.findUnique({ where: { id: labelId } });
-  if (!label?.trackingNumber) throw new LabelError("Label has no tracking number", 404);
+export async function refreshTracking(
+  labelId: string,
+  actorId?: string | null,
+  seasonId?: string,
+) {
+  const label = await db.shippingLabel.findFirst({
+    where: {
+      id: labelId,
+      ...(seasonId ? { order: { seasonId } } : {}),
+    },
+  });
+  if (!label?.trackingNumber) throw new ApiError("Label has no tracking number", 404);
   const tracking = await trackShipment(label.carrier, label.trackingNumber);
-  const updated = await db.shippingLabel.update({
-    where: { id: label.id },
-    data: {
-      trackingStatus: tracking.status,
-      trackingUpdatedAt: new Date(tracking.updatedAt),
-    },
+  return db.$transaction(async (tx) => {
+    const updated = await tx.shippingLabel.update({
+      where: { id: label.id },
+      data: {
+        trackingStatus: tracking.status,
+        trackingUpdatedAt: new Date(tracking.updatedAt),
+      },
+    });
+    await writeAudit(
+      {
+        action: AuditAction.TRACKING_REFRESHED,
+        actorId,
+        meta: labelAuditMeta(label, { status: tracking.status }),
+      },
+      tx,
+    );
+    return updated;
   });
-  await db.auditLog.create({
-    data: {
-      action: AuditAction.TRACKING_REFRESHED,
-      actorId: actorId ?? undefined,
-      targetId: label.id,
-      meta: { status: tracking.status },
-    },
-  });
-  return updated;
 }
 
 /** P9 hook stub — marks label non-voidable once on a route. */

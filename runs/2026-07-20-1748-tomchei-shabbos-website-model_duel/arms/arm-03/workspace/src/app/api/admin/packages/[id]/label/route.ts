@@ -4,7 +4,6 @@ import { requirePermission } from "@/lib/auth";
 import { apiErrorResponse } from "@/lib/api-error";
 import {
   createLabelForPackage,
-  LabelError,
   refreshTracking,
   voidLabelForPackage,
 } from "@/lib/shipping/labels";
@@ -79,9 +78,6 @@ export async function POST(request: Request, ctx: Ctx) {
     const updated = await refreshTracking(active, staff.effectiveStaff.id);
     return NextResponse.json({ ok: true, label: updated });
   } catch (error) {
-    if (error instanceof LabelError) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
-    }
     return apiErrorResponse(error);
   }
 }

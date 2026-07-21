@@ -1,12 +1,18 @@
 import { quoteMargin } from "@/lib/shipping/margin";
-import { getShippoEnv, type ShippoParcel } from "@/lib/shippo/client";
+import { getShippoEnv } from "@/lib/shippo/client";
 import {
   FULFILLMENT_CODES,
+  addressOnlyKey,
+  destinationKey,
   type CheckoutLineForFees,
   type DeliveryFeeBreakdown,
   type DeliveryFeeSettings,
 } from "@/lib/checkout/delivery";
 import { isDeliveryZipAllowed, normalizeZip } from "@/lib/storefront/settings-keys";
+import {
+  resolveParcelsForItems,
+  type PackableItem,
+} from "@/lib/shipping/bin-packing";
 
 export type LiveShipQuote = {
   destinationKey: string;
@@ -15,45 +21,39 @@ export type LiveShipQuote = {
   marginCents: number;
   chargeCarrier: string;
   buyCarrier: string;
+  parcelCount: number;
 };
 
-function destinationKey(line: CheckoutLineForFees): string {
-  return [
-    (line.recipientName ?? "").trim().toLowerCase(),
-    (line.addressLine1 ?? "").trim().toLowerCase(),
-    (line.city ?? "").trim().toLowerCase(),
-    (line.state ?? "").trim().toLowerCase(),
-    normalizeZip(line.postalCode ?? ""),
-    (line.country ?? "US").trim().toLowerCase(),
-  ].join("|");
+function shipItemsForDestination(
+  lines: CheckoutLineForFees[],
+  destKey: string,
+): PackableItem[] {
+  return lines
+    .filter(
+      (line) =>
+        line.fulfillmentMethodCode === FULFILLMENT_CODES.SHIP &&
+        destinationKey(line) === destKey,
+    )
+    .map((line) => ({
+      id: line.id,
+      sku: line.productSku ?? line.id,
+      quantity: line.quantity ?? 1,
+      weightOz: line.weightOz ?? 16,
+      lengthIn: line.lengthIn ?? 8,
+      widthIn: line.widthIn ?? 6,
+      heightIn: line.heightIn ?? 4,
+    }));
 }
-
-function addressOnlyKey(line: CheckoutLineForFees): string {
-  return [
-    (line.addressLine1 ?? "").trim().toLowerCase(),
-    (line.city ?? "").trim().toLowerCase(),
-    (line.state ?? "").trim().toLowerCase(),
-    normalizeZip(line.postalCode ?? ""),
-    (line.country ?? "US").trim().toLowerCase(),
-  ].join("|");
-}
-
-const DEFAULT_PARCEL: ShippoParcel = {
-  lengthIn: 12,
-  widthIn: 9,
-  heightIn: 6,
-  weightOz: 48,
-};
 
 /**
  * Live Shippo rate-resolution for SHIP lines (replaces P5 placeholder).
- * One margin quote per unique ship destination; customer charged highest eligible rate.
+ * One margin quote per unique ship destination; parcels from shared bin-pack
+ * so checkout charge matches label purchase (B1/B2).
  */
 export async function resolveDeliveryFeesLive(
   lines: CheckoutLineForFees[],
   fees: DeliveryFeeSettings,
   allowedZips: string[],
-  parcel: ShippoParcel = DEFAULT_PARCEL,
 ): Promise<DeliveryFeeBreakdown & { shipQuotes: LiveShipQuote[]; liveShip: boolean }> {
   const blockedZips: string[] = [];
   const bulkDestinations = new Set<string>();
@@ -88,28 +88,36 @@ export async function resolveDeliveryFeesLive(
   if (shipDestinations.size > 0) {
     liveShip = true;
     const origin = getShippoEnv().origin;
-    for (const [key, line] of shipDestinations) {
-      const margin = await quoteMargin({
-        addressFrom: origin,
-        addressTo: {
-          name: line.recipientName ?? "Recipient",
-          street1: line.addressLine1 ?? "",
-          city: line.city ?? "",
-          state: line.state ?? "",
-          zip: line.postalCode ?? "",
-          country: line.country ?? "US",
-        },
-        parcel,
-      });
-      shipQuotes.push({
-        destinationKey: key,
-        chargedCents: margin.chargedCents,
-        purchasedCents: margin.purchasedCents,
-        marginCents: margin.marginCents,
-        chargeCarrier: margin.chargeRate.carrier,
-        buyCarrier: margin.buyRate.carrier,
-      });
-      shipFeeCents += margin.chargedCents;
+    const quoted = await Promise.all(
+      [...shipDestinations.entries()].map(async ([key, line]) => {
+        const items = shipItemsForDestination(lines, key);
+        const { parcels } = await resolveParcelsForItems(items);
+        const margin = await quoteMargin({
+          addressFrom: origin,
+          addressTo: {
+            name: line.recipientName ?? "Recipient",
+            street1: line.addressLine1 ?? "",
+            city: line.city ?? "",
+            state: line.state ?? "",
+            zip: line.postalCode ?? "",
+            country: line.country ?? "US",
+          },
+          parcels,
+        });
+        return {
+          destinationKey: key,
+          chargedCents: margin.chargedCents,
+          purchasedCents: margin.purchasedCents,
+          marginCents: margin.marginCents,
+          chargeCarrier: margin.chargeRate.carrier,
+          buyCarrier: margin.buyRate.carrier,
+          parcelCount: parcels.length,
+        } satisfies LiveShipQuote;
+      }),
+    );
+    for (const quote of quoted) {
+      shipQuotes.push(quote);
+      shipFeeCents += quote.chargedCents;
     }
   }
 

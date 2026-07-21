@@ -127,7 +127,7 @@ export function PackageBoardClient() {
     }
   }
 
-  async function labelAction(packageId: string, action: "create" | "void") {
+  async function labelAction(packageId: string, action: "create" | "void" | "refresh") {
     setMessage(null);
     const res = await fetch(`/api/admin/packages/${packageId}/label`, {
       method: "POST",
@@ -143,6 +143,8 @@ export function PackageBoardClient() {
       setMessage(
         `Label ${json.label?.trackingNumber ?? json.label?.id}: charge ${json.margin?.chargedCents}¢ buy ${json.margin?.purchasedCents}¢ margin ${json.margin?.marginCents}¢`,
       );
+    } else if (action === "refresh") {
+      setMessage(`Tracking: ${json.label?.trackingStatus ?? "refreshed"}`);
     } else {
       setMessage(`Voided label ${json.labelId}`);
     }
@@ -232,6 +234,14 @@ export function PackageBoardClient() {
                     data-testid={`package-label-void-${pkg.id}`}
                   >
                     Void label
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void labelAction(pkg.id, "refresh")}
+                    data-testid={`package-label-refresh-${pkg.id}`}
+                  >
+                    Refresh tracking
                   </Button>
                 </div>
               ) : null}

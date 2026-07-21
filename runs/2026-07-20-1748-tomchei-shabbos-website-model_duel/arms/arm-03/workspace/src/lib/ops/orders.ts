@@ -92,7 +92,10 @@ export async function getOrderDetail(orderId: string) {
         },
         orderBy: { postedAt: "desc" },
       },
-      packages: { orderBy: { createdAt: "asc" } },
+      packages: {
+        orderBy: { createdAt: "asc" },
+        include: { fulfillmentMethod: { select: { id: true, code: true, label: true } } },
+      },
       stripeSessions: true,
       stripeIntents: true,
     },

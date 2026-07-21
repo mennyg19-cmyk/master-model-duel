@@ -16,6 +16,10 @@ const ORDER_AUDIT_ACTIONS: AuditAction[] = [
   AuditAction.ORDER_REPEATED,
   AuditAction.CHECKOUT_STARTED,
   AuditAction.BULK_ACTION_APPLIED,
+  AuditAction.LABEL_PURCHASED,
+  AuditAction.LABEL_VOIDED,
+  AuditAction.LABEL_FAILED,
+  AuditAction.TRACKING_REFRESHED,
 ];
 
 export async function GET(_request: Request, ctx: Ctx) {

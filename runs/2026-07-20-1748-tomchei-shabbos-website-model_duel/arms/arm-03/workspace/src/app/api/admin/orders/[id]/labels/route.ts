@@ -4,7 +4,6 @@ import { requirePermission } from "@/lib/auth";
 import { apiErrorResponse } from "@/lib/api-error";
 import {
   createLabelForPackage,
-  LabelError,
   voidLabelForPackage,
 } from "@/lib/shipping/labels";
 import { db } from "@/lib/db";
@@ -18,14 +17,18 @@ const bodySchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("validate"),
     address: z.object({
-      name: z.string(),
-      street1: z.string(),
-      street2: z.string().optional().nullable(),
-      city: z.string(),
-      state: z.string(),
-      zip: z.string(),
-      country: z.string().optional(),
+      name: z.string().max(200),
+      street1: z.string().max(200),
+      street2: z.string().max(200).optional().nullable(),
+      city: z.string().max(100),
+      state: z.string().max(50),
+      zip: z.string().max(20),
+      country: z.string().max(2).optional(),
     }),
+  }),
+  z.object({
+    action: z.literal("refresh"),
+    labelId: z.string().min(1),
   }),
 ]);
 
@@ -51,12 +54,36 @@ export async function GET(_request: Request, ctx: Ctx) {
 export async function POST(request: Request, ctx: Ctx) {
   try {
     const staff = await requirePermission("admin.access");
-    await ctx.params;
+    const { id: orderId } = await ctx.params;
     const body = bodySchema.parse(await request.json());
 
     if (body.action === "validate") {
       const result = await validateAddress(body.address);
       return NextResponse.json({ ok: true, validation: result });
+    }
+
+    if (body.action === "refresh") {
+      const { refreshTracking } = await import("@/lib/shipping/labels");
+      const label = await db.shippingLabel.findFirst({
+        where: { id: body.labelId, orderId },
+      });
+      if (!label) {
+        return NextResponse.json({ ok: false, error: "Label not found on this order" }, { status: 404 });
+      }
+      const updated = await refreshTracking(label.id, staff.effectiveStaff.id);
+      return NextResponse.json({ ok: true, label: updated });
+    }
+
+    // Bind package to URL order (object-level check).
+    const pkg = await db.package.findFirst({
+      where: { id: body.packageId, orderId },
+      select: { id: true },
+    });
+    if (!pkg) {
+      return NextResponse.json(
+        { ok: false, error: "Package not found on this order" },
+        { status: 404 },
+      );
     }
 
     if (body.action === "create") {
@@ -81,9 +108,6 @@ export async function POST(request: Request, ctx: Ctx) {
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
-    if (error instanceof LabelError) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
-    }
     return apiErrorResponse(error);
   }
 }

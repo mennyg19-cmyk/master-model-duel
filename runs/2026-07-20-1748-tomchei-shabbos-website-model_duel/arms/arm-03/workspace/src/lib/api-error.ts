@@ -3,9 +3,22 @@ import { ZodError } from "zod";
 import { AuthError } from "@/lib/auth";
 import { maskError } from "@/lib/result";
 
-/** Single API error response path — Auth/Zod pass through; internals masked. */
+/** Client-safe API failure with status — single path via apiErrorResponse. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number = 400,
+  ) {
+    super(message);
+  }
+}
+
+/** Single API error response path — Auth/Api/Zod pass through; internals masked. */
 export function apiErrorResponse(error: unknown): NextResponse {
   if (error instanceof AuthError) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
+  }
+  if (error instanceof ApiError) {
     return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
   }
   if (error instanceof ZodError) {

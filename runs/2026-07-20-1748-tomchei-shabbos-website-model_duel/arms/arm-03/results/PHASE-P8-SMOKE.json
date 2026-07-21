@@ -1,0 +1,55 @@
+{
+  "ok": true,
+  "passed": 3,
+  "failed": 0,
+  "evidence": [
+    {
+      "id": "S1",
+      "check": "Margin math: charge highest, buy cheaper, stored margin exact",
+      "pass": true,
+      "even": {
+        "chargedCents": 1800,
+        "purchasedCents": 1200,
+        "marginCents": 600,
+        "buyCarrier": "ups",
+        "planBoxes": 1
+      },
+      "odd": {
+        "chargedCents": 1800,
+        "purchasedCents": 1200,
+        "marginCents": 600,
+        "buyCarrier": "fedex"
+      },
+      "createEvenStatus": 200,
+      "createOddStatus": 200
+    },
+    {
+      "id": "S2",
+      "check": "Void + rebuy; checkout live Shippo quotes",
+      "pass": true,
+      "voidOk": true,
+      "rebuyOk": true,
+      "liveShip": true,
+      "shipFeeCents": 1800,
+      "shipQuotes": [
+        {
+          "destinationKey": "live rate|22 rate ave|brooklyn|ny|11218|us",
+          "chargedCents": 1800,
+          "purchasedCents": 1200,
+          "marginCents": 600,
+          "chargeCarrier": "usps",
+          "buyCarrier": "ups"
+        }
+      ],
+      "prepError": []
+    },
+    {
+      "id": "S3",
+      "check": "Printed-but-unshipped voidable; route-assigned blocked (P9 stub)",
+      "pass": true,
+      "voidPrintedOk": true,
+      "voidRoutedStatus": 409,
+      "voidRoutedError": "Label is assigned to a route and cannot be voided here (P9)"
+    }
+  ]
+}

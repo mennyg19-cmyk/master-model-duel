@@ -2,7 +2,6 @@ import { getSetting } from "@/lib/settings";
 import {
   DEFAULT_DELIVERY_ZIPS,
   STORE_SETTINGS,
-  isDeliveryZipAllowed,
   normalizeZip,
   type DeliveryZipsSetting,
 } from "@/lib/storefront/settings-keys";
@@ -17,6 +16,7 @@ export const FULFILLMENT_CODES = {
 export type DeliveryFeeSettings = {
   bulkDestinationFeeCents: number;
   perPackageFeeCents: number;
+  /** @deprecated P8 live Shippo quotes replace placeholder SHIP rates. */
   placeholderShipRateCents: number;
 };
 
@@ -43,6 +43,13 @@ export type CheckoutLineForFees = {
   postalCode: string | null;
   country: string | null;
   fulfillmentMethodCode: string | null;
+  /** Packing dims — required for live SHIP quotes (shared with label purchase). */
+  quantity?: number;
+  productSku?: string;
+  weightOz?: number | null;
+  lengthIn?: number | null;
+  widthIn?: number | null;
+  heightIn?: number | null;
 };
 
 export type DeliveryFeeBreakdown = {
@@ -56,7 +63,8 @@ export type DeliveryFeeBreakdown = {
   blockedZips: string[];
 };
 
-function destinationKey(line: CheckoutLineForFees): string {
+/** Recipient + address key for per-package / ship destination grouping. */
+export function destinationKey(line: CheckoutLineForFees): string {
   return [
     (line.recipientName ?? "").trim().toLowerCase(),
     (line.addressLine1 ?? "").trim().toLowerCase(),
@@ -68,7 +76,7 @@ function destinationKey(line: CheckoutLineForFees): string {
 }
 
 /** Destination only (no recipient) — bulk fee is per destination address. */
-function addressOnlyKey(line: CheckoutLineForFees): string {
+export function addressOnlyKey(line: CheckoutLineForFees): string {
   return [
     (line.addressLine1 ?? "").trim().toLowerCase(),
     (line.city ?? "").trim().toLowerCase(),
@@ -91,56 +99,6 @@ export async function loadAllowedDeliveryZips(): Promise<string[]> {
 export async function loadPurimWeekDays(): Promise<string[]> {
   const stored = await getSetting<PurimWeekSettings>(STORE_SETTINGS.purimWeekDays);
   return (stored ?? DEFAULT_PURIM_WEEK).days;
-}
-
-/**
- * Sync fee breakdown. SHIP uses placeholder only when live quotes are unavailable;
- * checkout prefers `resolveDeliveryFeesLive` (P8).
- * BULK: one fee per destination. PER_PACKAGE: fee per recipient + hard zip block.
- */
-export function resolveDeliveryFees(
-  lines: CheckoutLineForFees[],
-  fees: DeliveryFeeSettings,
-  allowedZips: string[],
-): DeliveryFeeBreakdown {
-  const blockedZips: string[] = [];
-  const bulkDestinations = new Set<string>();
-  const perPackageRecipients = new Set<string>();
-  let shipLineCount = 0;
-
-  for (const line of lines) {
-    const code = line.fulfillmentMethodCode;
-    if (!code) continue;
-
-    if (code === FULFILLMENT_CODES.PER_PACKAGE_DELIVERY) {
-      const zip = line.postalCode ?? "";
-      if (!isDeliveryZipAllowed(zip, allowedZips)) {
-        blockedZips.push(normalizeZip(zip) || "(missing)");
-        continue;
-      }
-      perPackageRecipients.add(destinationKey(line));
-    } else if (code === FULFILLMENT_CODES.BULK_DELIVERY) {
-      bulkDestinations.add(addressOnlyKey(line));
-    } else if (code === FULFILLMENT_CODES.SHIP) {
-      shipLineCount += 1;
-    }
-  }
-
-  const uniqueBlocked = [...new Set(blockedZips)];
-  const bulkFeeCents = bulkDestinations.size * fees.bulkDestinationFeeCents;
-  const perPackageFeeCents = perPackageRecipients.size * fees.perPackageFeeCents;
-  const shipFeeCents = shipLineCount * fees.placeholderShipRateCents;
-
-  return {
-    bulkDestinationCount: bulkDestinations.size,
-    bulkFeeCents,
-    perPackageRecipientCount: perPackageRecipients.size,
-    perPackageFeeCents,
-    shipLineCount,
-    shipFeeCents,
-    totalFeeCents: bulkFeeCents + perPackageFeeCents + shipFeeCents,
-    blockedZips: uniqueBlocked,
-  };
 }
 
 export class ZipBlockedError extends Error {

@@ -9,14 +9,10 @@ import {
 /** Ground-equivalent service tokens eligible for high-quote / low-buy (plan risk #2). */
 const GROUND_SERVICES = new Set([
   "FEDEX_GROUND",
-  "fedex_ground",
   "GROUND_HOME_DELIVERY",
   "UPS_GROUND",
-  "ups_ground",
   "GROUND",
   "PRIORITY",
-  "usps_priority",
-  "ParcelSelect",
   "PARCEL_SELECT",
 ]);
 
@@ -35,9 +31,8 @@ export type MarginDecision = {
 };
 
 export function isGroundEquivalent(rate: ShippoRate): boolean {
-  const token = rate.serviceLevel;
-  if (GROUND_SERVICES.has(token)) return true;
-  const upper = token.toUpperCase();
+  const upper = rate.serviceLevel.toUpperCase();
+  if (GROUND_SERVICES.has(upper) || GROUND_SERVICES.has(rate.serviceLevel)) return true;
   return upper.includes("GROUND") || upper.includes("PRIORITY") || upper.includes("PARCEL");
 }
 
@@ -50,7 +45,9 @@ export function selectMargin(quotes: ShippoRate[]): MarginDecision {
     (q) => ELIGIBLE_CARRIERS.has(q.carrier.toLowerCase()) && isGroundEquivalent(q),
   );
   if (eligible.length === 0) {
-    throw new Error("No eligible ground carrier quotes for margin selection");
+    throw new Error(
+      "No eligible ground carrier quotes for margin selection (expected ≥1 ground-equivalent rate from fedex/ups/usps)",
+    );
   }
 
   const bestByCarrier = new Map<string, ShippoRate>();
@@ -80,14 +77,19 @@ export function selectMargin(quotes: ShippoRate[]): MarginDecision {
 
 export async function quoteMargin(input: {
   addressTo: ShippoAddress;
-  parcel: ShippoParcel;
+  /** One or more parcels (multi-box shipment rated together). */
+  parcels: ShippoParcel[];
   addressFrom?: ShippoAddress;
 }): Promise<MarginDecision> {
+  const parcels = input.parcels.length > 0 ? input.parcels : [];
+  if (parcels.length === 0) {
+    throw new Error("quoteMargin requires at least one parcel");
+  }
   const from = input.addressFrom ?? getShippoEnv().origin;
   const quotes = await getRates({
     addressFrom: from,
     addressTo: input.addressTo,
-    parcel: input.parcel,
+    parcels,
   });
   return selectMargin(quotes);
 }

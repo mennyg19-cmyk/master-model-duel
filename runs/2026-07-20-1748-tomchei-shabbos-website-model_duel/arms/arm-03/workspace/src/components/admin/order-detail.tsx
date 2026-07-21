@@ -30,6 +30,11 @@ type Payment = {
     id: string;
     recipientName: string;
     stage: string;
+    addressLine1?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
     fulfillmentMethod: { code: string };
   }>;
 };
@@ -116,6 +121,57 @@ export function OrderDetailClient({ orderId }: { orderId: string }) {
         : json.error || "Label action failed",
     );
     if (res.ok) await load();
+  }
+
+  async function refreshLabel(labelId: string) {
+    setMessage(null);
+    const res = await fetch(`/api/admin/orders/${orderId}/labels`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "refresh", labelId }),
+    });
+    const json = await res.json();
+    setMessage(
+      res.ok
+        ? `Tracking refreshed: ${json.label?.trackingStatus ?? "ok"}`
+        : json.error || "Refresh failed",
+    );
+    if (res.ok) await load();
+  }
+
+  async function validatePackageAddress(pkg: {
+    id: string;
+    recipientName: string;
+    addressLine1?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  }) {
+    setMessage(null);
+    const res = await fetch(`/api/admin/orders/${orderId}/labels`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "validate",
+        address: {
+          name: pkg.recipientName,
+          street1: pkg.addressLine1 ?? "",
+          city: pkg.city ?? "",
+          state: pkg.state ?? "",
+          zip: pkg.postalCode ?? "",
+          country: pkg.country ?? "US",
+        },
+      }),
+    });
+    const json = await res.json();
+    setMessage(
+      res.ok
+        ? json.validation?.isValid
+          ? `Address valid${json.validation.normalized?.street1 ? ` → ${json.validation.normalized.street1}` : ""}`
+          : `Address invalid: ${(json.validation?.messages ?? []).join("; ") || "failed"}`
+        : json.error || "Validate failed",
+    );
   }
 
   if (!order) {
@@ -212,7 +268,11 @@ export function OrderDetailClient({ orderId }: { orderId: string }) {
         <ul className="mt-2 space-y-2 text-sm">
           {(order.packages ?? [])
             .filter((p) => p.fulfillmentMethod.code === "SHIP")
-            .map((pkg) => (
+            .map((pkg) => {
+              const hasPurchased = labels.some(
+                (l) => l.packageId === pkg.id && l.status === "PURCHASED",
+              );
+              return (
               <li key={pkg.id} className="flex flex-wrap items-center gap-2 rounded border px-3 py-2">
                 <span>
                   {pkg.recipientName} · {pkg.stage}
@@ -220,6 +280,7 @@ export function OrderDetailClient({ orderId }: { orderId: string }) {
                 <Button
                   type="button"
                   variant="secondary"
+                  disabled={hasPurchased}
                   onClick={() => void labelAction(pkg.id, "create")}
                   data-testid={`order-label-create-${pkg.id}`}
                 >
@@ -233,16 +294,37 @@ export function OrderDetailClient({ orderId }: { orderId: string }) {
                 >
                   Void
                 </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void validatePackageAddress(pkg)}
+                  data-testid={`order-label-validate-${pkg.id}`}
+                >
+                  Validate address
+                </Button>
               </li>
-            ))}
+              );
+            })}
         </ul>
         {labels.length > 0 ? (
           <ul className="mt-3 space-y-1 text-xs opacity-80" data-testid="order-label-list">
             {labels.map((l) => (
-              <li key={l.id}>
-                {l.status} · {l.carrier} · charge {l.chargedCents}¢ / buy {l.purchasedCents}¢ /
-                margin {l.marginCents}¢ · {l.trackingNumber ?? "no track"}
-                {l.routeAssignedAt ? " · on route" : " · voidable"}
+              <li key={l.id} className="flex flex-wrap items-center gap-2">
+                <span>
+                  {l.status} · {l.carrier} · charge {l.chargedCents}¢ / buy {l.purchasedCents}¢ /
+                  margin {l.marginCents}¢ · {l.trackingNumber ?? "no track"}
+                  {l.routeAssignedAt ? " · on route" : " · voidable"}
+                </span>
+                {l.trackingNumber ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void refreshLabel(l.id)}
+                    data-testid={`order-label-refresh-${l.id}`}
+                  >
+                    Refresh tracking
+                  </Button>
+                ) : null}
               </li>
             ))}
           </ul>

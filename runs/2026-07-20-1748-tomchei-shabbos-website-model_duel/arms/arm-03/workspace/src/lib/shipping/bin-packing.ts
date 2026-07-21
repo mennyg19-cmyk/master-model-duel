@@ -114,15 +114,41 @@ export function packItems(items: PackableItem[], boxTypes: BoxType[]): ShipmentP
   return { boxes, unpackedItemIds };
 }
 
+const FALLBACK_BOX: ShippoParcel = {
+  lengthIn: 12,
+  widthIn: 9,
+  heightIn: 6,
+  weightOz: 48,
+};
+
+/** One Shippo parcel per bin-packed box (multi-box = multi-parcel quote). */
+export function planToParcels(plan: ShipmentPlan, fallback: ShippoParcel = FALLBACK_BOX): ShippoParcel[] {
+  if (plan.boxes.length === 0) return [fallback];
+  return plan.boxes.map((box) => ({
+    lengthIn: box.lengthIn,
+    widthIn: box.widthIn,
+    heightIn: box.heightIn,
+    weightOz: Math.max(1, Math.round(box.weightOz)),
+  }));
+}
+
 export function planToParcel(plan: ShipmentPlan, fallback: ShippoParcel): ShippoParcel {
-  if (plan.boxes.length === 0) return fallback;
-  const primary = plan.boxes.reduce((a, b) => (a.weightOz >= b.weightOz ? a : b));
-  return {
-    lengthIn: primary.lengthIn,
-    widthIn: primary.widthIn,
-    heightIn: primary.heightIn,
-    weightOz: Math.max(1, Math.round(primary.weightOz)),
-  };
+  return planToParcels(plan, fallback)[0]!;
+}
+
+/** Shared resolver: pack items → parcels for checkout charge and label buy. */
+export async function resolveParcelsForItems(items: PackableItem[]): Promise<{
+  plan: ShipmentPlan;
+  parcels: ShippoParcel[];
+}> {
+  const boxTypes = await loadActiveBoxTypes();
+  const plan = packItems(items, boxTypes);
+  const weightOz = Math.max(
+    1,
+    Math.round(items.reduce((sum, item) => sum + item.weightOz * item.quantity, 0)),
+  );
+  const fallback: ShippoParcel = { ...FALLBACK_BOX, weightOz };
+  return { plan, parcels: planToParcels(plan, fallback) };
 }
 
 export async function loadActiveBoxTypes(): Promise<BoxType[]> {
@@ -153,7 +179,11 @@ export async function loadActiveBoxTypes(): Promise<BoxType[]> {
   ];
 }
 
-export async function planPackageShipment(packageId: string): Promise<ShipmentPlan> {
+/** Compute bin-pack plan without persisting (planning must not write on quote failure). */
+export async function computePackageShipmentPlan(packageId: string): Promise<{
+  plan: ShipmentPlan;
+  items: PackableItem[];
+}> {
   const pkg = await db.package.findUniqueOrThrow({
     where: { id: packageId },
     include: {
@@ -178,10 +208,23 @@ export async function planPackageShipment(packageId: string): Promise<ShipmentPl
   }));
 
   const boxTypes = await loadActiveBoxTypes();
-  const plan = packItems(items, boxTypes);
+  return { plan: packItems(items, boxTypes), items };
+}
+
+/** Persist plan after a successful label purchase (or explicit admin replan). */
+export async function persistPackageShipmentPlan(
+  packageId: string,
+  plan: ShipmentPlan,
+): Promise<ShipmentPlan> {
   await db.package.update({
     where: { id: packageId },
     data: { shipmentPlan: plan },
   });
   return plan;
+}
+
+/** @deprecated Prefer computePackageShipmentPlan + persist on success. */
+export async function planPackageShipment(packageId: string): Promise<ShipmentPlan> {
+  const { plan } = await computePackageShipmentPlan(packageId);
+  return persistPackageShipmentPlan(packageId, plan);
 }
