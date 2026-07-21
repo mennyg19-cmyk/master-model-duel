@@ -29,8 +29,8 @@ export async function POST(request: Request) {
       input.action === "nightly"
         ? await runNightlyBatch(season.id, actorId)
         : input.action === "reprint-group"
-          ? { batch: await reprintFilingGroup(season.id, input.filingGroup, actorId), replayed: false }
-          : { batch: await reprintOrder(season.id, input.orderId, actorId), replayed: false };
+          ? await reprintFilingGroup(season.id, input.filingGroup, actorId)
+          : await reprintOrder(season.id, input.orderId, actorId);
 
     if (!result.replayed) {
       await writeAudit(gate.staff, {

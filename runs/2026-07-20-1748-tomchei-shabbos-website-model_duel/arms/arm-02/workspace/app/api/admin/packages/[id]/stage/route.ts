@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
 import { ActionError, advancePackageStage } from "@/lib/packages/actions";
+import { getOpenSeason } from "@/lib/season";
 
 const stageSchema = z.object({
   to: z.enum(["PRINTED", "PACKED", "SENT", "PICKED_UP"]),
@@ -18,8 +19,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return Response.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
+  const season = await getOpenSeason();
+  if (!season) return Response.json({ error: "No open season" }, { status: 409 });
+
   try {
-    const result = await advancePackageStage(id, parsed.data.to, parsed.data.version, gate.staff.realUser.id);
+    const result = await advancePackageStage(season.id, id, parsed.data.to, parsed.data.version, gate.staff.realUser.id);
     await writeAudit(gate.staff, {
       action: "package.stage",
       targetType: "Package",

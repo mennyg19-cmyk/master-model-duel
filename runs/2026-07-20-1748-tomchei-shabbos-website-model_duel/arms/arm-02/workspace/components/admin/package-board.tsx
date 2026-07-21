@@ -3,7 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { FulfillmentKind, PackageStage } from "@prisma/client";
 import { apiFetch } from "@/lib/api-client";
+import { allowedNextStages } from "@/lib/domain/package-stage";
 import { Badge } from "@/components/ui/badge";
 
 // Package board controls (UR-001): per-row stage advance, an expandable split
@@ -22,22 +24,16 @@ type BoardLine = {
 export type BoardPackage = {
   id: string;
   version: number;
-  stage: string;
+  stage: PackageStage;
   recipientName: string;
   address: string;
   greeting: string;
   methodName: string;
-  methodKind: string;
+  methodKind: FulfillmentKind;
   lines: BoardLine[];
 };
 
-const NEXT_STAGES: Record<string, string[]> = {
-  NEW: ["PRINTED", "PACKED"],
-  PRINTED: ["PACKED"],
-  PACKED: [],
-};
-
-function stageTone(stage: string): "brand" | "neutral" | "success" {
+function stageTone(stage: PackageStage): "brand" | "neutral" | "success" {
   if (stage === "NEW") return "brand";
   if (stage === "SENT" || stage === "PICKED_UP") return "success";
   return "neutral";
@@ -73,7 +69,7 @@ export function PackageBoard({ packages }: { packages: BoardPackage[] }) {
     }
   }
 
-  const advance = (entry: BoardPackage, to: string) =>
+  const advance = (entry: BoardPackage, to: PackageStage) =>
     run(async () => {
       const result = await apiFetch(`/api/admin/packages/${entry.id}/stage`, {
         body: { to, version: entry.version },
@@ -140,8 +136,7 @@ export function PackageBoard({ packages }: { packages: BoardPackage[] }) {
         </thead>
         <tbody>
           {packages.map((entry) => {
-            const terminal = entry.methodKind === "PICKUP" ? "PICKED_UP" : "SENT";
-            const nextStages = [...(NEXT_STAGES[entry.stage] ?? []), ...(entry.stage in NEXT_STAGES ? [terminal] : [])];
+            const nextStages = allowedNextStages(entry.stage, entry.methodKind);
             const totalUnits = entry.lines.reduce((sum, line) => sum + line.quantity, 0);
             return (
               <tr key={entry.id} className="border-b border-border last:border-0 align-top">

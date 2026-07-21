@@ -5,7 +5,9 @@ import { packageGroupingKey } from "@/lib/domain/grouping";
 import { canAdvancePackage } from "@/lib/domain/package-stage";
 
 // Staff package operations (UR-001, G-003, G-004): split, regroup, and stage
-// advance. Every mutation writes PackageAudit inside its own transaction.
+// advance. Every mutation writes PackageAudit inside its own transaction and is
+// scoped to the caller's season — a package id from another season 404s rather
+// than letting staff mutate (or merge into) closed-season data.
 // Thrown ActionError messages are safe to show staff verbatim.
 
 export class ActionError extends Error {
@@ -36,14 +38,14 @@ export type SplitPart = { lineId: string; quantity: number };
  * rows cloned). Lines with add-ons only move whole — add-on units per line
  * cannot be divided meaningfully.
  */
-export async function splitPackage(packageId: string, parts: SplitPart[], actorStaffId?: string) {
+export async function splitPackage(seasonId: string, packageId: string, parts: SplitPart[], actorStaffId?: string) {
   if (parts.length === 0) throw new ActionError("Pick at least one item to split out", 400);
   const byLine = new Map(parts.map((part) => [part.lineId, part.quantity]));
   if (byLine.size !== parts.length) throw new ActionError("Each line may appear once in a split", 400);
 
   return db.$transaction(async (tx) => {
-    const source = await tx.package.findUnique({
-      where: { id: packageId },
+    const source = await tx.package.findFirst({
+      where: { id: packageId, seasonId },
       include: { lines: { include: { options: true } } },
     });
     if (!source) throw new ActionError("Package not found", 404);
@@ -138,17 +140,19 @@ export async function splitPackage(packageId: string, parts: SplitPart[], actorS
  * and their keys retired so finalize never merges future lines into them; the
  * board hides packages without lines.
  */
-export async function regroupPackages(packageIds: string[], actorStaffId?: string) {
+export async function regroupPackages(seasonId: string, packageIds: string[], actorStaffId?: string) {
   const ids = [...new Set(packageIds)];
   if (ids.length < 2) throw new ActionError("Pick at least two packages to regroup", 400);
 
   return db.$transaction(async (tx) => {
+    // seasonId in the WHERE is the cross-season merge guard: a CUID from
+    // another season simply doesn't come back, and the length check rejects.
     const packages = await tx.package.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, seasonId },
       include: { lines: { select: { id: true } } },
       orderBy: { createdAt: "asc" },
     });
-    if (packages.length !== ids.length) throw new ActionError("A selected package no longer exists", 409);
+    if (packages.length !== ids.length) throw new ActionError("A selected package no longer exists in this season", 409);
     if (packages.some((entry) => entry.stage !== "NEW")) {
       throw new ActionError("Only packages still at New can be regrouped");
     }
@@ -200,6 +204,7 @@ export async function regroupPackages(packageIds: string[], actorStaffId?: strin
  * wins; the loser gets a 409 with the fresh stage.
  */
 export async function advancePackageStage(
+  seasonId: string,
   packageId: string,
   to: PackageStage,
   version: number,
@@ -207,8 +212,8 @@ export async function advancePackageStage(
   outerTx?: Prisma.TransactionClient
 ) {
   const run = async (tx: Prisma.TransactionClient) => {
-    const current = await tx.package.findUnique({
-      where: { id: packageId },
+    const current = await tx.package.findFirst({
+      where: { id: packageId, seasonId },
       include: { fulfillmentMethod: { select: { kind: true } } },
     });
     if (!current) throw new ActionError("Package not found", 404);

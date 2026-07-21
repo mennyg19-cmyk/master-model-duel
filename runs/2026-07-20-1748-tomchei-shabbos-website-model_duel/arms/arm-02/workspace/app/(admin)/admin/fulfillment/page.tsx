@@ -24,6 +24,7 @@ export default async function AdminFulfillmentPage() {
   const [channels, artifacts] = await Promise.all([
     channelSummaries(season.id),
     db.printArtifact.findMany({
+      where: { printBatch: { seasonId: season.id } },
       include: { printBatch: { select: { kind: true, runKey: true, createdAt: true } } },
       orderBy: { createdAt: "desc" },
       take: RECENT_ARTIFACTS,

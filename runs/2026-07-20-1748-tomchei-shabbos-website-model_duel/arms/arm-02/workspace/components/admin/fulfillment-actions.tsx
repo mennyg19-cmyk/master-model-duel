@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import type { FulfillmentKind, PackageStage } from "@prisma/client";
 import { apiFetch } from "@/lib/api-client";
 
 // Channel bulk moves + print batch triggers for the fulfillment dashboard
 // (R-072, UR-005). One shared busy/message strip per instance.
 
-type StageCounts = { NEW: number; PRINTED: number; PACKED: number; SENT: number; PICKED_UP: number };
+type StageCounts = Record<PackageStage, number>;
 
-type ChannelProps = { mode: "channel"; methodId: string; methodKind: string; stageCounts: StageCounts };
+type ChannelProps = { mode: "channel"; methodId: string; methodKind: FulfillmentKind; stageCounts: StageCounts };
 type PrintProps = { mode: "print"; filingGroups: string[] };
 type OrderProps = { mode: "order"; orderId: string };
 
@@ -23,13 +24,13 @@ export function FulfillmentActions(props: ChannelProps | PrintProps | OrderProps
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function post(body: unknown, url: string, note: (result: never) => string) {
+  async function post<T>(body: unknown, url: string, note: (result: T) => string) {
     if (busy) return;
     setBusy(true);
     setMessage(null);
     try {
-      const result = await apiFetch<Record<string, unknown>>(url, { body });
-      setMessage(result.ok ? note(result.body as never) : result.error);
+      const result = await apiFetch<T>(url, { body });
+      setMessage(result.ok ? note(result.body) : result.error);
       if (result.ok) router.refresh();
     } finally {
       setBusy(false);

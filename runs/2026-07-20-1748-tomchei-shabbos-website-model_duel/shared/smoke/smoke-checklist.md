@@ -63,11 +63,11 @@ See `shared/phases/PHASE-P6-EXPECTED.md`. Both arms P6 **gated**.
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Package split/group | ✓ | |
-| S2 | Print vs status | ✓ | |
-| S3 | Batch idempotency | ✓ | |
+| S1 | Package split/group | ✓ | ✓ |
+| S2 | Print vs status | ✓ | ✓ |
+| S3 | Batch idempotency | ✓ | ✓ |
 
-See `shared/phases/PHASE-P7-EXPECTED.md`. arm-01 P7 **gated**.
+See `shared/phases/PHASE-P7-EXPECTED.md`. Both arms P7 **gated**.
 
 ## P8
 

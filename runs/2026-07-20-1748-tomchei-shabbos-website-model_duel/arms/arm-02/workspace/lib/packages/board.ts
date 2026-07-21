@@ -1,4 +1,4 @@
-import type { PackageStage, Prisma } from "@prisma/client";
+import type { FulfillmentKind, PackageStage, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
 // Bounded package board queries (UR-001, G-024): hard take ceiling and a
@@ -77,7 +77,7 @@ export type ChannelSummary = {
   methodId: string;
   code: string;
   name: string;
-  kind: string;
+  kind: FulfillmentKind;
   stageCounts: Record<PackageStage, number>;
   packages: number;
   gifts: number;
