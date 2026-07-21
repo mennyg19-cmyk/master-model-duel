@@ -11,8 +11,8 @@ export default async function DriverHomePage() {
       <Card className="w-full max-w-md">
         <CardTitle>Driver area</CardTitle>
         <p className="text-sm text-muted">
-          Hi {staff.actingAs.name}. Delivery routes and magic-link driver access arrive in the
-          fulfillment phases. Drivers have no admin access.
+          Hi {staff.actingAs.name}. Routes are worked through the magic link the office texts you —
+          no login needed on the road. Drivers have no admin access.
         </p>
       </Card>
     </main>

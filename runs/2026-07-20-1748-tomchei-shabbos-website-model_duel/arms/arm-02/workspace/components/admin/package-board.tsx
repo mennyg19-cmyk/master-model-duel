@@ -41,7 +41,25 @@ function stageTone(stage: PackageStage): "brand" | "neutral" | "success" {
   return "neutral";
 }
 
-export function PackageBoard({ packages }: { packages: BoardPackage[] }) {
+export type SwitchMethod = { id: string; name: string; kind: FulfillmentKind };
+
+const DELIVERY_KINDS: FulfillmentKind[] = ["BULK_DELIVERY", "PER_PACKAGE_DELIVERY"];
+
+/** Methods this package may switch to (UR-002): shipping <-> delivery only. */
+function switchTargetsFor(entry: BoardPackage, methods: SwitchMethod[]): SwitchMethod[] {
+  if (entry.stage === "SENT" || entry.stage === "PICKED_UP") return [];
+  if (entry.methodKind === "SHIPPING") return methods.filter((method) => DELIVERY_KINDS.includes(method.kind));
+  if (DELIVERY_KINDS.includes(entry.methodKind)) return methods.filter((method) => method.kind === "SHIPPING");
+  return [];
+}
+
+export function PackageBoard({
+  packages,
+  switchMethods = [],
+}: {
+  packages: BoardPackage[];
+  switchMethods?: SwitchMethod[];
+}) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [splitting, setSplitting] = useState<string | null>(null);
@@ -140,6 +158,7 @@ export function PackageBoard({ packages }: { packages: BoardPackage[] }) {
           {packages.map((entry) => {
             const nextStages = allowedNextStages(entry.stage, entry.methodKind);
             const totalUnits = entry.lines.reduce((sum, line) => sum + line.quantity, 0);
+            const switchTargets = switchTargetsFor(entry, switchMethods);
             return (
               <tr key={entry.id} className="border-b border-border last:border-0 align-top">
                 <td className="py-2 pr-2">
@@ -165,7 +184,45 @@ export function PackageBoard({ packages }: { packages: BoardPackage[] }) {
                     </span>
                   ))}
                 </td>
-                <td className="py-2 pr-3">{entry.methodName}</td>
+                <td className="py-2 pr-3">
+                  {entry.methodName}
+                  {switchTargets.length > 0 && (
+                    <select
+                      value=""
+                      disabled={busy}
+                      aria-label="Switch method"
+                      data-testid="method-switch"
+                      onChange={(event) => {
+                        const target = switchTargets.find((method) => method.id === event.target.value);
+                        if (!target) return;
+                        // Charge stays what the customer paid (UR-002) — the
+                        // confirm spells that out, plus the label void.
+                        if (
+                          !window.confirm(
+                            `Switch ${entry.recipientName} from ${entry.methodName} to ${target.name}? The charge stays as paid; an active shipping label is voided.`
+                          )
+                        )
+                          return;
+                        run(async () => {
+                          const result = await apiFetch(`/api/admin/packages/${entry.id}/method`, {
+                            body: { methodId: target.id },
+                          });
+                          return result.ok
+                            ? { ok: true, note: `${entry.recipientName} switched to ${target.name}` }
+                            : { ok: false, error: result.error };
+                        });
+                      }}
+                      className="mt-1 block rounded-md border border-border bg-white px-1 py-0.5 text-xs"
+                    >
+                      <option value="">Switch to…</option>
+                      {switchTargets.map((method) => (
+                        <option key={method.id} value={method.id}>
+                          {method.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </td>
                 <td className="py-2 pr-3">
                   <Badge tone={stageTone(entry.stage)}>{entry.stage.replace("_", " ")}</Badge>
                 </td>

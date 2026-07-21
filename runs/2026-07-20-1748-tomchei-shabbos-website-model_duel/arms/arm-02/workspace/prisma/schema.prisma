@@ -37,6 +37,7 @@ model StaffUser {
   lastLoginAt         DateTime?
   permissionOverrides PermissionOverride[]
   sessions            Session[]
+  deliveryRoutes      DeliveryRoute[]
 }
 
 model PermissionOverride {
@@ -162,19 +163,21 @@ enum SeasonStatus {
 // orderCounter backs sequential per-season order numbers (R-151) — incremented
 // atomically inside the finalize transaction.
 model Season {
-  id           String       @id @default(cuid())
-  name         String       @unique
-  status       SeasonStatus @default(CLOSED)
-  opensAt      DateTime?
-  closesAt     DateTime?
-  orderCounter Int          @default(0)
-  createdAt    DateTime     @default(now())
-  products     Product[]
-  addOns       AddOn[]
-  orders       Order[]
-  packages     Package[]
-  orderDrafts  OrderDraft[]
-  printBatches PrintBatch[]
+  id                    String                 @id @default(cuid())
+  name                  String                 @unique
+  status                SeasonStatus           @default(CLOSED)
+  opensAt               DateTime?
+  closesAt              DateTime?
+  orderCounter          Int                    @default(0)
+  createdAt             DateTime               @default(now())
+  products              Product[]
+  addOns                AddOn[]
+  orders                Order[]
+  packages              Package[]
+  orderDrafts           OrderDraft[]
+  printBatches          PrintBatch[]
+  deliveryRoutes        DeliveryRoute[]
+  bulkDeliverySchedules BulkDeliverySchedule[]
 }
 
 enum ProductKind {
@@ -417,11 +420,16 @@ model Package {
   greeting            String            @default("")
   stage               PackageStage      @default(NEW)
   version             Int               @default(0)
+  // Pickup lifecycle stamps (UR-010, G-026): set when the ready notification
+  // went out / when the expiry cron gave up on the pickup.
+  pickupReadyAt       DateTime?
+  pickupExpiredAt     DateTime?
   createdAt           DateTime          @default(now())
   lines               OrderLine[]
   auditEntries        PackageAudit[]
   shippingQuotes      ShippingQuote[]
   shipments           Shipment[]
+  routeStop           RouteStop?
 
   @@index([seasonId, groupingKey])
   // Dashboard stage counts at 5k+ package scale (G-024).
@@ -790,6 +798,113 @@ model OrderDraft {
   // 14-day guest cookie may own one draft per season without colliding.
   @@unique([seasonId, guestTokenHash])
   @@index([customerId, status])
+}
+
+// ---------------------------------------------------------------------------
+// P9 — delivery routes, driver magic links, pickup, bulk scheduling.
+// ---------------------------------------------------------------------------
+
+enum RouteStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+// One driver's delivery run (R-074, R-075). Stops are ordered snapshots of
+// delivery packages; the driver works it through a magic link (RouteLink) or
+// the printed sheet.
+model DeliveryRoute {
+  id               String      @id @default(cuid())
+  seasonId         String
+  season           Season      @relation(fields: [seasonId], references: [id])
+  name             String
+  status           RouteStatus @default(PLANNED)
+  driverStaffId    String?
+  driverStaff      StaffUser?  @relation(fields: [driverStaffId], references: [id])
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdByStaffId String?
+  createdAt        DateTime    @default(now())
+  stops            RouteStop[]
+  links            RouteLink[]
+
+  @@index([seasonId, status])
+}
+
+// A package rides at most one route (unique packageId). Coordinates are the
+// geocode snapshot taken at build time so the map doesn't re-geocode per view.
+model RouteStop {
+  id          String        @id @default(cuid())
+  routeId     String
+  route       DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  packageId   String        @unique
+  package     Package       @relation(fields: [packageId], references: [id])
+  position    Int
+  latitude    Float?
+  longitude   Float?
+  deliveredAt DateTime?
+  // "link:{routeLinkId}" for a driver tap, "staff:{staffId}" for the printed
+  // fallback — the audit trail keys off this (UR-015).
+  deliveredBy String?
+
+  @@index([routeId, position])
+}
+
+// Driver magic link (UR-004, G-025): the URL carries a random token stored
+// only as an HMAC hash. Scoped to one route's stops; expiresAt is set when the
+// route completes (short grace); optional 4-digit PIN with attempt lockout.
+model RouteLink {
+  id               String        @id @default(cuid())
+  routeId          String
+  route            DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  tokenHash        String        @unique
+  pinHash          String?
+  pinAttempts      Int           @default(0)
+  pinLockedUntil   DateTime?
+  expiresAt        DateTime?
+  revokedAt        DateTime?
+  createdByStaffId String?
+  createdAt        DateTime      @default(now())
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+// Captured-notification outbox (G-021 channel wiring). Until P11 wires real
+// providers, every send is CAPTURED here — the test-visible record the smoke
+// checks count. dedupeKey is the idempotency rule: an insert that collides is
+// a skipped duplicate, never a second send.
+model Notification {
+  id         String              @id @default(cuid())
+  channel    NotificationChannel
+  recipient  String
+  kind       String
+  subject    String?
+  body       String
+  dedupeKey  String?             @unique
+  customerId String?
+  orderId    String?
+  packageId  String?
+  status     String              @default("captured")
+  createdAt  DateTime            @default(now())
+
+  @@index([kind, createdAt])
+}
+
+// One staff scheduling act for bulk delivery (R-078): the chosen date/window
+// plus the notified audience size, for the follow-up screen.
+model BulkDeliverySchedule {
+  id               String   @id @default(cuid())
+  seasonId         String
+  season           Season   @relation(fields: [seasonId], references: [id])
+  scheduledDate    String
+  window           String
+  packageCount     Int
+  customerCount    Int
+  createdByStaffId String?
+  createdAt        DateTime @default(now())
 }
 
 model AssemblyBatch {

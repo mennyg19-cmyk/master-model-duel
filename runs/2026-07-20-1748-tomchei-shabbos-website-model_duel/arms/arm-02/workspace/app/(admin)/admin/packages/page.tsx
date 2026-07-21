@@ -139,6 +139,7 @@ export default async function AdminPackagesPage({
               orderRef: line.order.orderNumber ? `#${line.order.orderNumber}` : line.order.draftReference,
             })),
           }))}
+          switchMethods={methods.map((method) => ({ id: method.id, name: method.name, kind: method.kind }))}
         />
       </Card>
 

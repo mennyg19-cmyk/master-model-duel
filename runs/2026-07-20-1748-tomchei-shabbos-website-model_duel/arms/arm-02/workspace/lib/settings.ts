@@ -44,6 +44,8 @@ const SETTING_SCHEMAS = {
       state: "NJ",
       zip: "08701",
     }),
+  // Days a ready pickup may wait before the expiry cron gives up on it (G-026).
+  "pickup.expiry_days": z.number().int().min(1).default(7),
   "email.from_address": z.string().default("purim@tomcheishabbos.example.org"),
   "email.reply_to": z.string().default("office@tomcheishabbos.example.org"),
 } as const;

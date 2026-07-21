@@ -50,6 +50,12 @@ const envSchema = z
     // Optional USPS carrier account: when set, live getRates quotes USPS
     // alongside the negotiated FedEx/UPS accounts (EXPECTED §2).
     SHIPPO_USPS_ACCOUNT_ID: z.string().optional(),
+    // Bearer secret for /api/cron/* (R-182). Unset = every cron endpoint
+    // refuses with 503 — scheduled jobs never run unauthenticated.
+    CRON_SECRET: z.string().min(16).optional(),
+    // Mapbox geocoding (P9, R-179). Without a token the geocoder falls back to
+    // the local deterministic provider — same swap point as Stripe/Shippo mocks.
+    MAPBOX_ACCESS_TOKEN: z.string().optional(),
   })
   .refine(
     (vars) => vars.AUTH_MODE !== "clerk" || (vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && vars.CLERK_SECRET_KEY),
