@@ -319,6 +319,8 @@ async function main() {
           expectedVersion: freshForBulk?.version ?? paidOrderVersion,
         },
       ],
+      confirmReplacements: true,
+      confirmRecipients: true,
     }),
   });
   push(

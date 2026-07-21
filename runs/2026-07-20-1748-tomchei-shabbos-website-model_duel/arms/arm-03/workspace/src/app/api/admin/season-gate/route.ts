@@ -2,39 +2,28 @@ import { NextResponse } from "next/server";
 import { SeasonStatus } from "@prisma/client";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
-import { writeAudit } from "@/lib/audit";
-import { db } from "@/lib/db";
 import { apiErrorResponse } from "@/lib/api-error";
+import { setSeasonStatus } from "@/lib/seasons/manage";
 
 const schema = z.object({
   seasonId: z.string().min(1),
   status: z.nativeEnum(SeasonStatus),
 });
 
+/** UR-008 — manager Open/Closed switch. */
 export async function POST(request: Request) {
   try {
     const ctx = await requirePermission("settings.write");
     const body = schema.parse(await request.json());
-
-    if (body.status === SeasonStatus.OPEN) {
-      await db.season.updateMany({
-        where: { status: SeasonStatus.OPEN, NOT: { id: body.seasonId } },
-        data: { status: SeasonStatus.CLOSED },
-      });
+    const result = await setSeasonStatus({
+      seasonId: body.seasonId,
+      status: body.status,
+      staffId: ctx.effectiveStaff.id,
+    });
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });
     }
-
-    const season = await db.season.update({
-      where: { id: body.seasonId },
-      data: { status: body.status },
-    });
-
-    await writeAudit({
-      action: "SETTINGS_UPDATED",
-      actorId: ctx.effectiveStaff.id,
-      meta: { seasonId: season.id, status: season.status, kind: "season_gate" },
-    });
-
-    return NextResponse.json({ ok: true, season });
+    return NextResponse.json({ ok: true, season: result.value.season });
   } catch (error) {
     return apiErrorResponse(error);
   }

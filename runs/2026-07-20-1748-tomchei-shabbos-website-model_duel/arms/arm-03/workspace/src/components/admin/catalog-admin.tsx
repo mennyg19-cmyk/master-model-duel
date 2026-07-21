@@ -214,7 +214,7 @@ export function CatalogAdmin() {
           />
         </label>
         <label className="text-sm md:col-span-2">
-          Replacement link targets (product ids, comma-separated) — editor shell
+          Replacement targets (product ids, comma-separated) — cross-season chains resolve on repeat
           <input
             className="mt-1 w-full rounded border px-2 py-1.5"
             value={form.replacementToProductIds}

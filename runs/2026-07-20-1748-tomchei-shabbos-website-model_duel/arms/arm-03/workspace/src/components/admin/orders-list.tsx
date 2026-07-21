@@ -68,12 +68,23 @@ export function OrdersListClient() {
       setMessage("Select at least one order.");
       return;
     }
+    if (action === "repeat") {
+      const confirmed = window.confirm(
+        `Repeat ${items.length} order(s) into the open season?\n\nConfirm: use price-smart replacement defaults and keep each line's recipient.`,
+      );
+      if (!confirmed) return;
+    }
     const res = await fetch("/api/admin/orders/bulk", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(
         action === "repeat"
-          ? { action: "repeat", items }
+          ? {
+              action: "repeat",
+              items,
+              confirmReplacements: true,
+              confirmRecipients: true,
+            }
           : { action: "status", toStatus: "FULFILLING", items },
       ),
     });

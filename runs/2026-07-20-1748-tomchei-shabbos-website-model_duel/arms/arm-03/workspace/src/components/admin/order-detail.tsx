@@ -100,9 +100,7 @@ export function OrderDetailClient({ orderId }: { orderId: string }) {
 
   async function repeat() {
     setMessage(null);
-    const res = await fetch(`/api/admin/orders/${orderId}/repeat`, { method: "POST" });
-    const json = await res.json();
-    setMessage(res.ok ? `Repeated → draft ${json.draftRef}` : json.error || "Repeat failed");
+    window.location.href = `/admin/orders/${orderId}/repeat`;
   }
 
   async function labelAction(packageId: string, action: "create" | "void") {

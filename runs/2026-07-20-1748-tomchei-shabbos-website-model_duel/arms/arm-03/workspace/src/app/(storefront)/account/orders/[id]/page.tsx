@@ -31,6 +31,8 @@ export default async function AccountOrderDetailPage({ params }: Props) {
   // Ownership already enforced by customerId filter (R-042).
   void AuthError;
 
+  const canRepeat = order.status !== "DRAFT" && order.status !== "DISCARDED";
+
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-4 py-10" data-testid="order-detail">
       <Link href="/account" className="text-sm font-semibold">
@@ -42,6 +44,15 @@ export default async function AccountOrderDetailPage({ params }: Props) {
       <p className="text-sm text-[var(--color-ink)]/70">
         {order.season.name} · {order.status}
       </p>
+      {canRepeat ? (
+        <Link
+          href={`/account/orders/${order.id}/repeat`}
+          className="inline-block rounded bg-[var(--color-leaf)] px-4 py-2 text-sm font-semibold text-white"
+          data-testid="repeat-order-link"
+        >
+          Repeat this order
+        </Link>
+      ) : null}
       <ul className="space-y-2">
         {order.lines.map((line) => (
           <li key={line.id} className="rounded border bg-white p-3 text-sm">

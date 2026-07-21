@@ -7,131 +7,93 @@ import { writeAudit } from "@/lib/audit";
 import { lockOrderForUpdate } from "@/lib/orders/lock";
 import { assertOrderTransition } from "@/lib/orders/state-machine";
 import {
-  buildRepeatLinePreviews,
-  type RepeatLinePreview,
-} from "@/lib/ops/replacements";
+  resolveReplacementChain,
+  type ResolvedReplacement,
+} from "@/lib/catalog/replacements";
 
 type Tx = Prisma.TransactionClient;
 
-export type LineDecision = {
+export type RepeatLinePreview = {
   sourceLineId: string;
-  action: "map" | "remove";
-  toProductId?: string;
-  keepRecipient?: boolean;
+  quantity: number;
+  unitPriceCents: number;
+  greeting: string | null;
+  recipient: {
+    recipientName: string | null;
+    addressLine1: string | null;
+    addressLine2: string | null;
+    city: string | null;
+    state: string | null;
+    postalCode: string | null;
+    country: string | null;
+    savedAddressId: string | null;
+  };
+  fulfillmentMethodId: string | null;
+  productOptionId: string | null;
+  replacement: ResolvedReplacement;
+  defaultProductId: string | null;
+  requiresPick: boolean;
 };
 
-async function resolveTargetSeason(targetSeasonId?: string) {
-  if (targetSeasonId) {
-    return db.season.findUniqueOrThrow({ where: { id: targetSeasonId } });
-  }
-  const open = await db.season.findFirst({
-    where: { status: SeasonStatus.OPEN },
-    orderBy: { year: "desc" },
-  });
-  if (!open) return err("season", "No open season to repeat into.");
-  return ok(open);
-}
-
-export async function previewRepeatOrder(input: {
+export type RepeatPreview = {
   sourceOrderId: string;
-  targetSeasonId?: string;
-  customerId?: string;
-}): Promise<
-  Result<{
-    sourceOrderId: string;
-    targetSeasonId: string;
-    targetSeasonName: string;
-    lines: RepeatLinePreview[];
-    recipients: Array<{
-      sourceLineId: string;
-      recipientName: string | null;
-      addressLine1: string | null;
-      city: string | null;
-      savedAddressId: string | null;
-      greeting: string | null;
-    }>;
-    blockers: string[];
-  }>
-> {
-  try {
-    const source = await db.order.findUniqueOrThrow({
-      where: { id: input.sourceOrderId },
-    });
-    if (input.customerId && source.customerId !== input.customerId) {
-      return err("forbidden", "Order does not belong to this customer.");
-    }
-    if (
-      source.status === OrderStatus.DRAFT ||
-      source.status === OrderStatus.DISCARDED
-    ) {
-      return err("status", "Cannot repeat a draft or discarded order.");
-    }
+  sourceDraftRef: string;
+  sourceSeasonId: string;
+  targetSeasonId: string;
+  targetSeasonName: string;
+  customerId: string | null;
+  greetingDefault: string | null;
+  lines: RepeatLinePreview[];
+  recipients: Array<{
+    sourceLineId: string;
+    recipientName: string | null;
+    addressSummary: string;
+    savedAddressId: string | null;
+    confirmedByDefault: boolean;
+  }>;
+  blockers: string[];
+};
 
-    const seasonResult = await resolveTargetSeason(input.targetSeasonId);
-    if (!("ok" in seasonResult) || !seasonResult.ok) {
-      // resolveTargetSeason returns Season | Result — normalize
-      if ("id" in (seasonResult as object)) {
-        // unreachable
-      }
-      return seasonResult as Result<never>;
-    }
-    // Fix: resolveTargetSeason returns Season | Result — let me fix the helper usage
-    const target =
-      "ok" in (seasonResult as { ok?: boolean }) && (seasonResult as { ok: boolean }).ok === false
-        ? null
-        : ("ok" in (seasonResult as { ok?: boolean })
-            ? (seasonResult as { ok: true; value: Awaited<ReturnType<typeof db.season.findUniqueOrThrow>> }).value
-            : (seasonResult as Awaited<ReturnType<typeof db.season.findUniqueOrThrow>>));
+export type RepeatLineChoice = {
+  sourceLineId: string;
+  /** map → keep with chosen product; remove → drop the line */
+  action: "map" | "remove";
+  toProductId?: string | null;
+  keepRecipient?: boolean;
+  savedAddressId?: string | null;
+};
 
-    // Simpler path below — rewrite resolve usage cleanly in next write
-    void target;
-    void source;
-    return err("internal", "preview stub");
-  } catch (error) {
-    return err(maskError(error), "Could not preview repeat.");
-  }
-}
-
-async function getTargetSeason(targetSeasonId?: string) {
-  if (targetSeasonId) {
-    return db.season.findUniqueOrThrow({ where: { id: targetSeasonId } });
+async function resolveTargetSeason(preferredId?: string | null) {
+  if (preferredId) {
+    return db.season.findUniqueOrThrow({ where: { id: preferredId } });
   }
   const open = await db.season.findFirst({
     where: { status: SeasonStatus.OPEN },
     orderBy: { year: "desc" },
   });
-  if (!open) throw new Error("No open season to repeat into.");
+  if (!open) {
+    throw new Error("No OPEN season available to repeat into.");
+  }
   return open;
 }
 
-export async function getRepeatPreview(input: {
+/** Build middle-review payload (UR-007, G-011, G-012). */
+export async function previewRepeatOrder(input: {
   sourceOrderId: string;
-  targetSeasonId?: string;
-  customerId?: string;
-}): Promise<
-  Result<{
-    sourceOrderId: string;
-    targetSeasonId: string;
-    targetSeasonName: string;
-    lines: RepeatLinePreview[];
-    recipients: Array<{
-      sourceLineId: string;
-      recipientName: string | null;
-      addressLine1: string | null;
-      city: string | null;
-      savedAddressId: string | null;
-      greeting: string | null;
-    }>;
-    blockers: string[];
-  }>
-> {
+  targetSeasonId?: string | null;
+}): Promise<Result<RepeatPreview>> {
   try {
-    const source = await db.order.findUniqueOrThrow({
+    const source = await db.order.findUnique({
       where: { id: input.sourceOrderId },
+      include: {
+        lines: {
+          include: { product: true },
+          orderBy: { createdAt: "asc" },
+        },
+        season: true,
+      },
     });
-    if (input.customerId && source.customerId !== input.customerId) {
-      return err("forbidden", "Order does not belong to this customer.");
-    }
+    if (!source) return err("missing", "Order not found.");
     if (
       source.status === OrderStatus.DRAFT ||
       source.status === OrderStatus.DISCARDED
@@ -139,29 +101,66 @@ export async function getRepeatPreview(input: {
       return err("status", "Cannot repeat a draft or discarded order.");
     }
 
-    const target = await getTargetSeason(input.targetSeasonId);
-    const lines = await buildRepeatLinePreviews(source.id, target.id);
+    const target = await resolveTargetSeason(input.targetSeasonId);
+    const lines: RepeatLinePreview[] = [];
     const blockers: string[] = [];
-    for (const line of lines) {
-      if (line.status === "unmapped") {
+
+    for (const line of source.lines) {
+      const replacement = await resolveReplacementChain(line.productId, target.id);
+      const defaultProductId = replacement.priceSmartProductId;
+      const requiresPick = replacement.needsPick;
+      if (requiresPick) {
         blockers.push(
-          `Line ${line.sourceLineId}: ${line.sourceProductName} needs a replacement pick or removal`,
+          `Line ${line.id}: ${replacement.sourceName} (${replacement.sourceSku}) has no mapped product in ${target.name}`,
         );
       }
+      lines.push({
+        sourceLineId: line.id,
+        quantity: line.quantity,
+        unitPriceCents: line.unitPriceCents,
+        greeting: line.greeting,
+        recipient: {
+          recipientName: line.recipientName,
+          addressLine1: line.addressLine1,
+          addressLine2: line.addressLine2,
+          city: line.city,
+          state: line.state,
+          postalCode: line.postalCode,
+          country: line.country,
+          savedAddressId: line.savedAddressId,
+        },
+        fulfillmentMethodId: line.fulfillmentMethodId,
+        productOptionId: line.productOptionId,
+        replacement,
+        defaultProductId,
+        requiresPick,
+      });
     }
 
     return ok({
       sourceOrderId: source.id,
+      sourceDraftRef: source.draftRef,
+      sourceSeasonId: source.seasonId,
       targetSeasonId: target.id,
       targetSeasonName: target.name,
+      customerId: source.customerId,
+      greetingDefault: source.greetingDefault,
       lines,
       recipients: lines.map((l) => ({
         sourceLineId: l.sourceLineId,
-        recipientName: l.recipientName,
-        addressLine1: l.addressLine1,
-        city: l.city,
-        savedAddressId: l.savedAddressId,
-        greeting: l.greeting,
+        recipientName: l.recipient.recipientName,
+        addressSummary: [
+          l.recipient.addressLine1,
+          l.recipient.city,
+          l.recipient.state,
+          l.recipient.postalCode,
+        ]
+          .filter(Boolean)
+          .join(", "),
+        savedAddressId: l.recipient.savedAddressId,
+        confirmedByDefault: Boolean(
+          l.recipient.recipientName && l.recipient.addressLine1,
+        ),
       })),
       blockers,
     });
@@ -170,186 +169,213 @@ export async function getRepeatPreview(input: {
   }
 }
 
-async function createDraftFromDecisions(
+async function createDraftFromChoices(
   tx: Tx,
   input: {
-    source: { id: string; customerId: string | null; greetingDefault: string | null };
+    sourceOrderId: string;
     targetSeasonId: string;
-    targetYear: number;
-    decisions: LineDecision[];
-    previews: RepeatLinePreview[];
+    greetingDefault: string | null;
+    customerId: string | null;
+    draftRef: string;
+    choices: RepeatLineChoice[];
+    previewLines: RepeatLinePreview[];
   },
 ) {
-  const draftRef = formatDraftRef(input.targetYear, randomBytes(6).toString("hex"));
+  const choiceByLine = new Map(input.choices.map((c) => [c.sourceLineId, c]));
+  const kept = input.previewLines.filter((l) => {
+    const choice = choiceByLine.get(l.sourceLineId);
+    if (!choice) return !l.requiresPick && Boolean(l.defaultProductId);
+    return choice.action === "map";
+  });
+
+  if (kept.length === 0) {
+    throw new Error("At least one line must be mapped to create a draft.");
+  }
+
+  for (const line of kept) {
+    const choice = choiceByLine.get(line.sourceLineId);
+    const toProductId =
+      choice?.toProductId || line.defaultProductId || null;
+    if (!toProductId) {
+      throw new Error(`Line ${line.sourceLineId} needs a replacement pick.`);
+    }
+    const inTarget = await tx.product.findFirst({
+      where: { id: toProductId, seasonId: input.targetSeasonId, isActive: true },
+    });
+    if (!inTarget) {
+      throw new Error(`Product ${toProductId} is not active in the target season.`);
+    }
+  }
+
   const order = await tx.order.create({
     data: {
       seasonId: input.targetSeasonId,
-      customerId: input.source.customerId,
+      customerId: input.customerId,
       status: OrderStatus.DRAFT,
-      draftRef,
-      greetingDefault: input.source.greetingDefault,
+      draftRef: input.draftRef,
+      greetingDefault: input.greetingDefault,
     },
   });
 
-  const byLine = new Map(input.previews.map((p) => [p.sourceLineId, p]));
-  const decisionMap = new Map(input.decisions.map((d) => [d.sourceLineId, d]));
-
-  for (const preview of input.previews) {
-    const decision = decisionMap.get(preview.sourceLineId);
-    if (!decision) {
-      throw new Error(`Missing decision for line ${preview.sourceLineId}`);
-    }
-    if (decision.action === "remove") continue;
-
-    const toProductId =
-      decision.toProductId || preview.suggestedProductId || null;
-    if (!toProductId) {
-      throw new Error(`Unmapped line ${preview.sourceLineId} must be picked or removed`);
-    }
+  for (const line of input.previewLines) {
+    const choice = choiceByLine.get(line.sourceLineId);
+    if (choice?.action === "remove") continue;
+    const toProductId = choice?.toProductId || line.defaultProductId;
+    if (!toProductId) continue;
 
     const product = await tx.product.findUniqueOrThrow({ where: { id: toProductId } });
-    if (product.seasonId !== input.targetSeasonId) {
-      throw new Error(`Replacement ${toProductId} is not in target season`);
-    }
+    const keepRecipient = choice?.keepRecipient !== false;
+    const savedAddressId =
+      choice?.savedAddressId !== undefined
+        ? choice.savedAddressId
+        : line.recipient.savedAddressId;
 
-    const keepRecipient = decision.keepRecipient !== false;
-    const option =
-      preview.productOptionId && product.id === preview.sourceProductId
-        ? await tx.productOption.findUnique({ where: { id: preview.productOptionId } })
-        : await tx.productOption.findFirst({
-            where: { productId: product.id, isActive: true },
-            orderBy: { sortOrder: "asc" },
-          });
+    let optionId = line.productOptionId;
+    let optionAdjustCents = 0;
+    if (optionId) {
+      let opt = await tx.productOption.findFirst({
+        where: { id: optionId, productId: product.id },
+      });
+      if (!opt) {
+        opt = await tx.productOption.findFirst({
+          where: { productId: product.id, isActive: true },
+          orderBy: { sortOrder: "asc" },
+        });
+      }
+      optionId = opt?.id ?? null;
+      optionAdjustCents = opt?.priceAdjustmentCents ?? 0;
+    }
 
     await tx.orderLine.create({
       data: {
         orderId: order.id,
         productId: product.id,
-        productOptionId: option?.id ?? null,
-        quantity: preview.quantity,
+        productOptionId: optionId,
+        quantity: line.quantity,
         unitPriceCents: product.basePriceCents,
-        optionAdjustCents: option?.priceAdjustmentCents ?? 0,
-        recipientName: keepRecipient ? preview.recipientName : null,
-        addressLine1: keepRecipient ? preview.addressLine1 : null,
-        addressLine2: null,
-        city: keepRecipient ? preview.city : null,
-        state: keepRecipient ? preview.state : null,
-        postalCode: keepRecipient ? preview.postalCode : null,
-        country: keepRecipient ? preview.country ?? "US" : "US",
-        savedAddressId: keepRecipient ? preview.savedAddressId : null,
-        fulfillmentMethodId: preview.fulfillmentMethodId,
-        greeting: keepRecipient ? preview.greeting : null,
+        optionAdjustCents,
+        recipientName: keepRecipient ? line.recipient.recipientName : null,
+        addressLine1: keepRecipient ? line.recipient.addressLine1 : null,
+        addressLine2: keepRecipient ? line.recipient.addressLine2 : null,
+        city: keepRecipient ? line.recipient.city : null,
+        state: keepRecipient ? line.recipient.state : null,
+        postalCode: keepRecipient ? line.recipient.postalCode : null,
+        country: keepRecipient ? line.recipient.country : null,
+        savedAddressId: keepRecipient ? savedAddressId : null,
+        fulfillmentMethodId: line.fulfillmentMethodId ?? undefined,
+        greeting: line.greeting ?? input.greetingDefault ?? undefined,
         groupingKey: "unassigned",
-        addOns: {
-          create: preview.addOns.map((a) => ({
-            addOnId: a.addOnId,
-            quantity: a.quantity,
-            unitPriceCents: a.unitPriceCents,
-          })),
-        },
       },
     });
-    void byLine;
   }
 
   return order;
 }
 
-function autoDecisions(previews: RepeatLinePreview[]): LineDecision[] {
-  return previews.map((p) => {
-    if (p.suggestedProductId) {
-      return {
-        sourceLineId: p.sourceLineId,
-        action: "map" as const,
-        toProductId: p.suggestedProductId,
-        keepRecipient: true,
-      };
-    }
-    return { sourceLineId: p.sourceLineId, action: "remove" as const };
-  });
-}
-
-/** Customer/staff confirm repeat after review page (UR-007, G-011, G-012). */
+/** Confirm review page selections and create a draft (customer or staff). */
 export async function confirmRepeatOrder(input: {
   sourceOrderId: string;
-  targetSeasonId?: string;
-  decisions: LineDecision[];
-  recipientsConfirmed: boolean;
-  replacementsConfirmed: boolean;
-  customerId?: string;
-  staffId?: string | null;
+  targetSeasonId?: string | null;
+  choices: RepeatLineChoice[];
+  actorStaffId?: string | null;
+  actorCustomerId?: string | null;
 }): Promise<Result<{ draftRef: string; orderId: string }>> {
   try {
-    if (!input.recipientsConfirmed || !input.replacementsConfirmed) {
-      return err(
-        "confirm",
-        "Confirm both replacements and recipients before continuing.",
-      );
-    }
-
-    const source = await db.order.findUniqueOrThrow({
-      where: { id: input.sourceOrderId },
+    const preview = await previewRepeatOrder({
+      sourceOrderId: input.sourceOrderId,
+      targetSeasonId: input.targetSeasonId,
     });
-    if (input.customerId && source.customerId !== input.customerId) {
-      return err("forbidden", "Order does not belong to this customer.");
-    }
-    if (
-      source.status === OrderStatus.DRAFT ||
-      source.status === OrderStatus.DISCARDED
-    ) {
-      return err("status", "Cannot repeat a draft or discarded order.");
-    }
+    if (!preview.ok) return preview;
 
-    const target = await getTargetSeason(input.targetSeasonId);
-    const previews = await buildRepeatLinePreviews(source.id, target.id);
-
-    for (const preview of previews) {
-      const decision = input.decisions.find((d) => d.sourceLineId === preview.sourceLineId);
-      if (!decision) {
-        return err("decision", `Missing decision for ${preview.sourceProductName}.`);
+    const choiceByLine = new Map(input.choices.map((c) => [c.sourceLineId, c]));
+    for (const line of preview.value.lines) {
+      const choice = choiceByLine.get(line.sourceLineId);
+      if (!choice) {
+        if (line.requiresPick) {
+          return err(
+            "pick",
+            `Choose a replacement or remove: ${line.replacement.sourceName}`,
+          );
+        }
+        continue;
       }
-      if (decision.action === "map") {
-        const toId = decision.toProductId || preview.suggestedProductId;
+      if (choice.action === "map") {
+        const toId = choice.toProductId || line.defaultProductId;
         if (!toId) {
           return err(
-            "unmapped",
-            `Unmapped item ${preview.sourceProductName} must be picked or removed.`,
+            "pick",
+            `Choose a replacement or remove: ${line.replacement.sourceName}`,
           );
         }
         const allowed =
-          preview.candidates.some((c) => c.productId === toId) ||
-          preview.status === "same_season";
-        if (!allowed && preview.status !== "same_season") {
-          // Allow any active product in target season as manual pick
+          line.replacement.candidates.some((c) => c.productId === toId) ||
+          line.replacement.alreadyInTarget;
+        if (!allowed && toId !== line.defaultProductId) {
+          // Still allow any active product in target season (staff override).
           const product = await db.product.findFirst({
-            where: { id: toId, seasonId: target.id, isActive: true },
+            where: {
+              id: toId,
+              seasonId: preview.value.targetSeasonId,
+              isActive: true,
+            },
           });
           if (!product) {
-            return err("pick", `Invalid replacement for ${preview.sourceProductName}.`);
+            return err("map", `Invalid replacement for ${line.replacement.sourceName}`);
           }
         }
       }
+      if (choice.action === "map" && choice.keepRecipient === false) {
+        // Allowed — recipient cleared on confirm.
+      }
     }
 
+    // Recipients must be explicitly confirmed when present on kept lines.
+    for (const line of preview.value.lines) {
+      const choice = choiceByLine.get(line.sourceLineId);
+      const removing = choice?.action === "remove";
+      if (removing) continue;
+      const hasRecipient = Boolean(line.recipient.recipientName);
+      if (hasRecipient && choice && choice.keepRecipient === undefined) {
+        return err(
+          "recipients",
+          "Confirm each recipient (keep or clear) before continuing.",
+        );
+      }
+      if (hasRecipient && !choice) {
+        return err(
+          "recipients",
+          "Confirm each recipient (keep or clear) before continuing.",
+        );
+      }
+    }
+
+    const target = await resolveTargetSeason(
+      input.targetSeasonId ?? preview.value.targetSeasonId,
+    );
+    const draftRef = formatDraftRef(target.year, randomBytes(6).toString("hex"));
+
     const created = await db.$transaction(async (tx) => {
-      const order = await createDraftFromDecisions(tx, {
-        source,
+      const order = await createDraftFromChoices(tx, {
+        sourceOrderId: input.sourceOrderId,
         targetSeasonId: target.id,
-        targetYear: target.year,
-        decisions: input.decisions,
-        previews,
+        greetingDefault: preview.value.greetingDefault,
+        customerId: input.actorCustomerId ?? preview.value.customerId,
+        draftRef,
+        choices: input.choices,
+        previewLines: preview.value.lines,
       });
       await writeAudit(
         {
           action: AuditAction.ORDER_REPEATED,
-          actorId: input.staffId ?? null,
+          actorId: input.actorStaffId ?? null,
           meta: {
-            orderId: source.id,
-            sourceOrderId: source.id,
+            orderId: input.sourceOrderId,
+            sourceOrderId: input.sourceOrderId,
             newOrderId: order.id,
-            draftRef: order.draftRef,
-            mode: input.customerId ? "customer_review" : "staff_review",
+            draftRef,
+            mode: input.actorStaffId ? "staff_confirm" : "customer_confirm",
             targetSeasonId: target.id,
+            choices: input.choices,
           },
         },
         tx,
@@ -357,40 +383,65 @@ export async function confirmRepeatOrder(input: {
       return order;
     });
 
-    return ok({ draftRef: created.draftRef!, orderId: created.id });
+    return ok({ draftRef: created.draftRef, orderId: created.id });
   } catch (error) {
     return err(maskError(error), "Could not confirm repeat.");
   }
 }
 
-/** Staff single-order repeat with auto price-smart maps (R-057). */
+/**
+ * Staff single-order repeat (R-057).
+ * Auto-applies price-smart defaults when every line maps; otherwise returns needsReview.
+ */
 export async function repeatOrder(input: {
   sourceOrderId: string;
   staffId: string;
-  targetSeasonId?: string;
-}): Promise<Result<{ draftRef: string; orderId: string; autoRemoved: string[] }>> {
+  targetSeasonId?: string | null;
+  forceAuto?: boolean;
+}): Promise<
+  Result<
+    | { draftRef: string; orderId: string; mode: "auto" }
+    | { needsReview: true; preview: RepeatPreview }
+  >
+> {
   try {
-    const preview = await getRepeatPreview({
+    const preview = await previewRepeatOrder({
       sourceOrderId: input.sourceOrderId,
       targetSeasonId: input.targetSeasonId,
     });
     if (!preview.ok) return preview;
 
-    const decisions = autoDecisions(preview.value.lines);
-    const autoRemoved = decisions
-      .filter((d) => d.action === "remove")
-      .map((d) => d.sourceLineId);
+    const needsReview =
+      preview.value.lines.some((l) => l.requiresPick) || !input.forceAuto;
 
-    const confirmed = await confirmRepeatOrder({
-      sourceOrderId: input.sourceOrderId,
-      targetSeasonId: preview.value.targetSeasonId,
-      decisions,
-      recipientsConfirmed: true,
-      replacementsConfirmed: true,
-      staffId: input.staffId,
-    });
-    if (!confirmed.ok) return confirmed;
-    return ok({ ...confirmed.value, autoRemoved });
+    // Staff UI historically one-clicked; keep auto when all lines map cleanly OR forceAuto.
+    const allMapped = preview.value.lines.every(
+      (l) => !l.requiresPick && l.defaultProductId,
+    );
+    if (!allMapped) {
+      return ok({ needsReview: true, preview: preview.value });
+    }
+
+    // When forceAuto (bulk / API convenience) or all mapped — create draft with keep recipients.
+    if (input.forceAuto || allMapped) {
+      const choices: RepeatLineChoice[] = preview.value.lines.map((l) => ({
+        sourceLineId: l.sourceLineId,
+        action: "map" as const,
+        toProductId: l.defaultProductId,
+        keepRecipient: true,
+        savedAddressId: l.recipient.savedAddressId,
+      }));
+      const confirmed = await confirmRepeatOrder({
+        sourceOrderId: input.sourceOrderId,
+        targetSeasonId: preview.value.targetSeasonId,
+        choices,
+        actorStaffId: input.staffId,
+      });
+      if (!confirmed.ok) return confirmed;
+      return ok({ ...confirmed.value, mode: "auto" as const });
+    }
+
+    return ok({ needsReview: true, preview: preview.value });
   } catch (error) {
     return err(maskError(error), "Could not repeat order.");
   }
@@ -398,11 +449,14 @@ export async function repeatOrder(input: {
 
 const MAX_BULK_REPEAT = 25;
 
-/** Bounded bulk-repeat of customer history into open season (R-058, B7). */
+/** Bounded bulk-repeat of customer history into the open season (R-058). */
 export async function bulkRepeatOrders(input: {
   items: Array<{ orderId: string; expectedVersion: number }>;
   staffId: string;
-  targetSeasonId?: string;
+  targetSeasonId?: string | null;
+  /** Required — staff must confirm replacements (defaults) and recipients (UR-007). */
+  confirmReplacements: boolean;
+  confirmRecipients: boolean;
 }): Promise<
   Result<{
     created: Array<{ sourceOrderId: string; draftRef: string; orderId: string }>;
@@ -416,9 +470,14 @@ export async function bulkRepeatOrders(input: {
   if (input.items.length > MAX_BULK_REPEAT) {
     return err("bound", `Bulk repeat capped at ${MAX_BULK_REPEAT}.`);
   }
+  if (!input.confirmReplacements || !input.confirmRecipients) {
+    return err(
+      "confirm",
+      "Confirm replacements and recipients before bulk repeat.",
+    );
+  }
 
   try {
-    const target = await getTargetSeason(input.targetSeasonId);
     const created: Array<{ sourceOrderId: string; draftRef: string; orderId: string }> = [];
     const conflicts: Array<{ orderId: string; reason: string; actualVersion?: number }> = [];
     const skipped: Array<{ orderId: string; reason: string }> = [];
@@ -445,8 +504,30 @@ export async function bulkRepeatOrders(input: {
         continue;
       }
 
-      const previews = await buildRepeatLinePreviews(source.id, target.id);
-      const decisions = autoDecisions(previews);
+      const preview = await previewRepeatOrder({
+        sourceOrderId: item.orderId,
+        targetSeasonId: input.targetSeasonId,
+      });
+      if (!preview.ok) {
+        skipped.push({ orderId: item.orderId, reason: String(preview.error) });
+        continue;
+      }
+      if (preview.value.lines.some((l) => l.requiresPick)) {
+        skipped.push({ orderId: item.orderId, reason: "needs_replacement_pick" });
+        continue;
+      }
+
+      const target = await resolveTargetSeason(
+        input.targetSeasonId ?? preview.value.targetSeasonId,
+      );
+      const draftRef = formatDraftRef(target.year, randomBytes(6).toString("hex"));
+      const choices: RepeatLineChoice[] = preview.value.lines.map((l) => ({
+        sourceLineId: l.sourceLineId,
+        action: "map" as const,
+        toProductId: l.defaultProductId,
+        keepRecipient: true,
+        savedAddressId: l.recipient.savedAddressId,
+      }));
 
       const order = await db.$transaction(async (tx) => {
         const locked = await lockOrderForUpdate(tx, source.id);
@@ -457,12 +538,14 @@ export async function bulkRepeatOrders(input: {
         });
         if (bumped.count !== 1) return null;
 
-        const draft = await createDraftFromDecisions(tx, {
-          source: locked,
+        const draft = await createDraftFromChoices(tx, {
+          sourceOrderId: locked.id,
           targetSeasonId: target.id,
-          targetYear: target.year,
-          decisions,
-          previews,
+          greetingDefault: locked.greetingDefault,
+          customerId: locked.customerId,
+          draftRef,
+          choices,
+          previewLines: preview.value.lines,
         });
         await writeAudit(
           {
@@ -473,9 +556,8 @@ export async function bulkRepeatOrders(input: {
               orderId: locked.id,
               sourceOrderId: locked.id,
               newOrderId: draft.id,
-              draftRef: draft.draftRef,
-              targetSeasonId: target.id,
-              created: [{ sourceOrderId: locked.id, draftRef: draft.draftRef, orderId: draft.id }],
+              draftRef,
+              created: [{ sourceOrderId: locked.id, draftRef, orderId: draft.id }],
             },
           },
           tx,
@@ -495,7 +577,7 @@ export async function bulkRepeatOrders(input: {
 
       created.push({
         sourceOrderId: item.orderId,
-        draftRef: order.draftRef!,
+        draftRef: order.draftRef,
         orderId: order.id,
       });
     }

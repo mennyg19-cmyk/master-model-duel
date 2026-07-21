@@ -1,7 +1,9 @@
-import { AuditAction, SeasonStatus, type Season } from "@prisma/client";
+import { AuditAction, SeasonStatus, type Prisma, type Season } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { err, maskError, ok, type Result } from "@/lib/result";
+
+type Tx = Prisma.TransactionClient;
 
 function slugify(input: string): string {
   return input
@@ -12,16 +14,71 @@ function slugify(input: string): string {
     .slice(0, 60);
 }
 
-/** R-097 — create a new season (starts CLOSED until manager opens or auto-flip). */
+async function copyCatalogShell(
+  tx: Tx,
+  fromSeasonId: string,
+  toSeasonId: string,
+): Promise<number> {
+  const products = await tx.product.findMany({
+    where: { seasonId: fromSeasonId },
+    include: { options: true },
+  });
+  let copied = 0;
+  for (const product of products) {
+    const created = await tx.product.create({
+      data: {
+        seasonId: toSeasonId,
+        sku: product.sku,
+        name: product.name,
+        slug: product.slug,
+        kind: product.kind,
+        category: product.category,
+        description: product.description,
+        basePriceCents: product.basePriceCents,
+        weightOz: product.weightOz,
+        lengthIn: product.lengthIn,
+        widthIn: product.widthIn,
+        heightIn: product.heightIn,
+        tracksInventory: product.tracksInventory,
+        isActive: product.isActive,
+        sortOrder: product.sortOrder,
+        primaryImageUrl: product.primaryImageUrl,
+        mediaAssetId: product.mediaAssetId,
+      },
+    });
+    for (const option of product.options) {
+      await tx.productOption.create({
+        data: {
+          productId: created.id,
+          name: option.name,
+          priceAdjustmentCents: option.priceAdjustmentCents,
+          sortOrder: option.sortOrder,
+          isActive: option.isActive,
+        },
+      });
+    }
+    await tx.productReplacement.create({
+      data: {
+        fromProductId: product.id,
+        toProductId: created.id,
+        note: "wizard_copy",
+      },
+    });
+    copied += 1;
+  }
+  return copied;
+}
+
+/** R-097 — new-season wizard (CLOSED until Open or scheduled auto-flip). */
 export async function createSeason(input: {
   name: string;
   year: number;
   slug?: string;
+  copyFromSeasonId?: string | null;
   scheduledOpenAt?: Date | null;
   scheduledCloseAt?: Date | null;
   staffId: string;
-  copyFulfillmentDefaults?: boolean;
-}): Promise<Result<{ season: Season }>> {
+}): Promise<Result<{ season: Season; productsCopied: number }>> {
   try {
     const slug = input.slug?.trim() || slugify(`${input.name}-${input.year}`);
     if (!slug) return err("slug", "Season slug is required.");
@@ -32,7 +89,7 @@ export async function createSeason(input: {
     const existing = await db.season.findUnique({ where: { slug } });
     if (existing) return err("duplicate", `Season slug "${slug}" already exists.`);
 
-    const season = await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       const created = await tx.season.create({
         data: {
           slug,
@@ -43,23 +100,29 @@ export async function createSeason(input: {
           scheduledCloseAt: input.scheduledCloseAt ?? null,
         },
       });
+      let productsCopied = 0;
+      if (input.copyFromSeasonId) {
+        productsCopied = await copyCatalogShell(tx, input.copyFromSeasonId, created.id);
+      }
       await writeAudit(
         {
           action: AuditAction.SETTINGS_UPDATED,
           actorId: input.staffId,
           meta: {
-            kind: "season_created",
+            kind: "season_wizard",
             seasonId: created.id,
             slug: created.slug,
             year: created.year,
+            copyFromSeasonId: input.copyFromSeasonId ?? null,
+            productsCopied,
           },
         },
         tx,
       );
-      return created;
+      return { season: created, productsCopied };
     });
 
-    return ok({ season });
+    return ok(result);
   } catch (error) {
     return err(maskError(error), "Could not create season.");
   }

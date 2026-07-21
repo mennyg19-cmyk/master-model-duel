@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/season-auto-flip",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

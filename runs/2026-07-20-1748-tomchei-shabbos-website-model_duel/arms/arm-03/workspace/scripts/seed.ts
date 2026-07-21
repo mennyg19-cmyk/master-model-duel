@@ -319,7 +319,7 @@ async function main() {
     },
   });
 
-  await db.product.upsert({
+  const archiveClassic = await db.product.upsert({
     where: { seasonId_sku: { seasonId: archiveSeason.id, sku: "CLASSIC-2025" } },
     create: {
       seasonId: archiveSeason.id,
@@ -338,6 +338,123 @@ async function main() {
       category: "Packages",
     },
   });
+
+  // Discontinued prior-year SKU for P10 repeat / replacement smoke (R-048).
+  const discontinued = await db.product.upsert({
+    where: { seasonId_sku: { seasonId: archiveSeason.id, sku: "LEGACY-DELUXE" } },
+    create: {
+      seasonId: archiveSeason.id,
+      sku: "LEGACY-DELUXE",
+      name: "Legacy Deluxe 2025",
+      slug: "legacy-deluxe-2025",
+      kind: ProductKind.PACKAGE,
+      category: "Packages",
+      description: "Discontinued — use replacement mapping",
+      basePriceCents: 5600,
+      tracksInventory: false,
+      isActive: false,
+      sortOrder: 2,
+    },
+    update: {
+      isActive: false,
+      basePriceCents: 5600,
+      name: "Legacy Deluxe 2025",
+    },
+  });
+
+  const nearPrice = await db.product.upsert({
+    where: { seasonId_sku: { seasonId: season.id, sku: "FAMILY-DELUXE" } },
+    create: {
+      seasonId: season.id,
+      sku: "FAMILY-DELUXE",
+      name: "Family Deluxe 2026",
+      slug: "family-deluxe",
+      kind: ProductKind.PACKAGE,
+      category: "Packages",
+      description: "Price-smart replacement target (~5600)",
+      basePriceCents: 5500,
+      tracksInventory: true,
+      sortOrder: 4,
+    },
+    update: {
+      isActive: true,
+      basePriceCents: 5500,
+    },
+  });
+
+  assertInventoryTargetXor({ productId: nearPrice.id, addOnId: null });
+  await db.inventoryItem.upsert({
+    where: { productId: nearPrice.id },
+    create: { productId: nearPrice.id, onHand: 20, reserved: 0, version: 1 },
+    update: { onHand: 20 },
+  });
+
+  await db.productReplacement.deleteMany({
+    where: { fromProductId: discontinued.id },
+  });
+  await db.productReplacement.create({
+    data: {
+      fromProductId: discontinued.id,
+      toProductId: product.id,
+      note: "far_price",
+    },
+  });
+  await db.productReplacement.create({
+    data: {
+      fromProductId: discontinued.id,
+      toProductId: nearPrice.id,
+      note: "price_smart",
+    },
+  });
+  await db.productReplacement.upsert({
+    where: {
+      fromProductId_toProductId: {
+        fromProductId: archiveClassic.id,
+        toProductId: product.id,
+      },
+    },
+    create: {
+      fromProductId: archiveClassic.id,
+      toProductId: product.id,
+      note: "archive_to_current",
+    },
+    update: { note: "archive_to_current" },
+  });
+
+  // Imported prior-year paid order stub (S3 / P12 hook).
+  const importedRef = "IMP-2025-PRIOR";
+  let imported = await db.order.findFirst({ where: { draftRef: importedRef } });
+  if (!imported) {
+    imported = await db.order.create({
+      data: {
+        seasonId: archiveSeason.id,
+        customerId: customer.id,
+        status: OrderStatus.PAID,
+        draftRef: importedRef,
+        orderNumber: 42,
+        placedAt: new Date("2025-03-01T12:00:00Z"),
+        greetingDefault: "Chag Sameach from 2025",
+        lines: {
+          create: {
+            productId: discontinued.id,
+            quantity: 1,
+            unitPriceCents: discontinued.basePriceCents,
+            optionAdjustCents: 0,
+            recipientName: "Rivky Cohen",
+            addressLine1: "200 Ocean Pkwy",
+            city: "Brooklyn",
+            state: "NY",
+            postalCode: "11218",
+            country: "US",
+            savedAddressId: "seed-addr-customer-friend",
+            fulfillmentMethodId: shipMethod.id,
+            greeting: "Chag Sameach from 2025",
+            groupingKey: "imported-prior",
+          },
+        },
+      },
+    });
+  }
 
   await db.productOption.upsert({
     where: { productId_name: { productId: product.id, name: "Standard" } },
@@ -618,11 +735,11 @@ async function main() {
     where: { key: SETUP_LOCK_KEY },
     create: {
       key: SETUP_LOCK_KEY,
-      value: { complete: true, seeded: true, phase: "P8" },
+      value: { complete: true, seeded: true, phase: "P10" },
       version: 1,
     },
     update: {
-      value: { complete: true, seeded: true, phase: "P8" },
+      value: { complete: true, seeded: true, phase: "P10" },
     },
   });
 

@@ -14,6 +14,8 @@ const bodySchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("repeat"),
     items: z.array(itemSchema).min(1).max(25),
+    confirmReplacements: z.literal(true),
+    confirmRecipients: z.literal(true),
   }),
   z.object({
     action: z.literal("status"),
@@ -31,6 +33,8 @@ export async function POST(request: Request) {
       const result = await bulkRepeatOrders({
         items: body.items,
         staffId: staff.effectiveStaff.id,
+        confirmReplacements: body.confirmReplacements,
+        confirmRecipients: body.confirmRecipients,
       });
       if (!result.ok) {
         return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });

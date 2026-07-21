@@ -42,7 +42,6 @@ export async function GET() {
   try {
     await requirePermission("settings.read");
     const products = await db.product.findMany({
-      where: { isActive: true },
       include: {
         season: true,
         options: { orderBy: { sortOrder: "asc" } },
