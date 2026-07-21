@@ -21,7 +21,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- arm-02 P8 aggregate: pending spawn
+- arm-02 P8 aggregate: [arm-02 P8 aggregate review](c9cb6c1a-c7b3-402a-864b-8a0bde42a902)
 
 ## P8 review panel (arm-02) — complete
 
