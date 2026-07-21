@@ -21,7 +21,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- arm-02 P8: fix pass pending spawn
+- arm-02 P8: [arm-02 P8 fix pass](6d3ebeee-f67e-4c59-89b7-77e893b37e14) → re-smoke S1–S3 → gate (+1.5 → **12.0/20**)
 
 ## P8 aggregate (arm-02)
 
