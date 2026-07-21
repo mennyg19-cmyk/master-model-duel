@@ -10,3 +10,8 @@
 | Test 4 P2 | arm-02 quality + clean-code reviews also exhausted; resumed once each | Cursor quota wave |
 | Test 4 P2 | Second `resource_exhausted` on arm-01 aggregate, arm-02 all four P2 reviewers → orchestrator wrote arm-01 aggregate; arm-02 review panel **DNF** until quota resets | Protocol rule 29 |
 | Test 4 P6 arm-01 | [arm-01 Test4 P6 build](c63da8b0-d773-47ca-9b48-9baffe069893) HTTP 500 mid-build after schema/migration + admin-operations + csv-import; resumed same agent | Cursor infra error |
+
+## [2026-07-21T13:33:59.6474314Z] Late join arm-03
+**What happened:** Added contestant mid-run.
+**Rule:** Shared freezes unchanged; see protocol/LATE-JOIN.md.
+**Status:** DECIDED

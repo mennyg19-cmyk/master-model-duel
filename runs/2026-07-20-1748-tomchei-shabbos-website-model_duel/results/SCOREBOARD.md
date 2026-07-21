@@ -2,10 +2,11 @@
 
 Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 
-| Arm | 1a /7 | 1b /8 | 2 /15 | 3 /20 | 4 /20 | 5 /15 | 6 /15 | Total /100 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** |
-| arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** |
+| Arm | 1a /7 | 1b /8 | 2 /15 | 3 /20 | 4 /20 | 5 /15 | 6 /15 | Total /100 | Bonus | Late |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** | — | no |
+| arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** | — | no |
+| arm-03 | | | | | | | | | | **yes** (join after Test 6) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
