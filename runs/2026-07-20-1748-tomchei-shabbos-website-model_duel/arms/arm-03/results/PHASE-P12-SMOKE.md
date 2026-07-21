@@ -21,12 +21,12 @@
     "id": "S1",
     "check": "Reports + margin",
     "pass": true,
-    "seasonOrders": 144,
-    "paidOrders": 100,
+    "seasonOrders": 170,
+    "paidOrders": 117,
     "marginTotals": {
-      "chargedCents": 27000,
-      "purchasedCents": 18000,
-      "marginCents": 9000
+      "chargedCents": 32400,
+      "purchasedCents": 21600,
+      "marginCents": 10800
     },
     "seededLabels": {
       "charged": 3600,
@@ -42,17 +42,17 @@
     "id": "S2",
     "check": "Exports + reconciliation",
     "pass": true,
-    "exportRows": 15,
+    "exportRows": 18,
     "unauthorized": 403,
     "authorized": 200,
     "orphanFlagged": true,
     "recon1": {
-      "orphaned": 1,
-      "created": 1
+      "orphaned": 2,
+      "created": 2
     },
     "recon2": {
       "created": 0,
-      "skipped": 1
+      "skipped": 2
     },
     "cron": {
       "ok": 200,
@@ -82,8 +82,8 @@
     "id": "S4",
     "check": "Imported repeat",
     "pass": true,
-    "importedOrderId": "cmrv8q9vs003eqxpw5csad4st",
-    "draftRef": "D-2026-08013474",
+    "importedOrderId": "cmrv92tik003gqxh41ryae5ji",
+    "draftRef": "D-2026-6B27B5A6",
     "reviewPage": 200,
     "accountReview": 200
   },
@@ -92,8 +92,8 @@
     "check": "Dress rehearsal",
     "pass": true,
     "dress": {
-      "orderId": "cmrv8qa0e003uqxpwjsvn5llq",
-      "printBatchId": "cmrv8qa1u004qqxpw8yh5b486",
+      "orderId": "cmrv92u7x003wqxh4b63dscek",
+      "printBatchId": "cmrv92u9v004sqxh4oqrx20uv",
       "marginCents": 300
     },
     "dressBeforeWipe": 1,
@@ -102,8 +102,8 @@
     "probe": {
       "scaleOrders": 1000,
       "scalePackages": 5000,
-      "newPackagesProcessed": 346,
-      "nightlyMs": 137,
+      "newPackagesProcessed": 365,
+      "nightlyMs": 139,
       "acceptable": true
     },
     "wipe": {
@@ -113,8 +113,8 @@
     },
     "reseed": {
       "openSeasonId": "cmruro40z0007qx5wepn8bspr",
-      "orderCount": 164,
-      "packageCount": 136
+      "orderCount": 235,
+      "packageCount": 162
     },
     "pages": {
       "testOps": 200,

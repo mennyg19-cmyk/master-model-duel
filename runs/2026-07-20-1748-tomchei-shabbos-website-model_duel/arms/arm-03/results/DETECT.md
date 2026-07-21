@@ -1,0 +1,9 @@
+# Test 6 — Detect
+
+| Bug ID | Location | What’s wrong | How you found it |
+|---|---|---|---|
+| B1 | `lib/checkout/fees.ts` (`PER_PACKAGE_DELIVERY` ZIP check, ~line 84) | Hard ZIP block is inverted: `deliveryZips.includes(zip)` rejects in-zone addresses as “outside the delivery area” and lets out-of-zone ZIPs through. | Traced per-package delivery fee rules; condition matches comment/G-014 intent backwards vs `deliveryZips` list. |
+| B2 | `lib/shipping/margin.ts` (`resolveMargin`, ~line 30) | Customer charge uses the cheapest per-carrier best (`perCarrierBest[0]`) instead of the highest; margin is always ~0. | Compared implementation to comment/UR-003 (“charge HIGHEST… buy CHEAPER”); charge and buy both take index 0 after ascending sort. |
+| B3 | `lib/public-guard.ts` (`isSameOrigin`, ~line 22) | Requests with neither `Origin` nor `Referer` return `true` and pass `guardPublicEndpoint`, so curl/server POSTs to checkout/quote succeed without browser origin. | Read same-origin guard used by `app/api/checkout/route.ts` and `app/api/checkout/quote/route.ts`; fall-through contradicts the file’s “neither header are refused” comment. |
+| B4 | `components/checkout/checkout-form.tsx` (`placeOrder`, ~line 109) | Pay/submit `fetch`es `POST /api/checkout/start`, but the live handler is `app/api/checkout/route.ts` (`POST /api/checkout`) — no `start` route → 404, no Stripe redirect. | Followed checkout submit path; listed `app/api/checkout/` (only `route.ts` + `quote/`). |
+| B5 | `lib/routes/driver-access.ts` (`resolveDriverAccess`, ~line 23) | PIN gate is disabled: `if (access.link.pinHash && false)` never runs cookie/PIN validation, so a magic-link URL alone unlocks stops/APIs. | Inspected driver access resolver used by `/d/[token]` and driver APIs; `&& false` short-circuits the PIN branch. |

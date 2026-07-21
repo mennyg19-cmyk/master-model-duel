@@ -1,6 +1,6 @@
 {
-  "passed": 16,
-  "failed": 0,
+  "passed": 6,
+  "failed": 10,
   "evidence": [
     {
       "id": "S1a",
@@ -25,95 +25,69 @@
     {
       "id": "S1c",
       "check": "Split one package via API",
-      "pass": true,
-      "status": 200,
+      "pass": false,
+      "status": 409,
       "body": {
-        "ok": true,
-        "sourceId": "cmrv51eij000aqx4oyphsryle",
-        "newPackageId": "cmrv51ezb04dbqxhcenbsdv2l"
+        "ok": false,
+        "error": "Could not split package: Package cmrv93pso000aqx0w1o5lr4m1 not found"
       }
     },
     {
       "id": "S1d",
       "check": "After split: 3 packages; audit retained on source",
-      "pass": true,
-      "packageCount": 3
+      "pass": false,
+      "packageCount": 2
     },
     {
       "id": "S1e",
       "check": "Split packages both included in print reprint-order",
-      "pass": true,
+      "pass": false,
       "body": {
-        "ok": true,
-        "batchId": "cmrv51f6g04dlqxhcmviep148",
-        "runKey": "reprint-order:cmrv51egr0003qx4obsqj4yru:36942662b60d",
-        "created": true,
-        "artifactCount": 7,
-        "packageCount": 3,
-        "stagesUnchanged": true,
-        "packageStages": [
-          {
-            "id": "cmrv51eij000aqx4oyphsryle",
-            "stage": "NEW",
-            "orderId": "cmrv51egr0003qx4obsqj4yru"
-          },
-          {
-            "id": "cmrv51eiu000hqx4o70ji4pcl",
-            "stage": "NEW",
-            "orderId": "cmrv51egr0003qx4obsqj4yru"
-          },
-          {
-            "id": "cmrv51ezb04dbqxhcenbsdv2l",
-            "stage": "NEW",
-            "orderId": "cmrv51egr0003qx4obsqj4yru"
-          }
-        ]
+        "ok": false,
+        "error": "Could not reprint order."
       }
     },
     {
       "id": "S1f",
       "check": "PACKAGE_SPLIT audit retained",
-      "pass": true,
-      "auditId": "cmrv51ezj04djqxhc7x1dkjdc"
+      "pass": false
     },
     {
       "id": "S2a",
       "check": "Print all artifacts → no stage change",
-      "pass": true,
+      "pass": false,
       "stagesBefore": {
-        "cmrv51eij000aqx4oyphsryle": "NEW",
-        "cmrv51eiu000hqx4o70ji4pcl": "NEW",
-        "cmrv51ezb04dbqxhcenbsdv2l": "NEW"
+        "cmrv93pso000aqx0w1o5lr4m1": "NEW",
+        "cmrv93pst000hqx0w96xutpw5": "NEW"
       },
       "stagesAfter": {
-        "cmrv51eij000aqx4oyphsryle": "NEW",
-        "cmrv51eiu000hqx4o70ji4pcl": "NEW",
-        "cmrv51ezb04dbqxhcenbsdv2l": "NEW"
+        "cmrv93pso000aqx0w1o5lr4m1": "NEW",
+        "cmrv93pst000hqx0w96xutpw5": "NEW"
       }
     },
     {
       "id": "S2b",
       "check": "Printed artifacts download as PDF",
-      "pass": true,
-      "artifactCount": 7
+      "pass": false,
+      "artifactCount": 0
     },
     {
       "id": "S2c",
       "check": "Mark Printed separately",
-      "pass": true,
-      "stage": "PRINTED"
+      "pass": false,
+      "stage": "NEW"
     },
     {
       "id": "S2d",
       "check": "Mark Packed separately",
-      "pass": true,
-      "stage": "PACKED"
+      "pass": false,
+      "stage": "NEW"
     },
     {
       "id": "S2e",
       "check": "Mark Sent separately",
-      "pass": true,
-      "stage": "SENT"
+      "pass": false,
+      "stage": "NEW"
     },
     {
       "id": "S2f",
@@ -129,64 +103,41 @@
       "pass": true,
       "first": {
         "ok": true,
-        "batchId": "cmrv51hpp04e8qxhcqn9vjs6i",
-        "runKey": "nightly:cmruro40z0007qx5wepn8bspr:2099-06-16",
+        "batchId": "cmrv93tlz00yvqx3o0mb475vx",
+        "runKey": "nightly:cmruro40z0007qx5wepn8bspr:2099-08-25",
         "created": true,
-        "artifactCount": 1041,
-        "packageCount": 5045,
+        "artifactCount": 117,
+        "packageCount": 117,
         "stagesUnchanged": true
       },
       "second": {
         "ok": true,
-        "batchId": "cmrv51hpp04e8qxhcqn9vjs6i",
-        "runKey": "nightly:cmruro40z0007qx5wepn8bspr:2099-06-16",
+        "batchId": "cmrv93tlz00yvqx3o0mb475vx",
+        "runKey": "nightly:cmruro40z0007qx5wepn8bspr:2099-08-25",
         "created": false,
-        "artifactCount": 1041,
-        "packageCount": 5045,
+        "artifactCount": 117,
+        "packageCount": 117,
         "stagesUnchanged": true
       }
     },
     {
       "id": "S3b",
       "check": "Reprint one group + one order without unrelated regen of nightly",
-      "pass": true,
-      "batchCountBefore": 31,
-      "batchCountAfter": 33,
-      "expectedDelta": 2,
+      "pass": false,
+      "batchCountBefore": 51,
+      "batchCountAfter": 52,
+      "expectedDelta": 1,
       "reprintGroup": {
         "ok": true,
-        "batchId": "cmrv51iqo0579qxhcje0kf8y1",
-        "runKey": "reprint-group:cmruro40z0007qx5wepn8bspr:PICKUP:68379cb62d58",
+        "batchId": "cmrv93tpe0128qx3on2qojywt",
+        "runKey": "reprint-group:cmruro40z0007qx5wepn8bspr:PICKUP:e787f1b3613c",
         "created": true,
-        "artifactCount": 22,
-        "packageCount": 22,
+        "artifactCount": 30,
+        "packageCount": 32,
         "stagesUnchanged": true
       },
       "reprintOrder": {
-        "ok": true,
-        "batchId": "cmrv51iry057zqxhc5pjy750w",
-        "runKey": "reprint-order:cmrv51egr0003qx4obsqj4yru:e0f9fffec2ba",
-        "created": true,
-        "artifactCount": 7,
-        "packageCount": 3,
-        "stagesUnchanged": true,
-        "packageStages": [
-          {
-            "id": "cmrv51eij000aqx4oyphsryle",
-            "stage": "SENT",
-            "orderId": "cmrv51egr0003qx4obsqj4yru"
-          },
-          {
-            "id": "cmrv51eiu000hqx4o70ji4pcl",
-            "stage": "NEW",
-            "orderId": "cmrv51egr0003qx4obsqj4yru"
-          },
-          {
-            "id": "cmrv51ezb04dbqxhcenbsdv2l",
-            "stage": "NEW",
-            "orderId": "cmrv51egr0003qx4obsqj4yru"
-          }
-        ]
+        "ok": false
       }
     },
     {
@@ -195,16 +146,12 @@
       "pass": true,
       "stages": [
         {
-          "id": "cmrv51eiu000hqx4o70ji4pcl",
+          "id": "cmrv93pso000aqx0w1o5lr4m1",
           "stage": "NEW"
         },
         {
-          "id": "cmrv51ezb04dbqxhcenbsdv2l",
+          "id": "cmrv93pst000hqx0w96xutpw5",
           "stage": "NEW"
-        },
-        {
-          "id": "cmrv51eij000aqx4oyphsryle",
-          "stage": "SENT"
         }
       ]
     },

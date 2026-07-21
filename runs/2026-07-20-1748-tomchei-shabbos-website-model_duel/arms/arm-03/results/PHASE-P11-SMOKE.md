@@ -32,11 +32,11 @@
     "id": "S2",
     "check": "Campaign flow + idempotent rerun",
     "pass": true,
-    "campaignId": "cmrv7wqx700j4qx4suqy9ytzl",
-    "created": 15,
-    "skippedRerun": 15,
+    "campaignId": "cmrv92kne00n2qx3od8w53h7b",
+    "created": 17,
+    "skippedRerun": 17,
     "rerunCreated": 0,
-    "deliveries": 15
+    "deliveries": 17
   },
   {
     "id": "S3",
@@ -95,18 +95,18 @@
       "o1": {
         "ok": true,
         "skipped": false,
-        "workerId": "cron_cmrv7ws6l00oyqx4s2shvs5oc_b96835",
-        "claimed": 0,
+        "workerId": "cron_cmrv92mmr00txqx3oln2s0lki_1ccf54",
+        "claimed": 1,
         "sent": 0,
         "failed": 0,
-        "captured": 0,
-        "runId": "cmrv7ws6l00oyqx4s2shvs5oc"
+        "captured": 1,
+        "runId": "cmrv92mmr00txqx3oln2s0lki"
       },
       "o2": {
         "ok": true,
         "skipped": true,
         "reason": "overlap",
-        "token": "p11-overlap-1784672471444"
+        "token": "p11-overlap-1784674423802"
       }
     },
     "raceClaimed": 1,

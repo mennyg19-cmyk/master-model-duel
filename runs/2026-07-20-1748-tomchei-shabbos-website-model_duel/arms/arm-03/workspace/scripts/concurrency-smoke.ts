@@ -1,50 +1,39 @@
-import { db } from "../src/lib/db";
+import { PrismaClient } from "@prisma/client";
 
+const db = new PrismaClient();
+
+// G-024 groundwork: 10 concurrent versioned updates against one row.
+// Optimistic versioning must let exactly one writer per version through and
+// report the rest as conflicts instead of silently overwriting.
 async function main() {
-  const fixture = await db.versionedFixture.upsert({
-    where: { label: "concurrency-fixture" },
-    create: { label: "concurrency-fixture", payload: "start", version: 1 },
-    update: { payload: "start", version: 1 },
+  const fixture = await db.concurrencyFixture.upsert({
+    where: { name: "smoke-counter" },
+    update: { counter: 0, version: 0 },
+    create: { name: "smoke-counter" },
   });
 
-  const expectedVersion = fixture.version;
-  const attempts = Array.from({ length: 10 }, (_, index) => index);
-
-  const results = await Promise.all(
-    attempts.map(async (index) => {
-      try {
-        const updated = await db.versionedFixture.updateMany({
-          where: { id: fixture.id, version: expectedVersion },
-          data: {
-            payload: `writer-${index}`,
-            version: { increment: 1 },
-          },
-        });
-        return { index, wrote: updated.count === 1 };
-      } catch (error) {
-        return {
-          index,
-          wrote: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-    }),
+  const attempts = await Promise.all(
+    Array.from({ length: 10 }, async () => {
+      const updated = await db.concurrencyFixture.updateMany({
+        where: { id: fixture.id, version: fixture.version },
+        data: { counter: { increment: 1 }, version: { increment: 1 } },
+      });
+      return updated.count === 1 ? "committed" : "conflict";
+    })
   );
 
-  const winners = results.filter((row) => row.wrote);
-  const conflicts = results.filter((row) => !row.wrote);
-  const latest = await db.versionedFixture.findUnique({ where: { id: fixture.id } });
+  const committed = attempts.filter((outcome) => outcome === "committed").length;
+  const conflicts = attempts.filter((outcome) => outcome === "conflict").length;
+  const finalRow = await db.concurrencyFixture.findUniqueOrThrow({ where: { id: fixture.id } });
 
-  const summary = {
-    ok: winners.length === 1 && conflicts.length === 9,
-    winners: winners.length,
-    conflicts: conflicts.length,
-    finalVersion: latest?.version,
-    finalPayload: latest?.payload,
-  };
+  console.log(`10 concurrent versioned updates: ${committed} committed, ${conflicts} conflicts`);
+  console.log(`Final counter=${finalRow.counter} version=${finalRow.version}`);
 
-  console.log(JSON.stringify(summary, null, 2));
-  if (!summary.ok) process.exit(1);
+  if (committed !== 1 || conflicts !== 9 || finalRow.counter !== 1) {
+    console.error("FAIL: expected exactly 1 commit and 9 reported conflicts");
+    process.exit(1);
+  }
+  console.log("PASS: conflicts reported, no silent overwrite");
 }
 
 main()
@@ -52,6 +41,4 @@ main()
     console.error(error);
     process.exit(1);
   })
-  .finally(async () => {
-    await db.$disconnect();
-  });
+  .finally(() => db.$disconnect());

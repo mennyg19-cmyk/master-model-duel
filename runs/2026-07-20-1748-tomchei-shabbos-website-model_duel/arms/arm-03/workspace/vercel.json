@@ -1,28 +1,11 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    {
-      "path": "/api/cron/season-auto-flip",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/pickup-expiry",
-      "schedule": "15 * * * *"
-    },
-    {
-      "path": "/api/cron/payment-reminder",
-      "schedule": "30 * * * *"
-    },
-    {
-      "path": "/api/cron/outbox-sweep",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/purge-email-log",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/payment-reconcile",
-      "schedule": "0 5 * * *"
-    }
+    { "path": "/api/cron/season-flip", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/payment-reminders", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/pickup-expiry", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/notification-sweeper", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/email-log-purge", "schedule": "30 3 * * *" },
+    { "path": "/api/cron/stripe-reconciliation", "schedule": "0 4 * * *" }
   ]
 }
