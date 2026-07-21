@@ -8,7 +8,12 @@ export const DEV_WEBHOOK_SECRET = "whsec_dev_mock_secret";
 // operator who copies one unchanged would sign every staff session with an
 // HMAC key anyone can read from the repo — real mode refuses to start (B1,
 // same fail-closed posture as the Stripe webhook secret guard below).
-const PUBLIC_SESSION_SECRET_DEFAULTS = new Set(["change-me-to-a-random-string"]);
+const PUBLIC_SESSION_SECRET_DEFAULTS = new Set([
+  "change-me-to-a-random-string",
+  // The dev secret shipped in this tree's .env — exactly as public as the
+  // .env.example placeholder, so real mode must refuse it too.
+  "dev-only-secret-not-for-production-1748",
+]);
 
 // `next build` evaluates modules with NODE_ENV=production before any real env
 // exists; the production-only guards must not fire during the build phase.
@@ -115,6 +120,18 @@ const envSchema = z
         path: ["SHIPPO_API_TOKEN"],
         message:
           "SHIPPO_API_TOKEN is set (live mode) but SHIPPO_FEDEX_ACCOUNT_ID / SHIPPO_UPS_ACCOUNT_ID are missing — live rates must use the org's negotiated carrier accounts",
+      });
+    }
+    // Rate-limit keys collapse to one shared bucket without a trusted client
+    // IP: 20 failed logins from anyone would lock out every user. Production
+    // always sits behind a proxy (Vercel or a reverse proxy), so refuse to
+    // start until TRUST_PROXY=true is set deliberately.
+    if (process.env.NODE_ENV === "production" && !isBuildPhase && !vars.TRUST_PROXY) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["TRUST_PROXY"],
+        message:
+          "TRUST_PROXY=true is required in production — without it every client shares one rate-limit bucket (trivial lockout DoS). Set it when serving behind Vercel or a reverse proxy that appends the client IP to X-Forwarded-For",
       });
     }
     if (process.env.NODE_ENV === "production" && !isBuildPhase && !vars.STRIPE_SECRET_KEY) {

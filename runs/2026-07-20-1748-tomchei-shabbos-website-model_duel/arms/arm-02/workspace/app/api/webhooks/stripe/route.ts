@@ -11,6 +11,10 @@ import { finalizeOrder } from "@/lib/domain/finalize";
 // unique event-id ledger. No same-origin guard — Stripe posts cross-origin;
 // the signature IS the authentication.
 
+// How long a "processing" claim is honored before a retry may take it over
+// (a crashed worker must not park an event in "processing" forever).
+const PROCESSING_GRACE_MS = 5 * 60 * 1000;
+
 const eventSchema = z.object({
   id: z.string().min(1),
   type: z.string().min(1),
@@ -51,23 +55,30 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Malformed event" }, { status: 400 });
   const event = parsed.data;
 
-  // Idempotency (R-167), pending → processed: the unique insert claims this
-  // event id with status "pending"; the flip to "processed" happens only after
-  // the money work below succeeds. A replay of a processed event is a no-op.
-  // A redelivery of a still-pending event (crash mid-work, 5xx retry) falls
-  // through and reprocesses — every handler below is retry-safe, so the
-  // original event is never permanently lost.
+  // Idempotency (R-167), pending → processing → processed: the unique insert
+  // registers the event id, then the conditional update below CLAIMS it —
+  // exactly one delivery wins, so two concurrent deliveries of the same event
+  // can never both run the money work (double-booked charge rows). A replay of
+  // a processed event is a no-op. A crash mid-work leaves the event stuck in
+  // "processing"; Stripe's retry reclaims it after the grace window — every
+  // handler below is retry-safe, so the original event is never lost.
   try {
     await db.stripeWebhookEvent.create({ data: { stripeEventId: event.id, type: event.type } });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      const claimed = await db.stripeWebhookEvent.findUnique({ where: { stripeEventId: event.id } });
-      if (!claimed || claimed.status === "processed") {
-        return Response.json({ received: true, replay: true });
-      }
-    } else {
-      throw error;
-    }
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+  }
+  const claim = await db.stripeWebhookEvent.updateMany({
+    where: {
+      stripeEventId: event.id,
+      OR: [
+        { status: "pending" },
+        { status: "processing", processedAt: { lt: new Date(Date.now() - PROCESSING_GRACE_MS) } },
+      ],
+    },
+    data: { status: "processing", processedAt: new Date() },
+  });
+  if (claim.count === 0) {
+    return Response.json({ received: true, replay: true });
   }
 
   if (event.type === "checkout.session.completed") {

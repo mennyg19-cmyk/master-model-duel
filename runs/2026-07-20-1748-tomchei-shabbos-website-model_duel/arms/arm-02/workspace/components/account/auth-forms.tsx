@@ -15,12 +15,14 @@ export function CustomerAuthForms() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function submit(formEvent: React.FormEvent) {
     formEvent.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);
+    setNoticeMessage(null);
     const endpoint = tab === "signin" ? "/api/account/login" : "/api/account/register";
     const payload = tab === "signin" ? { email, password } : { email, name, password };
     const response = await fetch(endpoint, {
@@ -32,6 +34,13 @@ export function CustomerAuthForms() {
     if (!response.ok) {
       const body = await response.json().catch(() => null);
       setErrorMessage(body?.error ?? "Something went wrong");
+      return;
+    }
+    const body = await response.json().catch(() => null);
+    if (body?.pendingVerification) {
+      // The email may already belong to a customer record — finishing up (or
+      // signing in) continues from the email we just sent (SR-01).
+      setNoticeMessage("Check your email — we sent you a link to finish setting up your account.");
       return;
     }
     router.push("/account");
@@ -55,6 +64,7 @@ export function CustomerAuthForms() {
             onClick={() => {
               setTab(candidate.id);
               setErrorMessage(null);
+              setNoticeMessage(null);
             }}
             className={cn(
               "flex-1 rounded px-2 py-1.5 text-xs font-medium",
@@ -89,6 +99,7 @@ export function CustomerAuthForms() {
           required
         />
         {errorMessage && <p className="text-sm text-danger">{errorMessage}</p>}
+        {noticeMessage && <p className="text-sm text-muted">{noticeMessage}</p>}
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Working…" : tab === "signin" ? "Sign in" : "Create account"}
         </Button>

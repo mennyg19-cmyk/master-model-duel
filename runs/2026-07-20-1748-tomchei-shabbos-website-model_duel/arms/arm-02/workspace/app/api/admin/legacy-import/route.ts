@@ -2,7 +2,8 @@ import { z } from "zod";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
-import { planLegacyImport, commitLegacyImport, legacyFileHash } from "@/lib/legacy-import";
+import { planLegacyImport, legacyFileHash } from "@/lib/legacy-import/plan";
+import { commitLegacyImport } from "@/lib/legacy-import/commit";
 
 // Legacy migration pipeline API (R-186, G-029). POST = dry-run (parse,
 // normalize, plan, write nothing but the run record + report), PUT = commit

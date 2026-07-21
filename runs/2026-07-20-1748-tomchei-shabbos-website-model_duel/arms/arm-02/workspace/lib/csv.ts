@@ -7,10 +7,17 @@ export const MAX_IMPORT_ROWS = 5000;
 // CSV writer half (P12 export center, R-092). Quotes any field containing a
 // comma, quote, or newline; doubles embedded quotes — the inverse of parseCsv,
 // so an exported file round-trips through our own reader.
+//
+// Formula neutralization (SR-04): exports are opened in Excel by staff, and
+// customer-controlled text (names, greetings, addresses) starting with = + -
+// or @ would execute as a formula there. A leading tab prefix defangs it —
+// spreadsheets show the value, and our own parseCsv round-trips it unchanged
+// apart from the invisible prefix.
 export function csvField(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";
-  const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  let text = String(value);
+  if (typeof value === "string" && /^[=+\-@]/.test(text)) text = `\t${text}`;
+  return /[",\r\n\t]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 export function csvLine(values: (string | number | null | undefined)[]): string {

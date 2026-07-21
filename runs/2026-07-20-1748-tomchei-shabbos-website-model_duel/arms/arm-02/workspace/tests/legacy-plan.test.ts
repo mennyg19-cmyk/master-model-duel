@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { db } from "../lib/db";
-import { planLegacyImport } from "../lib/legacy-import";
+import { planLegacyImport } from "../lib/legacy-import/plan";
 
 // Planner-only tests over the messy fixture (DB is read for merge targets but
 // nothing is written — the commit half is exercised by the P12 smoke).

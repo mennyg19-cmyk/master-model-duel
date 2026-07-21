@@ -93,6 +93,21 @@ export async function createOrderFromCart(input: CheckoutInput): Promise<Checkou
     if (!input.guestContact) {
       return { kind: "conflict", errors: ["Enter your name and email to place the order"], freshTotalCents: null };
     }
+    // Never silently attach a guest order to a REGISTERED account (SR-07):
+    // the email alone is unverified, and the account owner would see a
+    // stranger's order in their history. Passwordless staff-created records
+    // keep the link — that's the same person ordering by phone and web.
+    const registered = await db.customer.findUnique({
+      where: { email: input.guestContact.email.toLowerCase() },
+      select: { passwordHash: true, clerkUserId: true },
+    });
+    if (registered && (registered.passwordHash || registered.clerkUserId)) {
+      return {
+        kind: "conflict",
+        errors: ["An account already exists for this email — sign in to place your order"],
+        freshTotalCents: null,
+      };
+    }
     const customer = await findOrLinkCustomer(input.guestContact);
     customerId = customer.id;
   }
