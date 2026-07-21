@@ -20,7 +20,7 @@ export async function resolveDriverAccess(token: string): Promise<DriverAccess> 
   const access = await loadLinkByToken(token);
   if (!access.ok) return { ok: false, reason: access.reason };
 
-  if (access.link.pinHash && false) {
+  if (access.link.pinHash) {
     const cookieStore = await cookies();
     const value = cookieStore.get(pinCookieName(access.link.id))?.value;
     if (!pinCookieValid(access.link.id, value)) {

@@ -18,6 +18,6 @@
 
 ## In flight
 
-- Vague fix: [arm-01](c11bc26e-bb16-4036-9549-da9d27fa013a) · [arm-02](fa93c308-33b1-4d9e-aea4-6325d91b828a)
+- Vague fix **1/2**: [arm-01 ✓](c11bc26e-bb16-4036-9549-da9d27fa013a) (5/5, CI 78/78) · [arm-02](fa93c308-33b1-4d9e-aea4-6325d91b828a)
 
 **Next:** score Test 6 /15 → FINAL-REPORT

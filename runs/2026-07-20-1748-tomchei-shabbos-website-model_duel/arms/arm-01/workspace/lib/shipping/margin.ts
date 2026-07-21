@@ -27,6 +27,6 @@ export function resolveMargin(rates: CarrierRate[]): MarginDecision | { error: s
 
   const perCarrierBest = [...bestByCarrier.values()].sort((a, b) => a.amountCents - b.amountCents);
   const buy = perCarrierBest[0];
-  const chargeCents = perCarrierBest[0].amountCents;
+  const chargeCents = perCarrierBest[perCarrierBest.length - 1].amountCents;
   return { chargeCents, buy, marginCents: chargeCents - buy.amountCents, perCarrierBest };
 }

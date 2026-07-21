@@ -106,7 +106,7 @@ export function CheckoutForm({
   async function placeOrder() {
     setIsSubmitting(true);
     setConflictMessages([]);
-    const response = await fetch("/api/checkout/start", {
+    const response = await fetch("/api/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
