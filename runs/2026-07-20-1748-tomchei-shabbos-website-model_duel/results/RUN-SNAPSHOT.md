@@ -14,7 +14,7 @@
 
 | Test | Status |
 |---|---|
-| 1a inventory vs freeze + bonus | **5/5 partials ✓** — merge + grade pending |
+| 1a inventory vs freeze + bonus | **gated** — 6/7 (164/192); bonus_novel=2 — [grade](344a7406-a4ee-466a-80a1-bea705eb7945) |
 | 1b grill | pending |
 | 2 plan (not merged) + bonus_plan | pending |
 | 4 build from merged plan | pending (Test 3 skipped like originals) |
