@@ -15,7 +15,7 @@ type Payment = {
   postedBy: { displayName: string } | null;
 };
 
-type OrderDetail = {
+  type OrderDetail = {
   id: string;
   orderNumber: number | null;
   draftRef: string;
@@ -26,11 +26,30 @@ type OrderDetail = {
   customer: { id: string; displayName: string; email: string | null } | null;
   lines: Array<{ id: string; product: { name: string }; quantity: number; unitPriceCents: number }>;
   payments: Payment[];
+  packages?: Array<{
+    id: string;
+    recipientName: string;
+    stage: string;
+    fulfillmentMethod: { code: string };
+  }>;
+};
+
+type ShippingLabelRow = {
+  id: string;
+  packageId: string;
+  status: string;
+  carrier: string;
+  chargedCents: number;
+  purchasedCents: number;
+  marginCents: number;
+  trackingNumber: string | null;
+  routeAssignedAt: string | null;
 };
 
 export function OrderDetailClient({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [audits, setAudits] = useState<Array<{ id: string; action: string; createdAt: string; actor?: { displayName: string } | null }>>([]);
+  const [labels, setLabels] = useState<ShippingLabelRow[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [refundAmount, setRefundAmount] = useState("");
   const [refundPaymentId, setRefundPaymentId] = useState("");
@@ -49,6 +68,9 @@ export function OrderDetailClient({ orderId }: { orderId: string }) {
         setRefundAmount(String(first.amountCents - first.refundedCents));
       }
     }
+    const labelRes = await fetch(`/api/admin/orders/${orderId}/labels`);
+    const labelJson = await labelRes.json();
+    if (labelRes.ok) setLabels(labelJson.labels ?? []);
   }
 
   useEffect(() => {
@@ -76,6 +98,24 @@ export function OrderDetailClient({ orderId }: { orderId: string }) {
     const res = await fetch(`/api/admin/orders/${orderId}/repeat`, { method: "POST" });
     const json = await res.json();
     setMessage(res.ok ? `Repeated → draft ${json.draftRef}` : json.error || "Repeat failed");
+  }
+
+  async function labelAction(packageId: string, action: "create" | "void") {
+    setMessage(null);
+    const res = await fetch(`/api/admin/orders/${orderId}/labels`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action, packageId }),
+    });
+    const json = await res.json();
+    setMessage(
+      res.ok
+        ? action === "create"
+          ? `Label bought · margin ${json.margin?.marginCents}¢`
+          : `Voided ${json.labelId}`
+        : json.error || "Label action failed",
+    );
+    if (res.ok) await load();
   }
 
   if (!order) {
@@ -165,6 +205,48 @@ export function OrderDetailClient({ orderId }: { orderId: string }) {
             Refund
           </Button>
         </div>
+      </section>
+
+      <section className="rounded bg-white p-5 shadow-sm" data-testid="order-labels">
+        <h2 className="font-semibold">Shipping labels</h2>
+        <ul className="mt-2 space-y-2 text-sm">
+          {(order.packages ?? [])
+            .filter((p) => p.fulfillmentMethod.code === "SHIP")
+            .map((pkg) => (
+              <li key={pkg.id} className="flex flex-wrap items-center gap-2 rounded border px-3 py-2">
+                <span>
+                  {pkg.recipientName} · {pkg.stage}
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void labelAction(pkg.id, "create")}
+                  data-testid={`order-label-create-${pkg.id}`}
+                >
+                  Buy label
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void labelAction(pkg.id, "void")}
+                  data-testid={`order-label-void-${pkg.id}`}
+                >
+                  Void
+                </Button>
+              </li>
+            ))}
+        </ul>
+        {labels.length > 0 ? (
+          <ul className="mt-3 space-y-1 text-xs opacity-80" data-testid="order-label-list">
+            {labels.map((l) => (
+              <li key={l.id}>
+                {l.status} · {l.carrier} · charge {l.chargedCents}¢ / buy {l.purchasedCents}¢ /
+                margin {l.marginCents}¢ · {l.trackingNumber ?? "no track"}
+                {l.routeAssignedAt ? " · on route" : " · voidable"}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
 
       <section className="rounded bg-white p-5 shadow-sm" data-testid="order-audit">

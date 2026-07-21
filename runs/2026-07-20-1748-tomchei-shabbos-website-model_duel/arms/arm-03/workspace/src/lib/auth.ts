@@ -4,7 +4,7 @@ import {
   type StaffUser,
   StaffRole,
 } from "@prisma/client";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { auth as clerkAuth, currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
@@ -33,18 +33,29 @@ export type StaffContext = {
   permissions: Set<Permission>;
 };
 
+function devIdentityAllowlist(env: ReturnType<typeof getEnv>): Set<string> {
+  return new Set(
+    [
+      env.DEV_MANAGER_USER_ID,
+      env.DEV_STAFF_USER_ID,
+      env.DEV_DRIVER_USER_ID,
+      env.DEV_CUSTOMER_USER_ID,
+      env.DEV_ACTING_USER_ID,
+    ].filter((id): id is string => Boolean(id)),
+  );
+}
+
 export async function getAuthIdentity(): Promise<AuthIdentity | null> {
   const env = getEnv();
   if (env.AUTH_MODE === "dev") {
-    const headerStore = await headers();
+    // Fail closed in production: unsigned cookie identity must never ship.
+    if (env.NODE_ENV === "production") return null;
     const cookieStore = await cookies();
-    // No silent manager fallback — unsigned requests must stay guest-capable (P4).
+    // Cookie only — never trust client-supplied x-dev-user-id (spoofable).
     const acting =
-      headerStore.get("x-dev-user-id") ??
-      cookieStore.get("dev_user_id")?.value ??
-      env.DEV_ACTING_USER_ID ??
-      null;
+      cookieStore.get("dev_user_id")?.value ?? env.DEV_ACTING_USER_ID ?? null;
     if (!acting) return null;
+    if (!devIdentityAllowlist(env).has(acting)) return null;
     return {
       clerkUserId: acting,
       email: `${acting}@example.local`,

@@ -54,8 +54,8 @@ Failed: 0
     "status": 200,
     "body": {
       "ok": true,
-      "sourceId": "cmrv4vc1v000aqxesz9ghozq1",
-      "newPackageId": "cmrv4vc3j03icqxhcmv13zj01"
+      "sourceId": "cmrv51eij000aqx4oyphsryle",
+      "newPackageId": "cmrv51ezb04dbqxhcenbsdv2l"
     }
   },
   {
@@ -70,27 +70,27 @@ Failed: 0
     "pass": true,
     "body": {
       "ok": true,
-      "batchId": "cmrv4vc4e03imqxhcqza5s78q",
-      "runKey": "reprint-order:cmrv4vc0l0003qxesdfuoykfb:3b9b65adbaf8",
+      "batchId": "cmrv51f6g04dlqxhcmviep148",
+      "runKey": "reprint-order:cmrv51egr0003qx4obsqj4yru:36942662b60d",
       "created": true,
       "artifactCount": 7,
       "packageCount": 3,
       "stagesUnchanged": true,
       "packageStages": [
         {
-          "id": "cmrv4vc1v000aqxesz9ghozq1",
+          "id": "cmrv51eij000aqx4oyphsryle",
           "stage": "NEW",
-          "orderId": "cmrv4vc0l0003qxesdfuoykfb"
+          "orderId": "cmrv51egr0003qx4obsqj4yru"
         },
         {
-          "id": "cmrv4vc1y000hqxesdptcn4cp",
+          "id": "cmrv51eiu000hqx4o70ji4pcl",
           "stage": "NEW",
-          "orderId": "cmrv4vc0l0003qxesdfuoykfb"
+          "orderId": "cmrv51egr0003qx4obsqj4yru"
         },
         {
-          "id": "cmrv4vc3j03icqxhcmv13zj01",
+          "id": "cmrv51ezb04dbqxhcenbsdv2l",
           "stage": "NEW",
-          "orderId": "cmrv4vc0l0003qxesdfuoykfb"
+          "orderId": "cmrv51egr0003qx4obsqj4yru"
         }
       ]
     }
@@ -99,21 +99,21 @@ Failed: 0
     "id": "S1f",
     "check": "PACKAGE_SPLIT audit retained",
     "pass": true,
-    "auditId": "cmrv4vc3m03ikqxhcmvmiza4d"
+    "auditId": "cmrv51ezj04djqxhc7x1dkjdc"
   },
   {
     "id": "S2a",
     "check": "Print all artifacts → no stage change",
     "pass": true,
     "stagesBefore": {
-      "cmrv4vc1y000hqxesdptcn4cp": "NEW",
-      "cmrv4vc1v000aqxesz9ghozq1": "NEW",
-      "cmrv4vc3j03icqxhcmv13zj01": "NEW"
+      "cmrv51eij000aqx4oyphsryle": "NEW",
+      "cmrv51eiu000hqx4o70ji4pcl": "NEW",
+      "cmrv51ezb04dbqxhcenbsdv2l": "NEW"
     },
     "stagesAfter": {
-      "cmrv4vc1y000hqxesdptcn4cp": "NEW",
-      "cmrv4vc1v000aqxesz9ghozq1": "NEW",
-      "cmrv4vc3j03icqxhcmv13zj01": "NEW"
+      "cmrv51eij000aqx4oyphsryle": "NEW",
+      "cmrv51eiu000hqx4o70ji4pcl": "NEW",
+      "cmrv51ezb04dbqxhcenbsdv2l": "NEW"
     }
   },
   {
@@ -154,20 +154,20 @@ Failed: 0
     "pass": true,
     "first": {
       "ok": true,
-      "batchId": "cmrv4vd4k03j9qxhcnvolvrt2",
-      "runKey": "nightly:cmruro40z0007qx5wepn8bspr:2099-06-04",
+      "batchId": "cmrv51hpp04e8qxhcqn9vjs6i",
+      "runKey": "nightly:cmruro40z0007qx5wepn8bspr:2099-06-16",
       "created": true,
-      "artifactCount": 1040,
-      "packageCount": 5043,
+      "artifactCount": 1041,
+      "packageCount": 5045,
       "stagesUnchanged": true
     },
     "second": {
       "ok": true,
-      "batchId": "cmrv4vd4k03j9qxhcnvolvrt2",
-      "runKey": "nightly:cmruro40z0007qx5wepn8bspr:2099-06-04",
+      "batchId": "cmrv51hpp04e8qxhcqn9vjs6i",
+      "runKey": "nightly:cmruro40z0007qx5wepn8bspr:2099-06-16",
       "created": false,
-      "artifactCount": 1040,
-      "packageCount": 5043,
+      "artifactCount": 1041,
+      "packageCount": 5045,
       "stagesUnchanged": true
     }
   },
@@ -175,41 +175,41 @@ Failed: 0
     "id": "S3b",
     "check": "Reprint one group + one order without unrelated regen of nightly",
     "pass": true,
-    "batchCountBefore": 27,
-    "batchCountAfter": 29,
+    "batchCountBefore": 31,
+    "batchCountAfter": 33,
     "expectedDelta": 2,
     "reprintGroup": {
       "ok": true,
-      "batchId": "cmrv4ve1104c9qxhcn2cwsohr",
-      "runKey": "reprint-group:cmruro40z0007qx5wepn8bspr:PICKUP:4afc672e09db",
+      "batchId": "cmrv51iqo0579qxhcje0kf8y1",
+      "runKey": "reprint-group:cmruro40z0007qx5wepn8bspr:PICKUP:68379cb62d58",
       "created": true,
-      "artifactCount": 21,
-      "packageCount": 21,
+      "artifactCount": 22,
+      "packageCount": 22,
       "stagesUnchanged": true
     },
     "reprintOrder": {
       "ok": true,
-      "batchId": "cmrv4ve1w04cyqxhcvhahxdsl",
-      "runKey": "reprint-order:cmrv4vc0l0003qxesdfuoykfb:811eb3b4002c",
+      "batchId": "cmrv51iry057zqxhc5pjy750w",
+      "runKey": "reprint-order:cmrv51egr0003qx4obsqj4yru:e0f9fffec2ba",
       "created": true,
       "artifactCount": 7,
       "packageCount": 3,
       "stagesUnchanged": true,
       "packageStages": [
         {
-          "id": "cmrv4vc1v000aqxesz9ghozq1",
+          "id": "cmrv51eij000aqx4oyphsryle",
           "stage": "SENT",
-          "orderId": "cmrv4vc0l0003qxesdfuoykfb"
+          "orderId": "cmrv51egr0003qx4obsqj4yru"
         },
         {
-          "id": "cmrv4vc1y000hqxesdptcn4cp",
+          "id": "cmrv51eiu000hqx4o70ji4pcl",
           "stage": "NEW",
-          "orderId": "cmrv4vc0l0003qxesdfuoykfb"
+          "orderId": "cmrv51egr0003qx4obsqj4yru"
         },
         {
-          "id": "cmrv4vc3j03icqxhcmv13zj01",
+          "id": "cmrv51ezb04dbqxhcenbsdv2l",
           "stage": "NEW",
-          "orderId": "cmrv4vc0l0003qxesdfuoykfb"
+          "orderId": "cmrv51egr0003qx4obsqj4yru"
         }
       ]
     }
@@ -220,15 +220,15 @@ Failed: 0
     "pass": true,
     "stages": [
       {
-        "id": "cmrv4vc1y000hqxesdptcn4cp",
+        "id": "cmrv51eiu000hqx4o70ji4pcl",
         "stage": "NEW"
       },
       {
-        "id": "cmrv4vc3j03icqxhcmv13zj01",
+        "id": "cmrv51ezb04dbqxhcenbsdv2l",
         "stage": "NEW"
       },
       {
-        "id": "cmrv4vc1v000aqxesz9ghozq1",
+        "id": "cmrv51eij000aqx4oyphsryle",
         "stage": "SENT"
       }
     ]

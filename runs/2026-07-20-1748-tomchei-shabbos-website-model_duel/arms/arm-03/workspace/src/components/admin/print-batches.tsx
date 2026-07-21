@@ -49,7 +49,11 @@ export function PrintBatchesClient() {
       return;
     }
     const stages = (json.packageStages ?? []) as Array<{ id: string; stage: string }>;
-    const unshipped = stages.every((s) => s.stage !== "SENT" && s.stage !== "PICKED_UP");
+    // Empty packageStages (large nightly) must not vacuously claim stillUnshipped.
+    const unshipped =
+      stages.length === 0
+        ? Boolean(json.stagesUnchanged)
+        : stages.every((s) => s.stage !== "SENT" && s.stage !== "PICKED_UP");
     setMessage(
       `${body.action}: batch ${json.batchId?.slice(0, 8)} · created=${json.created ?? true} · artifacts=${json.artifactCount} · stagesUnchanged=${json.stagesUnchanged} · stillUnshipped=${unshipped}`,
     );

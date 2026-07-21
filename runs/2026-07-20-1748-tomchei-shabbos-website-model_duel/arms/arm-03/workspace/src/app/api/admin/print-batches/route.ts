@@ -13,24 +13,17 @@ import {
 const batchSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("nightly"),
-    seasonId: z.string().min(1).optional(),
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   }),
   z.object({
     action: z.literal("reprint-group"),
-    seasonId: z.string().min(1).optional(),
     filingGroup: z.string().trim().min(1).max(80),
   }),
   z.object({
     action: z.literal("reprint-order"),
-    seasonId: z.string().min(1).optional(),
     orderId: z.string().min(1),
   }),
 ]);
-
-function sanitizeFilename(raw: string): string {
-  return raw.replace(/["\r\n\\]/g, "_").slice(0, 120);
-}
 
 export async function GET(request: Request) {
   try {
@@ -57,9 +50,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "No season" }, { status: 409 });
     }
     const actorId = staff.effectiveStaff.id;
-    const seasonId = parsed.action === "reprint-order"
-      ? (parsed.seasonId ?? season.id)
-      : (parsed.seasonId ?? season.id);
+    // Always current season — client-supplied seasonId rejected (no archived-season override).
+    const seasonId = season.id;
 
     if (parsed.action === "nightly") {
       const result = await runNightlyPrintBatch({
@@ -98,5 +90,3 @@ export async function POST(request: Request) {
     return apiErrorResponse(error);
   }
 }
-
-export { sanitizeFilename };

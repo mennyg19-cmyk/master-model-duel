@@ -63,6 +63,10 @@ enum AuditAction {
   PACKAGE_SPLIT
   PACKAGE_REGROUPED
   PRINT_BATCH_CREATED
+  LABEL_PURCHASED
+  LABEL_VOIDED
+  LABEL_FAILED
+  TRACKING_REFRESHED
 }
 
 enum ImportKind {
@@ -120,6 +124,12 @@ enum PackageStage {
   PACKED
   SENT
   PICKED_UP
+}
+
+enum ShippingLabelStatus {
+  PURCHASED
+  VOIDED
+  FAILED
 }
 
 enum PrintBatchKind {
@@ -504,6 +514,7 @@ model Order {
   stripeIntents     StripePaymentIntent[]
   stripeSessions    StripeCheckoutSession[]
   shippingQuotes    ShippingQuote[]
+  shippingLabels    ShippingLabel[]
 
   @@unique([seasonId, orderNumber])
   @@index([seasonId, status])
@@ -587,6 +598,9 @@ model Package {
   fulfillmentMethod FulfillmentMethod @relation(fields: [fulfillmentMethodId], references: [id], onDelete: Restrict)
   items             PackageItem[]
   audits            PackageAuditLog[]
+  shippingLabels    ShippingLabel[]
+  /// Bin-packing / shipment plan snapshot (R-081).
+  shipmentPlan      Json?
 
   @@index([orderId])
   @@index([groupingKey])
@@ -728,6 +742,41 @@ model ShippingQuote {
 
   @@index([orderId])
   @@index([expiresAt])
+}
+
+/// Purchased Shippo label with UR-003 margin capture (charge high / buy low).
+model ShippingLabel {
+  id                    String              @id @default(cuid())
+  packageId             String
+  orderId               String
+  status                ShippingLabelStatus @default(PURCHASED)
+  carrier               String
+  serviceLevel          String
+  shippoRateId          String?
+  shippoTransactionId   String?
+  trackingNumber        String?
+  labelUrl              String?
+  /// Customer-facing charge (highest eligible quote).
+  chargedCents          Int
+  /// Carrier cost actually purchased (cheapest eligible).
+  purchasedCents        Int
+  marginCents           Int
+  quotesJson            Json
+  trackingStatus        String?
+  trackingUpdatedAt     DateTime?
+  /// P9 stub: set when assigned to a delivery route; null ⇒ still voidable.
+  routeAssignedAt       DateTime?
+  failureReason         String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  voidedAt              DateTime?
+
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([packageId, status])
+  @@index([orderId])
+  @@index([trackingNumber])
 }
 
 model PickupLocation {

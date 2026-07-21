@@ -17,7 +17,7 @@
 | 1a inventory vs freeze + bonus | **gated** — 6/7 (164/192); bonus_novel=2 — [grade](344a7406-a4ee-466a-80a1-bea705eb7945) |
 | 1b grill | **gated** — 8/8 (turn_quality 1.985; T12 explain-down dock) — [grade](d8d77458-bf6d-4daa-a484-ef0af94c7f05) |
 | 2 plan (not merged) + bonus_plan | **gated** — 15/15 + bonus_plan — [review](5eafd426-7bd7-4ba8-872f-4ac8ae110dc3) |
-| 4 build from merged plan | **P1-P4 ✓ gated** · **P5 next** (4/12) — [P4 fix](78d09488-16e8-44bd-ad2a-138329a55661) |
+| 4 build from merged plan | **P1-P7 ✓ gated** · **P8-P12 + Tests 5-6 in flight** (7/12) |
 | 5 self-review | pending |
 | 6 detect/fix | **rerun** (arm-03 only) — same arm-02 clone + B1–B5 seeds; arm-01/02 scores frozen |
 

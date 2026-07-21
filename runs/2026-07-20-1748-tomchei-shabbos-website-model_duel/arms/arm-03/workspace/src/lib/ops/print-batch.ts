@@ -413,10 +413,12 @@ export async function reprintFilingGroup(input: {
 > {
   try {
     const group = filingGroupForMethodCode(input.filingGroup);
+    // Exclude terminal stages — no stale paperwork for shipped/picked-up packages.
     const packages = (await db.package.findMany({
       where: {
         order: { seasonId: input.seasonId },
         fulfillmentMethod: { code: { equals: group, mode: "insensitive" } },
+        stage: { notIn: ["SENT", "PICKED_UP"] },
       },
       include: packageLoadInclude(),
       orderBy: [{ createdAt: "asc" }],

@@ -94,7 +94,8 @@ export async function loadPurimWeekDays(): Promise<string[]> {
 }
 
 /**
- * Placeholder rate-resolution (live Shippo deferred to P8).
+ * Sync fee breakdown. SHIP uses placeholder only when live quotes are unavailable;
+ * checkout prefers `resolveDeliveryFeesLive` (P8).
  * BULK: one fee per destination. PER_PACKAGE: fee per recipient + hard zip block.
  */
 export function resolveDeliveryFees(

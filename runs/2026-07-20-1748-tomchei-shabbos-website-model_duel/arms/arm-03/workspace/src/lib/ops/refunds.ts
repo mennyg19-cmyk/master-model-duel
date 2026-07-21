@@ -4,25 +4,13 @@ import {
   PaymentMethod,
   PaymentState,
   type Payment,
-  type Prisma,
 } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { err, maskError, ok, type Result } from "@/lib/result";
+import { lockPaymentForUpdate } from "@/lib/orders/lock";
 import { getStripe, getStripeMode } from "@/lib/stripe/client";
 import { recalcOrderPaymentStatus } from "@/lib/payments/offline";
-
-type Tx = Prisma.TransactionClient;
-
-async function lockPaymentForUpdate(tx: Tx, paymentId: string) {
-  const rows = await tx.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM "Payment" WHERE id = ${paymentId} FOR UPDATE
-  `;
-  if (rows.length === 0) {
-    throw new Error(`Payment ${paymentId} not found`);
-  }
-  return tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
-}
 
 function refundIdempotencyKey(
   paymentId: string,

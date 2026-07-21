@@ -6,6 +6,7 @@ import {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { err, maskError, ok, type Result } from "@/lib/result";
+import { requirePackageInSeasonLocked } from "@/lib/orders/lock";
 
 type Tx = Prisma.TransactionClient;
 
@@ -64,14 +65,7 @@ async function lockPackageForUpdate(
   packageId: string,
   seasonId: string,
 ): Promise<Package & { fulfillmentMethod: { code: string } }> {
-  const scoped = await tx.package.findFirst({
-    where: { id: packageId, order: { seasonId } },
-    select: { id: true },
-  });
-  if (!scoped) {
-    throw new Error(`Package ${packageId} not found`);
-  }
-  await tx.$queryRaw`SELECT id FROM "Package" WHERE id = ${packageId} FOR UPDATE`;
+  await requirePackageInSeasonLocked(tx, packageId, seasonId);
   return tx.package.findUniqueOrThrow({
     where: { id: packageId },
     include: { fulfillmentMethod: { select: { code: true } } },

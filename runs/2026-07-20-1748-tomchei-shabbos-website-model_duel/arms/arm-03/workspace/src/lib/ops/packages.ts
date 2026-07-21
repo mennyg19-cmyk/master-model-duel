@@ -12,6 +12,7 @@ import {
   canTransitionPackage,
 } from "@/lib/orders/package-stages";
 import { buildGroupingKey } from "@/lib/orders/grouping";
+import { requirePackageInSeasonLocked } from "@/lib/orders/lock";
 
 type Tx = Prisma.TransactionClient;
 
@@ -163,7 +164,6 @@ export async function fulfillmentChannelDashboard(seasonId: string) {
   const methods = await db.fulfillmentMethod.findMany({
     orderBy: { code: "asc" },
   });
-  const methodById = new Map(methods.map((m) => [m.id, m]));
 
   type Channel = {
     methodId: string;
@@ -192,25 +192,7 @@ export async function fulfillmentChannelDashboard(seasonId: string) {
 
   for (const row of rows) {
     const channel = channels.get(row.fulfillmentMethodId);
-    if (!channel) {
-      const method = methodById.get(row.fulfillmentMethodId);
-      if (!method) continue;
-      channels.set(row.fulfillmentMethodId, {
-        methodId: method.id,
-        code: method.code,
-        name: method.label,
-        total: row._count._all,
-        byStage: {
-          NEW: 0,
-          PRINTED: 0,
-          PACKED: 0,
-          SENT: 0,
-          PICKED_UP: 0,
-          [row.stage]: row._count._all,
-        },
-      });
-      continue;
-    }
+    if (!channel) continue; // orphaned FK — skip rather than invent a channel
     channel.total += row._count._all;
     channel.byStage[row.stage] = (channel.byStage[row.stage] ?? 0) + row._count._all;
   }
@@ -240,12 +222,7 @@ export async function fulfillmentChannelDashboard(seasonId: string) {
 }
 
 async function lockPackage(tx: Tx, packageId: string, seasonId: string) {
-  const scoped = await tx.package.findFirst({
-    where: { id: packageId, order: { seasonId } },
-    select: { id: true },
-  });
-  if (!scoped) throw new Error(`Package ${packageId} not found`);
-  await tx.$queryRaw`SELECT id FROM "Package" WHERE id = ${packageId} FOR UPDATE`;
+  await requirePackageInSeasonLocked(tx, packageId, seasonId);
   return tx.package.findUniqueOrThrow({
     where: { id: packageId },
     include: { items: true, fulfillmentMethod: true },

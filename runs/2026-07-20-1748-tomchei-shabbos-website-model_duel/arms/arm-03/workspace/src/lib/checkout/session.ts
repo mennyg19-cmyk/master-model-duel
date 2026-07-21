@@ -16,6 +16,7 @@ import {
 } from "@/lib/checkout/greetings";
 import {
   validateCheckoutLines,
+  zipBlockedConflict,
   type CheckoutConflict,
   type ValidationLine,
 } from "@/lib/checkout/validation";
@@ -182,6 +183,8 @@ export async function buildCheckoutSummary(orderId: string) {
     donationCents: order.donationCents,
     subtotalCents: validation.subtotalCents,
     fees: breakdown,
+    liveShip: breakdown.liveShip,
+    shipQuotes: breakdown.shipQuotes,
     totalCents: validation.subtotalCents + breakdown.totalFeeCents + order.donationCents,
     conflicts: validation.conflicts,
     purimDays,
@@ -340,7 +343,7 @@ export async function prepareCheckout(
     const feeSettings = await loadDeliveryFees();
     const zips = await loadAllowedDeliveryZips();
     const feeLines = toFeeLines(refreshed);
-    const breakdown = resolveDeliveryFees(feeLines, feeSettings, zips);
+    const breakdown = await resolveDeliveryFeesLive(feeLines, feeSettings, zips);
 
     try {
       assertPerPackageZipsAllowed(breakdown);
@@ -348,13 +351,7 @@ export async function prepareCheckout(
       if (error instanceof ZipBlockedError) {
         return ok({
           summary: await buildCheckoutSummary(input.orderId),
-          conflicts: [
-            {
-              kind: "zip_blocked",
-              zips: error.zips,
-              message: error.message,
-            },
-          ],
+          conflicts: [zipBlockedConflict(error.zips, error.message)],
         });
       }
       throw error;
@@ -371,6 +368,8 @@ export async function prepareCheckout(
 
     const snapshot: Prisma.InputJsonValue = {
       fees: breakdown,
+      liveShip: breakdown.liveShip,
+      shipQuotes: breakdown.shipQuotes,
       subtotalCents: validation.subtotalCents,
       donationCents: refreshed.donationCents,
       expectedTotalCents: expectedTotal,
@@ -418,7 +417,7 @@ export async function createHostedCheckoutSession(input: {
     const feeSettings = await loadDeliveryFees();
     const zips = await loadAllowedDeliveryZips();
     const feeLines = toFeeLines(order);
-    const breakdown = resolveDeliveryFees(feeLines, feeSettings, zips);
+    const breakdown = await resolveDeliveryFeesLive(feeLines, feeSettings, zips);
 
     try {
       assertPerPackageZipsAllowed(breakdown);
@@ -428,13 +427,7 @@ export async function createHostedCheckoutSession(input: {
           sessionId: "",
           url: "",
           amountCents: 0,
-          conflicts: [
-            {
-              kind: "zip_blocked",
-              zips: error.zips,
-              message: error.message,
-            },
-          ],
+          conflicts: [zipBlockedConflict(error.zips, error.message)],
         });
       }
       throw error;
@@ -537,13 +530,7 @@ export async function createHostedCheckoutSession(input: {
         sessionId: "",
         url: "",
         amountCents: 0,
-        conflicts: [
-          {
-            kind: "zip_blocked",
-            zips: error.zips,
-            message: error.message,
-          },
-        ],
+        conflicts: [zipBlockedConflict(error.zips, error.message)],
       });
     }
     return err(maskError(error), "Could not start Stripe checkout.");

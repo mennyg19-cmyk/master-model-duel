@@ -127,6 +127,28 @@ export function PackageBoardClient() {
     }
   }
 
+  async function labelAction(packageId: string, action: "create" | "void") {
+    setMessage(null);
+    const res = await fetch(`/api/admin/packages/${packageId}/label`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setMessage(json.error || `Label ${action} failed`);
+      return;
+    }
+    if (action === "create") {
+      setMessage(
+        `Label ${json.label?.trackingNumber ?? json.label?.id}: charge ${json.margin?.chargedCents}¢ buy ${json.margin?.purchasedCents}¢ margin ${json.margin?.marginCents}¢`,
+      );
+    } else {
+      setMessage(`Voided label ${json.labelId}`);
+    }
+    await load();
+  }
+
   return (
     <div className="space-y-4" data-testid="package-board">
       <div className="flex flex-wrap gap-2">
@@ -193,6 +215,26 @@ export function PackageBoardClient() {
               <Button type="button" variant="secondary" onClick={() => void split(pkg)} data-testid={`package-split-${pkg.id}`}>
                 Split first item
               </Button>
+              {pkg.fulfillmentMethod.code === "SHIP" ? (
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void labelAction(pkg.id, "create")}
+                    data-testid={`package-label-create-${pkg.id}`}
+                  >
+                    Buy label
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void labelAction(pkg.id, "void")}
+                    data-testid={`package-label-void-${pkg.id}`}
+                  >
+                    Void label
+                  </Button>
+                </div>
+              ) : null}
             </div>
             <ul className="mt-2 text-xs opacity-80">
               {pkg.items.map((item) => (

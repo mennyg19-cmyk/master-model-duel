@@ -37,6 +37,10 @@ export type CheckoutConflict =
   | { kind: "zip_blocked"; zips: string[]; message: string }
   | { kind: "tampered_price"; message: string };
 
+export function zipBlockedConflict(zips: string[], message: string): CheckoutConflict {
+  return { kind: "zip_blocked", zips, message };
+}
+
 export type CheckoutValidationResult = {
   ok: boolean;
   conflicts: CheckoutConflict[];
