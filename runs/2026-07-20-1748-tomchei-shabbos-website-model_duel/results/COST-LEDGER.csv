@@ -206,3 +206,10 @@
 2026-07-21T15:07:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,review_aggregate,glm-5.2-high,95bf2385-0564-4c6c-a718-19c1eeb16516,,,,,,,,31 deduped 6 blockers; usage_missing_pending_export
 2026-07-21T15:14:35Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,builder,cursor-grok-4.5-high,18af1716-6769-409d-aa0f-1bb7e0ba260d,,,,,,,,storefront catalog archive newsletter admin; usage_missing_pending_export
 2026-07-21T15:14:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,fix,cursor-grok-4.5-high,c322c874-6060-489e-9068-3e6389e1a35d,,,,,,,,B1-B6 H1-H3 fixed S1-S5 pass; usage_missing_pending_export
+2026-07-21T16:30:03Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P4,builder,cursor-grok-4.5-high,a69e9e23-da0e-4894-b602-4139bc0690e7,,,,,,,,cart-first builder address book account; smoke 15/15; usage_missing_pending_export
+2026-07-21T16:32:45Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P4,review_security,glm-5.2-high,eda5627d-a4bc-4e6f-b5fe-95005467b4dc,,,,,,,,1 high 4 med; usage_missing
+2026-07-21T16:32:45Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P4,review_quality,glm-5.2-high,e66974a1-30d6-4c52-a92b-53816d1abf06,,,,,,,,10 findings 0 high; usage_missing
+2026-07-21T16:32:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P4,review_rules,glm-5.2-high,7cb4fcef-41f6-4e02-9620-6d3a33f1a73c,,,,,,,,15 findings; usage_missing
+2026-07-21T16:32:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P4,review_clean_code,glm-5.2-high,476a693d-2d3e-4540-a172-873b6bc5abe7,,,,,,,,11 findings; usage_missing
+2026-07-21T16:36:38Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P4,review_aggregate,glm-5.2-high,027894f7-8af1-46fd-9836-f1a45395cff5,,,,,,,,41 deduped 1 blocker; usage_missing
+2026-07-21T16:45:15Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P4,fix,cursor-grok-4.5-high,78d09488-16e8-44bd-ad2a-138329a55661,,,,,,,,B1 M1-M3 M5-M8 M10 fixed smoke 16/16; usage_missing

@@ -104,7 +104,10 @@ async function main() {
       body: JSON.stringify({ seasonId: current.id, status: "OPEN" }),
     });
     const openAgain = await req("/order");
-    reopened = openAgain.text.includes("order-open-placeholder");
+    reopened =
+      openAgain.text.includes("order-open-placeholder") ||
+      openAgain.text.includes("order-builder") ||
+      openAgain.text.includes("order-open");
     push("S2c", "Reopen season restores /order", reopened);
   } else {
     push("S2b", "Closed season blocks /order + banner", false, { error: "missing season" });

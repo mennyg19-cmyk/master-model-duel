@@ -42,6 +42,12 @@ enum AuditAction {
   MEDIA_REJECTED
   NEWSLETTER_SUBSCRIBED
   NEWSLETTER_UNSUBSCRIBED
+  ADDRESS_CREATED
+  ADDRESS_UPDATED
+  ADDRESS_STAFF_EDITED
+  DRAFT_CREATED
+  DRAFT_UPDATED
+  DRAFT_GUEST_CLEARED
 }
 
 enum SeasonStatus {
@@ -353,29 +359,32 @@ model ProductReplacement {
 }
 
 model SavedAddress {
-  id           String   @id @default(cuid())
-  customerId   String
-  label        String?
+  id            String    @id @default(cuid())
+  customerId    String
+  label         String?
   recipientName String
-  line1        String
-  line2        String?
-  city         String
-  state        String
-  postalCode   String
-  country      String   @default("US")
-  phone        String?
-  latitude     Float?
-  longitude    Float?
+  line1         String
+  line2         String?
+  city          String
+  state         String
+  postalCode    String
+  country       String    @default("US")
+  phone         String?
+  /// Normalized key for ownership-scoped dedupe (recipient+street+city+state+zip+country).
+  addressNorm   String
+  latitude      Float?
+  longitude     Float?
   geocodeStatus String?
-  geocodedAt   DateTime?
-  isDefault    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  geocodedAt    DateTime?
+  isDefault     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
   orderLines OrderLine[]
   packages   Package[]
 
+  @@unique([customerId, addressNorm])
   @@index([customerId])
   @@index([postalCode])
 }
@@ -401,11 +410,16 @@ model Order {
   status               OrderStatus         @default(DRAFT)
   orderNumber          Int?
   draftRef             String              @unique
+  /// SHA-256 hash of guest access token (raw token never stored).
+  guestAccessTokenHash String?
+  guestTokenVersion    Int                 @default(1)
   greetingDefault      String?
   paymentStatusCached  CachedPaymentStatus @default(UNPAID)
   version              Int                 @default(1)
   placedAt             DateTime?
   discardedAt          DateTime?
+  /// Set when guest checkout succeeds and local draft access is revoked.
+  guestClearedAt       DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
@@ -421,35 +435,38 @@ model Order {
   @@index([seasonId, status])
   @@index([customerId])
   @@index([status])
+  @@index([guestAccessTokenHash])
 }
 
 model OrderLine {
-  id                   String   @id @default(cuid())
-  orderId              String
-  productId            String
-  productOptionId      String?
-  quantity             Int      @default(1)
-  unitPriceCents       Int
-  optionAdjustCents    Int      @default(0)
-  recipientName        String
-  addressLine1         String
-  addressLine2         String?
-  city                 String
-  state                String
-  postalCode           String
-  country              String   @default("US")
-  savedAddressId       String?
-  fulfillmentMethodId  String
-  greeting             String   @default("")
-  groupingKey          String
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  orderId             String
+  productId           String
+  productOptionId     String?
+  quantity            Int      @default(1)
+  unitPriceCents      Int
+  optionAdjustCents   Int      @default(0)
+  /// Null while cart line awaits recipient assignment (cart-first builder).
+  recipientName       String?
+  addressLine1        String?
+  addressLine2        String?
+  city                String?
+  state               String?
+  postalCode          String?
+  country             String?  @default("US")
+  savedAddressId      String?
+  /// Fulfillment chosen at checkout (P5); optional during draft build.
+  fulfillmentMethodId String?
+  greeting            String   @default("")
+  groupingKey         String   @default("unassigned")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  order             Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product           Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
-  productOption     ProductOption?    @relation(fields: [productOptionId], references: [id], onDelete: SetNull)
-  savedAddress      SavedAddress?     @relation(fields: [savedAddressId], references: [id], onDelete: SetNull)
-  fulfillmentMethod FulfillmentMethod @relation(fields: [fulfillmentMethodId], references: [id], onDelete: Restrict)
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product           Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productOption     ProductOption?     @relation(fields: [productOptionId], references: [id], onDelete: SetNull)
+  savedAddress      SavedAddress?      @relation(fields: [savedAddressId], references: [id], onDelete: SetNull)
+  fulfillmentMethod FulfillmentMethod? @relation(fields: [fulfillmentMethodId], references: [id], onDelete: Restrict)
   addOns            OrderLineAddOn[]
   packageItems      PackageItem[]
 

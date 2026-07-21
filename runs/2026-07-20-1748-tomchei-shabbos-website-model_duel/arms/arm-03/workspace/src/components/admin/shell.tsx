@@ -5,6 +5,7 @@ import { StopImpersonationButton } from "@/components/admin/stop-impersonation-b
 
 const NAV: { href: string; label: string; permission: Permission }[] = [
   { href: "/admin", label: "Dashboard", permission: "admin.access" },
+  { href: "/admin/pos", label: "POS", permission: "admin.access" },
   { href: "/admin/catalog", label: "Catalog", permission: "settings.write" },
   { href: "/admin/media", label: "Media", permission: "settings.write" },
   { href: "/admin/staff", label: "Staff", permission: "staff.manage" },

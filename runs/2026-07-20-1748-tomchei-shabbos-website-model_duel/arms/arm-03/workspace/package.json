@@ -19,7 +19,8 @@
     "ci:migrate-guard": "node scripts/migrate-guard.mjs",
     "ci": "npm run lint && npm run typecheck && npm run ci:migrate-guard && npm run test:permissions && npm run test:domain-p2",
     "smoke": "node --env-file=.env scripts/smoke.mjs",
-    "smoke:p3": "node --env-file=.env scripts/smoke-p3.mjs"
+    "smoke:p3": "node --env-file=.env scripts/smoke-p3.mjs",
+    "smoke:p4": "node --env-file=.env scripts/smoke-p4.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "6.12.0",

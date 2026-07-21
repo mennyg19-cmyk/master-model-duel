@@ -114,6 +114,8 @@ async function main() {
       state: "NY",
       postalCode: "11218",
       country: "US",
+      addressNorm:
+        "baseline customer|100 main st||brooklyn|ny|11218|us",
       latitude: 40.635,
       longitude: -73.976,
       geocodeStatus: "ok",
@@ -126,6 +128,35 @@ async function main() {
       city: "Brooklyn",
       state: "NY",
       postalCode: "11218",
+      addressNorm:
+        "baseline customer|100 main st||brooklyn|ny|11218|us",
+    },
+  });
+
+  await db.savedAddress.upsert({
+    where: { id: "seed-addr-customer-friend" },
+    create: {
+      id: "seed-addr-customer-friend",
+      customerId: customer.id,
+      label: "Friend — Rivky",
+      recipientName: "Rivky Cohen",
+      line1: "200 Ocean Pkwy",
+      city: "Brooklyn",
+      state: "NY",
+      postalCode: "11218",
+      country: "US",
+      addressNorm: "rivky cohen|200 ocean pkwy||brooklyn|ny|11218|us",
+      latitude: 40.63,
+      longitude: -73.97,
+      geocodeStatus: "ok",
+      geocodedAt: new Date(),
+      isDefault: false,
+    },
+    update: {
+      customerId: customer.id,
+      recipientName: "Rivky Cohen",
+      line1: "200 Ocean Pkwy",
+      addressNorm: "rivky cohen|200 ocean pkwy||brooklyn|ny|11218|us",
     },
   });
 
@@ -520,11 +551,11 @@ async function main() {
     where: { key: SETUP_LOCK_KEY },
     create: {
       key: SETUP_LOCK_KEY,
-      value: { complete: true, seeded: true, phase: "P3" },
+      value: { complete: true, seeded: true, phase: "P4" },
       version: 1,
     },
     update: {
-      value: { complete: true, seeded: true, phase: "P3" },
+      value: { complete: true, seeded: true, phase: "P4" },
     },
   });
 

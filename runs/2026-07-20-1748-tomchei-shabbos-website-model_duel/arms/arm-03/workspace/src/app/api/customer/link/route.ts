@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     const result = await linkOrCreateCustomer({
       clerkUserId: identity.clerkUserId,
       email: identity.email,
+      emailVerified: identity.emailVerified,
       phone: body.phone,
       displayName: body.displayName ?? identity.displayName,
     });

@@ -6,11 +6,14 @@ import { err, ok, type Result } from "@/lib/result";
 export async function linkOrCreateCustomer(input: {
   clerkUserId: string;
   email?: string | null;
+  /** Required true before email-match linking (B1). Dev identities default verified. */
+  emailVerified?: boolean;
   phone?: string | null;
   displayName: string;
 }): Promise<Result<{ customerId: string; linked: boolean }>> {
   const email = input.email ? normalizeEmail(input.email) : null;
   const phoneNorm = input.phone ? normalizePhone(input.phone) : null;
+  const canLinkByEmail = Boolean(email && input.emailVerified === true);
 
   const existingByClerk = await db.customer.findUnique({
     where: { clerkUserId: input.clerkUserId },
@@ -19,7 +22,7 @@ export async function linkOrCreateCustomer(input: {
     return ok({ customerId: existingByClerk.id, linked: true });
   }
 
-  if (email) {
+  if (canLinkByEmail && email) {
     const byEmail =
       (await db.customer.findUnique({ where: { emailNorm: email } })) ??
       (await db.customer.findUnique({ where: { email } }));
@@ -47,11 +50,13 @@ export async function linkOrCreateCustomer(input: {
     );
   }
 
+  // Unverified emails must not claim an existing customer's emailNorm unique slot.
+  const storeEmail = canLinkByEmail ? email : null;
   const created = await db.customer.create({
     data: {
       clerkUserId: input.clerkUserId,
-      email,
-      emailNorm: email,
+      email: storeEmail,
+      emailNorm: storeEmail,
       phone: input.phone ?? null,
       phoneNorm,
       displayName: input.displayName,

@@ -20,6 +20,8 @@ import { normalizeEmail } from "@/lib/normalize";
 export type AuthIdentity = {
   clerkUserId: string;
   email: string | null;
+  /** False when Clerk primary email is present but not verified — never link by email. */
+  emailVerified: boolean;
   displayName: string;
 };
 
@@ -36,14 +38,17 @@ export async function getAuthIdentity(): Promise<AuthIdentity | null> {
   if (env.AUTH_MODE === "dev") {
     const headerStore = await headers();
     const cookieStore = await cookies();
+    // No silent manager fallback — unsigned requests must stay guest-capable (P4).
     const acting =
       headerStore.get("x-dev-user-id") ??
       cookieStore.get("dev_user_id")?.value ??
       env.DEV_ACTING_USER_ID ??
-      env.DEV_MANAGER_USER_ID!;
+      null;
+    if (!acting) return null;
     return {
       clerkUserId: acting,
       email: `${acting}@example.local`,
+      emailVerified: true,
       displayName: acting.replace(/_/g, " "),
     };
   }
@@ -51,16 +56,19 @@ export async function getAuthIdentity(): Promise<AuthIdentity | null> {
   const session = await clerkAuth();
   if (!session.userId) return null;
   const user = await currentUser();
-  const email =
-    user?.primaryEmailAddress?.emailAddress ??
-    user?.emailAddresses[0]?.emailAddress ??
-    null;
+  const primary = user?.primaryEmailAddress;
+  const fallback = user?.emailAddresses[0];
+  const emailAddress = primary ?? fallback ?? null;
+  const email = emailAddress?.emailAddress ?? null;
+  const emailVerified =
+    emailAddress?.verification?.status === "verified";
   return {
     clerkUserId: session.userId,
-    email,
+    email: emailVerified ? email : null,
+    emailVerified,
     displayName:
       [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-      email ||
+      (emailVerified ? email : null) ||
       session.userId,
   };
 }
