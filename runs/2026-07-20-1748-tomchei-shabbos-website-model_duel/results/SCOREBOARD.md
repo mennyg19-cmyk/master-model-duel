@@ -4,8 +4,8 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 
 | Arm | 1a /7 | 1b /8 | 2 /15 | 3 /20 | 4 /20 | 5 /15 | 6 /15 | Total /100 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| arm-01 | 5 | 8 | 14 | | 18.0 | | | 45.0 |
-| arm-02 | 7 | 8 | 14 | | 18.0 | | | 47.0 |
+| arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | | 57.0 |
+| arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | | 59.5 |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -53,7 +53,14 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **P10 arm-01:** **1.5/20** → **15.0/20** ([fix notes](arms/arm-01/results/P10-FIX-NOTES.md); B1 + A-H1/H2/H3 + A-M2/M3/M5/M6/M7; S1–S3 pass)
 - **P11 arm-01:** **1.5/20** → **16.5/20** ([fix notes](arms/arm-01/results/P11-FIX-NOTES.md); A-H1–A-H6 + A-M1/M2/M3/M5/M6/M7; S1–S5 pass)
 - **P12 arm-01:** **1.5/20** → **18.0/20** ([fix notes](arms/arm-01/results/P12-FIX-NOTES.md); B1–B4 + M1/M3/M5–M7/M9–M11; S1–S5 pass) — **Test 4 complete**
-- **Next:** Test 5 in progress (self-review) — Tests 6 after Test 5 scores
+- **Next:** Test 6 after user says **run test 6**
+
+## Test 5 notes
+
+- **Mode:** single self-review + one fix pass + blind residual panel (`glm-5.2-high`)
+- **arm-01:** **12.0/15** — self-review 1B·6M·1m; fixed SR-01–07; residual **3B·14M·25m** ([aggregate](arms/arm-01/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 3/6 (3 clean-code blockers, 0 security blockers). Fix rate 4/4. Regressions 3/3. Hygiene 2/2.
+- **arm-02:** **12.5/15** — self-review 3M·4m; fixed SR-01–07 (all); residual **1B·11M·20m** ([aggregate](arms/arm-02/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 4.5/6 (1 adoption-debt blocker). Fix rate 4/4. Regressions 2/3 (verify-email flow untested). Hygiene 2/2.
+- **Test 5 winner: arm-02** (fewer residual blockers, full minor fix pass)
 
 ## Test 2 notes
 
