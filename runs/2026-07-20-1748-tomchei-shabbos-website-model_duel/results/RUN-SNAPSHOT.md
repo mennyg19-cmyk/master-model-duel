@@ -2,7 +2,7 @@
 
 Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
-**UTC snapshot:** 2026-07-21T06:10:00Z (approx)
+**UTC snapshot:** 2026-07-21T06:15:00Z (approx)
 
 ## Status
 
@@ -21,11 +21,11 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- arm-02 P10 review panel:
-  - [arm-02 P10 security review](1a161370-d450-4256-8c23-3815ff68519e)
-  - [arm-02 P10 quality review](86127757-931a-41c2-9b96-4beaecfc623a)
-  - [arm-02 P10 rules review](f09b3854-7749-4f3d-8aec-bae34215cd2d)
-  - [arm-02 P10 clean-code review](5b3842e1-9448-433f-ac77-318722252b66)
+- arm-02 P10 review panel (**1/4**):
+  - [arm-02 P10 security review](1a161370-d450-4256-8c23-3815ff68519e) — pending
+  - [arm-02 P10 quality review](86127757-931a-41c2-9b96-4beaecfc623a) — pending
+  - [arm-02 P10 rules review](f09b3854-7749-4f3d-8aec-bae34215cd2d) — pending
+  - [arm-02 P10 clean-code review](5b3842e1-9448-433f-ac77-318722252b66) ✓ 12 (4M)
 
 ## P10 build (arm-02)
 
