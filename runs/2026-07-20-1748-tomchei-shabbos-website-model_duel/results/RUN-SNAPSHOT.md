@@ -2,7 +2,7 @@
 
 Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
-**UTC snapshot:** 2026-07-21T08:15:00Z (approx)
+**UTC snapshot:** 2026-07-21T08:20:00Z (approx)
 
 ## Status
 
@@ -21,11 +21,11 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- arm-02 P12 review panel:
-  - [arm-02 P12 security review](90e89184-bec9-4472-8951-d3770464506e)
-  - [arm-02 P12 quality review](fe678772-7746-4e49-b019-300019700385)
-  - [arm-02 P12 rules review](2f32f97b-0b27-4eff-8106-2ed2dfe1dd67)
-  - [arm-02 P12 clean-code review](2b002e62-4532-4f00-83ce-4e13b7feb403)
+- arm-02 P12 review panel (**3/4**):
+  - [arm-02 P12 security review](90e89184-bec9-4472-8951-d3770464506e) ✓ — 5 findings (1M · 2L · 2 info)
+  - [arm-02 P12 quality review](fe678772-7746-4e49-b019-300019700385) ✓ — 8 findings (3M · 5L)
+  - [arm-02 P12 rules review](2f32f97b-0b27-4eff-8106-2ed2dfe1dd67) ✓ — 7 findings (3M · 4L)
+  - [arm-02 P12 clean-code review](2b002e62-4532-4f00-83ce-4e13b7feb403) — pending
 
 ## P12 build (arm-02)
 
