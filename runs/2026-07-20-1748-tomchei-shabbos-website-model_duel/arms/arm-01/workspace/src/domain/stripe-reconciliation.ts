@@ -11,13 +11,22 @@ export type ProviderIntentSnapshot = {
 async function readProviderIntents() {
   const stripe = getStripe();
   if (!stripe) return [];
-  const page = await stripe.paymentIntents.list({ limit: 100 });
-  return page.data.map((intent) => ({
-    id: intent.id,
-    amount: intent.amount,
-    status: intent.status,
-    orderId: intent.metadata.orderId,
-  }));
+  const intents: ProviderIntentSnapshot[] = [];
+  let startingAfter: string | undefined;
+  do {
+    const page = await stripe.paymentIntents.list({
+      limit: 100,
+      starting_after: startingAfter,
+    });
+    intents.push(...page.data.map((intent) => ({
+      id: intent.id,
+      amount: intent.amount,
+      status: intent.status,
+      orderId: intent.metadata.orderId,
+    })));
+    startingAfter = page.has_more ? page.data.at(-1)?.id : undefined;
+  } while (startingAfter);
+  return intents;
 }
 
 export async function reconcileStripePayments(
@@ -105,6 +114,11 @@ export async function reconcileStripePayments(
       });
     }
   }
+  const storedFindingIds = new Set(
+    findings
+      .map((finding) => finding.providerObjectId)
+      .filter((providerId) => storedByProviderId.has(providerId)),
+  );
 
   await db.$transaction(async (transaction) => {
     for (const finding of findings) {
@@ -125,7 +139,7 @@ export async function reconcileStripePayments(
       where: { runKey },
       data: {
         status: "COMPLETED",
-        matchedCount: storedIntents.length - findings.length,
+        matchedCount: storedIntents.length - storedFindingIds.size,
         findingCount: findings.length,
         findings,
         finishedAt: new Date(),

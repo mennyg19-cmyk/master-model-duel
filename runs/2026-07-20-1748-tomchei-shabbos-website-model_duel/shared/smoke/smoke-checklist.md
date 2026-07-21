@@ -113,14 +113,14 @@ See `shared/phases/PHASE-P10-EXPECTED.md`. arm-01 P10 **gated**.
 
 See `shared/phases/PHASE-P11-EXPECTED.md`. arm-01 P11 **gated**.
 
-## P12 (next)
+## P12
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Reports + margin | | |
-| S2 | Exports + reconciliation | | |
-| S3 | Legacy import | | |
-| S4 | Imported repeat | | |
-| S5 | Dress rehearsal | | |
+| S1 | Reports + margin | ✓ | |
+| S2 | Exports + reconciliation | ✓ | |
+| S3 | Legacy import | ✓ | |
+| S4 | Imported repeat | ✓ | |
+| S5 | Dress rehearsal | ✓ | |
 
-See `shared/phases/PHASE-P12-EXPECTED.md`.
+See `shared/phases/PHASE-P12-EXPECTED.md`. arm-01 P12 **gated** — Test 4 complete for arm-01.

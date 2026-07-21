@@ -6,51 +6,81 @@ import {
   SeasonStatus,
   type PrismaClient,
 } from "@prisma/client";
+import { z } from "zod";
 import { normalizeEmail, normalizePhone } from "@/lib/normalize";
 
-type LegacyAddress = {
-  id: string;
-  recipientName: string;
-  line1: string;
-  line2?: string;
-  city: string;
-  region: string;
-  postalCode: string;
-  greeting?: string;
-};
-type LegacyCustomer = {
-  id: string;
-  displayName: string;
-  email?: string;
-  phone?: string;
-  addresses?: LegacyAddress[];
-};
-type LegacyProduct = {
-  id: string;
-  seasonYear: number;
-  sku: string;
-  name: string;
-  priceCents: number;
-};
-type LegacyOrder = {
-  id: string;
-  seasonYear: number;
-  customerId: string;
-  orderNumber?: number;
-  totalCents: number;
-  donationCents?: number;
-  lines: Array<{
-    productId: string;
-    quantity: number;
-    addressId?: string;
-    greeting?: string;
-  }>;
-};
-export type LegacyDocument = {
-  customers: LegacyCustomer[];
-  products: LegacyProduct[];
-  orders: LegacyOrder[];
-};
+export const MAX_LEGACY_IMPORT_BYTES = 10 * 1024 * 1024;
+const MAX_LEGACY_ENTITIES = 25_000;
+const MAX_LEGACY_ADDRESSES = 100_000;
+const MAX_LEGACY_ORDER_LINES = 100_000;
+
+const legacyAddressSchema = z.object({
+  id: z.string().min(1).max(120),
+  recipientName: z.string().min(1).max(200),
+  line1: z.string().min(1).max(250),
+  line2: z.string().max(250).optional(),
+  city: z.string().max(120),
+  region: z.string().max(80),
+  postalCode: z.string().max(30),
+  greeting: z.string().max(2_000).optional(),
+});
+
+export const legacyDocumentSchema = z.object({
+  customers: z.array(z.object({
+    id: z.string().min(1).max(120),
+    displayName: z.string().min(1).max(200),
+    email: z.string().max(320).optional(),
+    phone: z.string().max(80).optional(),
+    allowLiveCustomerMerge: z.boolean().optional(),
+    addresses: z.array(legacyAddressSchema).max(MAX_LEGACY_ADDRESSES).optional(),
+  })).max(MAX_LEGACY_ENTITIES),
+  products: z.array(z.object({
+    id: z.string().min(1).max(120),
+    seasonYear: z.number().int().min(1900).max(2200),
+    sku: z.string().min(1).max(120),
+    name: z.string().min(1).max(250),
+    priceCents: z.number().int().nonnegative(),
+  })).max(MAX_LEGACY_ENTITIES),
+  orders: z.array(z.object({
+    id: z.string().min(1).max(120),
+    seasonYear: z.number().int().min(1900).max(2200),
+    customerId: z.string().min(1).max(120),
+    orderNumber: z.number().int().positive().optional(),
+    totalCents: z.number().int().nonnegative(),
+    donationCents: z.number().int().nonnegative().optional(),
+    lines: z.array(z.object({
+      productId: z.string().min(1).max(120),
+      quantity: z.number().int().positive().max(1_000),
+      addressId: z.string().min(1).max(120).optional(),
+      greeting: z.string().max(2_000).optional(),
+    })).min(1).max(MAX_LEGACY_ORDER_LINES),
+  })).max(MAX_LEGACY_ENTITIES),
+}).superRefine((document, context) => {
+  const addressCount = document.customers.reduce(
+    (sum, customer) => sum + (customer.addresses?.length ?? 0),
+    0,
+  );
+  const lineCount = document.orders.reduce(
+    (sum, order) => sum + order.lines.length,
+    0,
+  );
+  if (addressCount > MAX_LEGACY_ADDRESSES) {
+    context.addIssue({ code: "custom", message: "Legacy document contains too many addresses." });
+  }
+  if (lineCount > MAX_LEGACY_ORDER_LINES) {
+    context.addIssue({ code: "custom", message: "Legacy document contains too many order lines." });
+  }
+});
+
+export type LegacyDocument = z.infer<typeof legacyDocumentSchema>;
+type LegacyAddress = z.infer<typeof legacyAddressSchema>;
+
+export class ImportConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ImportConflictError";
+  }
+}
 
 function normalizeAddress(address: LegacyAddress) {
   return [
@@ -225,20 +255,31 @@ export async function commitLegacyImport(
       if (batch.status === "COMMITTED") return batch;
       const issues = batch.issues as Array<{ severity: string }>;
       if (issues.some((issue) => issue.severity === "BLOCKING")) {
-        throw new Error("Resolve every blocking legacy-import issue before commit.");
+        throw new ImportConflictError("Resolve every blocking legacy-import issue before commit.");
       }
       const claimed = await transaction.legacyImportBatch.updateMany({
         where: { id: batchId, status: { in: ["STAGED", "COMMITTING"] } },
         data: { status: "COMMITTING" },
       });
       if (claimed.count !== 1) {
-        throw new Error("Legacy import is not in a resumable state.");
+        throw new ImportConflictError("Legacy import is not in a resumable state.");
       }
       const document = batch.payload as unknown as LegacyDocument;
       const customerMap = new Map<string, string>();
       const addressMap = new Map<string, string>();
       const productMap = new Map<string, string>();
       const seasonMap = new Map<number, string>();
+      const sourceProducts = new Map(
+        document.products.map((product) => [product.id, product]),
+      );
+      const recipientNames = new Map(
+        document.customers.flatMap((customer) =>
+          (customer.addresses ?? []).map((address) => [address.id, address.recipientName] as const),
+        ),
+      );
+      const customerNames = new Map(
+        document.customers.map((customer) => [customer.id, customer.displayName]),
+      );
 
       for (const year of new Set([
         ...document.products.map((product) => product.seasonYear),
@@ -267,6 +308,15 @@ export async function commitLegacyImport(
             ],
           },
         });
+        if (
+          existing &&
+          !existing.legacySourceId &&
+          !sourceCustomer.allowLiveCustomerMerge
+        ) {
+          throw new ImportConflictError(
+            `Customer ${sourceCustomer.id} matches a live customer; set allowLiveCustomerMerge to confirm the merge.`,
+          );
+        }
         const customer =
           existing ??
           (await transaction.customer.create({
@@ -373,9 +423,7 @@ export async function commitLegacyImport(
             lines: {
               create: sourceOrder.lines.map((line) => {
                 const productId = productMap.get(line.productId);
-                const sourceProduct = document.products.find(
-                  (product) => product.id === line.productId,
-                );
+                const sourceProduct = sourceProducts.get(line.productId);
                 if (!productId || !sourceProduct) {
                   throw new Error("Order product mapping is incomplete.");
                 }
@@ -386,13 +434,8 @@ export async function commitLegacyImport(
                     : null,
                   recipientSource: line.addressId ? "ADDRESS_BOOK" : "ON_ORDER",
                   recipientNameSnapshot: line.addressId
-                    ? document.customers
-                        .flatMap((customer) => customer.addresses ?? [])
-                        .find((address) => address.id === line.addressId)
-                        ?.recipientName
-                    : document.customers.find(
-                        (customer) => customer.id === sourceOrder.customerId,
-                      )?.displayName,
+                    ? recipientNames.get(line.addressId)
+                    : customerNames.get(sourceOrder.customerId),
                   greetingSnapshot: line.greeting ?? "",
                   productNameSnapshot: sourceProduct.name,
                   skuSnapshot: sourceProduct.sku,

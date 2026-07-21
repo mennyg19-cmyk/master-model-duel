@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
+import { NextResponse } from "next/server";
 import { reconcileStripePayments } from "@/domain/stripe-reconciliation";
+import {
+  adminRequestErrorResponse,
+  requireSameOriginAdminRequest,
+} from "@/lib/admin-request";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    requireSameOriginAdminRequest(request);
     const session = await requirePermission("payments:manage");
     const run = await reconcileStripePayments(
       db,
@@ -23,11 +29,11 @@ export async function POST() {
         },
       },
     });
-    return Response.json(run);
+    return NextResponse.json(run);
   } catch (error) {
     if (error instanceof AccessDeniedError) {
-      return Response.json({ error: error.message }, { status: 403 });
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
-    throw error;
+    return adminRequestErrorResponse(error);
   }
 }

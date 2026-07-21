@@ -1,24 +1,33 @@
-import { commitLegacyImport } from "@/domain/legacy-import";
+import { NextResponse } from "next/server";
+import {
+  commitLegacyImport,
+  ImportConflictError,
+} from "@/domain/legacy-import";
+import {
+  adminRequestErrorResponse,
+  requireSameOriginAdminRequest,
+} from "@/lib/admin-request";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ batchId: string }> },
 ) {
   try {
+    requireSameOriginAdminRequest(request);
     const session = await requirePermission("settings:manage");
     const { batchId } = await context.params;
-    return Response.json(
+    return NextResponse.json(
       await commitLegacyImport(db, batchId, session.actor.id),
     );
   } catch (error) {
     if (error instanceof AccessDeniedError) {
-      return Response.json({ error: error.message }, { status: 403 });
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
-    if (error instanceof Error && /blocking|resumable/i.test(error.message)) {
-      return Response.json({ error: error.message }, { status: 409 });
+    if (error instanceof ImportConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
-    throw error;
+    return adminRequestErrorResponse(error);
   }
 }

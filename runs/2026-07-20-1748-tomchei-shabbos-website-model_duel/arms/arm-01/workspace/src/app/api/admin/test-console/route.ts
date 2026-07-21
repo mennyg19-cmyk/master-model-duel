@@ -1,9 +1,15 @@
 import { z } from "zod";
+import { NextResponse } from "next/server";
 import {
   assertTestConsoleEnabled,
   seedScaleFixture,
+  TestConsoleUnavailableError,
   wipeScaleFixture,
 } from "@/domain/test-console";
+import {
+  adminRequestErrorResponse,
+  requireSameOriginAdminRequest,
+} from "@/lib/admin-request";
 import { AccessDeniedError, requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -14,11 +20,12 @@ const requestSchema = z.discriminatedUnion("action", [
 
 export async function POST(request: Request) {
   try {
+    requireSameOriginAdminRequest(request);
     assertTestConsoleEnabled();
     const session = await requirePermission("settings:manage");
     const parsed = requestSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
-      return Response.json({ error: "A supported test-console action is required." }, { status: 400 });
+      return NextResponse.json({ error: "A supported test-console action is required." }, { status: 400 });
     }
     let outcome: unknown;
     if (parsed.data.action === "setMode") {
@@ -44,14 +51,14 @@ export async function POST(request: Request) {
         metadata: parsed.data,
       },
     });
-    return Response.json({ outcome });
+    return NextResponse.json({ outcome });
   } catch (error) {
     if (error instanceof AccessDeniedError) {
-      return Response.json({ error: error.message }, { status: 403 });
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
-    if (error instanceof Error && /disabled outside/i.test(error.message)) {
-      return Response.json({ error: error.message }, { status: 404 });
+    if (error instanceof TestConsoleUnavailableError) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
     }
-    throw error;
+    return adminRequestErrorResponse(error);
   }
 }

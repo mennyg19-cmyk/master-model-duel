@@ -2,12 +2,19 @@ import type { PrismaClient } from "@prisma/client";
 
 const SCALE_PREFIX = "p12-scale-";
 
+export class TestConsoleUnavailableError extends Error {
+  constructor() {
+    super("Test console is disabled outside the local test environment.");
+    this.name = "TestConsoleUnavailableError";
+  }
+}
+
 export function assertTestConsoleEnabled() {
   if (
     process.env.NODE_ENV === "production" ||
     process.env.ENABLE_TEST_AUTH !== "true"
   ) {
-    throw new Error("Test console is disabled outside the local test environment.");
+    throw new TestConsoleUnavailableError();
   }
 }
 

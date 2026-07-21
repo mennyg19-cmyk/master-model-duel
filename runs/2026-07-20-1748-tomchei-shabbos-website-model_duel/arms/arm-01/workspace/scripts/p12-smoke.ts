@@ -41,6 +41,7 @@ function managerHeaders() {
     .digest("hex");
   return {
     "content-type": "application/json",
+    origin: baseUrl,
     "x-test-clerk-user-id": "__local_manager__",
     "x-test-auth-token": `${timestamp}.${signature}`,
   };
@@ -243,7 +244,16 @@ async function run() {
   );
   assert.equal(authorizedExport.status, 200);
   assert.match(await authorizedExport.text(), /P12 Ledger Customer/);
-  assert.ok(authorizedExport.headers.get("x-export-run-id"));
+  const exportRunId = authorizedExport.headers.get("x-export-run-id");
+  assert.ok(exportRunId);
+  assert.ok(await db.exportRun.findUnique({ where: { id: exportRunId } }));
+  assert.ok(await db.auditLog.findFirst({
+    where: {
+      action: "export.completed",
+      targetType: "ExportRun",
+      targetId: exportRunId,
+    },
+  }));
   const intent = await db.stripePaymentIntent.create({
     data: {
       orderId: fixture.order.id,
@@ -273,15 +283,24 @@ async function run() {
     [],
   );
   assert.equal(firstReconciliation.id, replayedReconciliation.id);
-  assert.equal(
-    await db.reconciliationFinding.count({
-      where: {
-        providerObjectId: {
-          in: [intent.stripePaymentIntentId, `pi_orphan_${runKey}`],
-        },
+  assert.ok(firstReconciliation.matchedCount >= 0);
+  const reconciliationFindings = await db.reconciliationFinding.findMany({
+    where: {
+      providerObjectId: {
+        in: [intent.stripePaymentIntentId, `pi_orphan_${runKey}`],
       },
-    }),
-    2,
+    },
+    select: { providerObjectId: true, findingType: true },
+  });
+  assert.deepEqual(
+    new Map(reconciliationFindings.map((finding) => [
+      finding.providerObjectId,
+      finding.findingType,
+    ])),
+    new Map([
+      [intent.stripePaymentIntentId, "SUCCEEDED_WITHOUT_PAYMENT"],
+      [`pi_orphan_${runKey}`, "ORPHAN_PROVIDER_INTENT"],
+    ]),
   );
   console.log("S2 PASS authorized streaming CSV was audited, unauthorized access failed, and reconciliation replayed without duplicate findings");
 

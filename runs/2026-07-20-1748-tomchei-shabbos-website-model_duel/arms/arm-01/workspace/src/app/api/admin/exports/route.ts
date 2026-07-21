@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import {
   encodeCsv,
   exportDatasets,
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
     const dataset = url.searchParams.get("dataset");
     const seasonId = url.searchParams.get("seasonId") ?? undefined;
     if (!exportDatasets.includes(dataset as ExportDataset)) {
-      return Response.json({ error: "A supported export dataset is required." }, { status: 400 });
+      return NextResponse.json({ error: "A supported export dataset is required." }, { status: 400 });
     }
     const selectedDataset = dataset as ExportDataset;
     const rows = await getExportRows(db, selectedDataset, seasonId);
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     if (error instanceof AccessDeniedError) {
-      return Response.json({ error: error.message }, { status: 403 });
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
     throw error;
   }
