@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth";
 import { apiErrorResponse } from "@/lib/api-error";
 import {
   createLabelForPackage,
+  refreshTracking,
   voidLabelForPackage,
 } from "@/lib/shipping/labels";
 import { db } from "@/lib/db";
@@ -63,7 +64,6 @@ export async function POST(request: Request, ctx: Ctx) {
     }
 
     if (body.action === "refresh") {
-      const { refreshTracking } = await import("@/lib/shipping/labels");
       const label = await db.shippingLabel.findFirst({
         where: { id: body.labelId, orderId },
       });

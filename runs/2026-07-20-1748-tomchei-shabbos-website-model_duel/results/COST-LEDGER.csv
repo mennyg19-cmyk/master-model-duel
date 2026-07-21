@@ -252,3 +252,4 @@
 2026-07-21T21:15:47Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P8,reviewer-aggregate,glm-5.2-high,2ed893d4-6594-4f97-a377-b4cfc52f1eb7,,,,,,,,usage_missing
 2026-07-21T21:19:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P8,review_aggregate,glm-5.2-high,ad31fbbf-8d00-4f3f-b086-2d77d9546971,,,,,,,,6 blockers; usage_missing
 2026-07-21T21:19:42Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P8,fix,cursor-grok-4.5-high,f5d70002-d693-4f70-b177-0bc266d4715a,,,,,,,,B1-B6 fixed smoke 3/3; usage_missing
+2026-07-21T21:21:13Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P8,contestant-fix,cursor-grok-4.5-high,ef08eda4-1e81-400f-a4ac-b1b7cb2980b3,,,,,,,,usage_missing

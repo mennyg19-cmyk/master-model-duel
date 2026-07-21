@@ -29,6 +29,7 @@ import {
   mintMockSessionId,
 } from "@/lib/stripe/client";
 import { err, maskError, ok, type Result } from "@/lib/result";
+import { writeAudit } from "@/lib/audit";
 
 export type RecipientFulfillmentInput = {
   /** Lines sharing this recipient destination get this method. */
@@ -530,8 +531,8 @@ export async function createHostedCheckoutSession(input: {
         },
       });
 
-      await tx.auditLog.create({
-        data: {
+      await writeAudit(
+        {
           action: AuditAction.CHECKOUT_STARTED,
           meta: {
             orderId: order.id,
@@ -541,7 +542,8 @@ export async function createHostedCheckoutSession(input: {
             mode,
           },
         },
-      });
+        tx,
+      );
     });
 
     return ok({ sessionId, url, amountCents });

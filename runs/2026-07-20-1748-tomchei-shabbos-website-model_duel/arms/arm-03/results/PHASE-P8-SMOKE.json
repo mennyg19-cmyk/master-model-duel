@@ -28,6 +28,7 @@
       "check": "Void + rebuy; checkout live Shippo quotes",
       "pass": true,
       "voidOk": true,
+      "voidStatus": 200,
       "rebuyOk": true,
       "liveShip": true,
       "shipFeeCents": 1800,
@@ -38,10 +39,13 @@
           "purchasedCents": 1200,
           "marginCents": 600,
           "chargeCarrier": "usps",
-          "buyCarrier": "ups"
+          "buyCarrier": "ups",
+          "parcelCount": 1
         }
       ],
-      "prepError": []
+      "prepStatus": 200,
+      "prepError": [],
+      "createEvenStatus": 200
     },
     {
       "id": "S3",

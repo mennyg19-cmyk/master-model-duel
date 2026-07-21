@@ -5,6 +5,7 @@
 **Mode:** SHIPPO_MODE=mock  
 **Passed:** 3 / 3  
 **Failed:** 0  
+**Re-run:** post P8 fix pass (B1–B6 + critical majors)
 
 | ID | Check | Pass |
 |---|---|---|
@@ -16,11 +17,12 @@
 
 - Even zip `11218`: charge 1800¢ (USPS), buy 1200¢ (UPS), margin 600¢; shipment plan boxes=1
 - Odd zip `11219`: charge 1800¢ (USPS), buy 1200¢ (FedEx), margin 600¢
+- createEvenStatus=200, createOddStatus=200
 
 ## S2 evidence
 
-- Void + rebuy OK on even package
-- Checkout prepare `liveShip=true`, `shipFeeCents=1800`, quotes charge 1800 / buy 1200
+- Void + rebuy OK on even package (voidStatus=200)
+- Checkout prepare `liveShip=true`, `shipFeeCents=1800`, quotes charge 1800 / buy 1200, `parcelCount=1`
 
 ## S3 evidence
 
@@ -56,6 +58,7 @@
     "check": "Void + rebuy; checkout live Shippo quotes",
     "pass": true,
     "voidOk": true,
+    "voidStatus": 200,
     "rebuyOk": true,
     "liveShip": true,
     "shipFeeCents": 1800,
@@ -66,10 +69,13 @@
         "purchasedCents": 1200,
         "marginCents": 600,
         "chargeCarrier": "usps",
-        "buyCarrier": "ups"
+        "buyCarrier": "ups",
+        "parcelCount": 1
       }
     ],
-    "prepError": []
+    "prepStatus": 200,
+    "prepError": [],
+    "createEvenStatus": 200
   },
   {
     "id": "S3",
