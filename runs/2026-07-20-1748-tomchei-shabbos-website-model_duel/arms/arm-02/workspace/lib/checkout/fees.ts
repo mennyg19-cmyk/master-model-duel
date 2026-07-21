@@ -81,7 +81,7 @@ export function computeFees(
       }
       case "PER_PACKAGE_DELIVERY": {
         // Hard zip block (G-014): out-of-zone cannot select this method at all.
-        if (config.deliveryZips.includes(recipient.address.zip)) {
+        if (!config.deliveryZips.includes(recipient.address.zip)) {
           errors.push(
             `${method.name} is not available for ${recipient.recipientName} â€” ZIP ${recipient.address.zip} is outside the delivery area`
           );

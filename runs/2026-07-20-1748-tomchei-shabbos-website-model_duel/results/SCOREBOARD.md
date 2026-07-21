@@ -4,8 +4,8 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 
 | Arm | 1a /7 | 1b /8 | 2 /15 | 3 /20 | 4 /20 | 5 /15 | 6 /15 | Total /100 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | | 57.0 |
-| arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | | 59.5 |
+| arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** |
+| arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -27,8 +27,8 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 
 | Headline | Winner arm | Notes |
 |---|---|---|
-| With external reviewer (1+2+3+4+6 renorm) | | |
-| Solo commit (1+2+5 renorm) | | |
+| With external reviewer (1+2+4+6 renorm) | **arm-02** (95.4/100) | Test 3 skipped |
+| Solo commit (1+2+5 renorm) | **arm-02** (92.2/100) | |
 | Best interviewer (1b) | arm-02 (tie 8/8; wins efficiency tie-break on turn quality 2.00 vs 1.98) | |
 
 ## Test 4 notes (partial)
@@ -53,7 +53,14 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **P10 arm-01:** **1.5/20** → **15.0/20** ([fix notes](arms/arm-01/results/P10-FIX-NOTES.md); B1 + A-H1/H2/H3 + A-M2/M3/M5/M6/M7; S1–S3 pass)
 - **P11 arm-01:** **1.5/20** → **16.5/20** ([fix notes](arms/arm-01/results/P11-FIX-NOTES.md); A-H1–A-H6 + A-M1/M2/M3/M5/M6/M7; S1–S5 pass)
 - **P12 arm-01:** **1.5/20** → **18.0/20** ([fix notes](arms/arm-01/results/P12-FIX-NOTES.md); B1–B4 + M1/M3/M5–M7/M9–M11; S1–S5 pass) — **Test 4 complete**
-- **Next:** Test 6 after user says **run test 6**
+- **Test 6 winner:** tie **15.0/15** both arms (detect 8/8 · vague fix 7/7)
+
+## Test 6 notes
+
+- **Clone source:** arm-02 headline winner; identical tree + 5 seeds (B1–B5)
+- **Detect:** both **5/5** — [arm-01](4d486d13-886f-4e9d-bd21-ede97965422f) · [arm-02](8f8af929-9a3e-41f3-bd6f-29bbced13b4f) → **8/8** each
+- **Vague fix:** both **5/5**, CI **78/78** — [arm-01](c11bc26e-bb16-4036-9549-da9d27fa013a) · [arm-02](fa93c308-33b1-4d9e-aea4-6325d91b828a) → **7/7** each
+- **Test 6 score:** **15.0/15** both arms
 
 ## Test 5 notes
 

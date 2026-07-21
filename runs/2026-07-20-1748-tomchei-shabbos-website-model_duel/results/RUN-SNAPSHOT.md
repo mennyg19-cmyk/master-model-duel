@@ -1,23 +1,19 @@
 # Run snapshot — `2026-07-20-1748-tomchei-shabbos-website-model_duel`
 
-**UTC snapshot:** 2026-07-21T10:00:00Z (approx)
+**UTC snapshot:** 2026-07-21T10:30:00Z (approx)
 
-## Status
+## Status — **RUN COMPLETE**
 
 | Item | Value |
 |---|---|
-| Test | **6** — vague fix phase |
-| Scoreboard | arm-01 **57.0**/100 · arm-02 **59.5**/100 |
+| Winner | **arm-02** (`claude-fable-5-thinking-medium`) — **74.5/100** |
+| arm-01 | **72.0/100** (`gpt-5.6-sol-medium`) |
 
-## Test 6 detect — 2/2 ✓ (both 5/5)
+## Test 6 — gated ✓
 
-| Arm | Detect | Provisional detect score |
-|---|---|---|
-| arm-01 | [detect ✓](4d486d13-886f-4e9d-bd21-ede97965422f) | 8/8 |
-| arm-02 | [detect ✓](8f8af929-9a3e-41f3-bd6f-29bbced13b4f) | 8/8 |
+| Arm | Detect | Vague fix | Total /15 |
+|---|---|---|---|
+| arm-01 | 8/8 (5/5) | 7/7 (5/5, CI 78/78) | **15.0** |
+| arm-02 | 8/8 (5/5) | 7/7 (5/5, CI + live smoke) | **15.0** |
 
-## In flight
-
-- Vague fix **1/2**: [arm-01 ✓](c11bc26e-bb16-4036-9549-da9d27fa013a) (5/5, CI 78/78) · [arm-02](fa93c308-33b1-4d9e-aea4-6325d91b828a)
-
-**Next:** score Test 6 /15 → FINAL-REPORT
+See [FINAL-REPORT.md](./FINAL-REPORT.md) · [SCOREBOARD.md](./SCOREBOARD.md)

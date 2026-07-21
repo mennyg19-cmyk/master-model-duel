@@ -19,7 +19,7 @@ export function isSameOrigin(request: Request): boolean {
       return false;
     }
   }
-  return true;
+  return false;
 }
 
 /** Returns a Response to send when the request is blocked, null when it may proceed. */
