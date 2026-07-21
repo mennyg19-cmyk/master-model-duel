@@ -1,10 +1,11 @@
 import { randomBytes } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { geocodeAddress } from "@/lib/addresses/geocode";
+import { geocodeAddress, WAREHOUSE_ORIGIN } from "@/lib/addresses/geocode";
 import { getSetting } from "@/lib/settings";
 import { ActionError } from "@/lib/packages/actions";
-import { canVoidShipment, voidShipmentById } from "@/lib/shipping/labels";
+import { canVoidShipment } from "@/lib/shipping/labels";
+import { voidLabel } from "@/lib/shipping/shippo";
 import { notifyCustomer } from "@/lib/notifications";
 import { distanceMiles, nearestNeighborOrder, sameStreet, type LatLng } from "@/lib/routes/geo";
 import { LINK_COMPLETION_GRACE_MINUTES } from "@/lib/routes/links";
@@ -67,7 +68,7 @@ export async function buildRoute(
   }
 
   const origin = await getSetting("shipping.origin");
-  const originCoordinates = (await geocodeAddress(origin)) ?? { latitude: 40.0821, longitude: -74.2097 };
+  const originCoordinates = (await geocodeAddress(origin)) ?? WAREHOUSE_ORIGIN;
 
   const withCoordinates = [];
   for (const pkg of candidates) {
@@ -78,6 +79,14 @@ export async function buildRoute(
 
   const routeCount = await db.deliveryRoute.count({ where: { seasonId } });
   const route = await db.$transaction(async (tx) => {
+    // Re-assert availability inside the transaction: a concurrent build may
+    // have grabbed some of these packages since the candidate query ran.
+    const taken = await tx.routeStop.count({
+      where: { packageId: { in: ordered.map((entry) => entry.pkg.id) } },
+    });
+    if (taken > 0) {
+      throw new ActionError("Some of those packages just landed on another route — rebuild", 409);
+    }
     const created = await tx.deliveryRoute.create({
       data: {
         seasonId,
@@ -136,15 +145,17 @@ export async function startRoute(seasonId: string, routeId: string, actor: strin
 }
 
 async function captureDayOfNotifications(routeId: string, routeName: string): Promise<number> {
+  // Every route stop is a delivery package (buildRoute only accepts delivery
+  // methods) — bulk-delivery customers get the same day-of heads-up as
+  // per-package ones.
   const stops = await db.routeStop.findMany({
     where: { routeId, deliveredAt: null },
-    include: { package: { include: { fulfillmentMethod: { select: { kind: true } } } } },
+    include: { package: true },
   });
-  const perPackageStops = stops.filter((stop) => stop.package.fulfillmentMethod.kind === "PER_PACKAGE_DELIVERY");
-  if (perPackageStops.length === 0) return 0;
-  const audiences = await packageCustomers(perPackageStops.map((stop) => stop.packageId));
+  if (stops.length === 0) return 0;
+  const audiences = await packageCustomers(stops.map((stop) => stop.packageId));
   let captured = 0;
-  for (const stop of perPackageStops) {
+  for (const stop of stops) {
     for (const customer of audiences.get(stop.packageId)?.values() ?? []) {
       captured += await notifyCustomer(customer, {
         kind: "day_of_delivery",
@@ -176,10 +187,13 @@ export async function markStopDelivered(seasonId: string, routeId: string, stopI
     if (stop.deliveredAt) throw new ActionError("This stop is already marked delivered");
 
     const deliveredBy = by.kind === "link" ? `link:${by.linkId}` : `staff:${by.staffId}`;
-    await tx.routeStop.update({
-      where: { id: stop.id },
+    // Guarded flip: only one concurrent tap wins the deliveredAt: null row —
+    // the loser refuses instead of double-writing audit + completion.
+    const flipped = await tx.routeStop.updateMany({
+      where: { id: stop.id, deliveredAt: null },
       data: { deliveredAt: new Date(), deliveredBy },
     });
+    if (flipped.count === 0) throw new ActionError("This stop is already marked delivered");
 
     // The tap is the physical hand-off: the package reaches its terminal stage.
     if (stop.package.stage !== "SENT" && stop.package.stage !== "PICKED_UP") {
@@ -208,8 +222,10 @@ export async function markStopDelivered(seasonId: string, routeId: string, stopI
 
     const remaining = await tx.routeStop.count({ where: { routeId, deliveredAt: null } });
     if (remaining === 0) {
-      await tx.deliveryRoute.update({
-        where: { id: routeId },
+      // Idempotent completion: a second observer of remaining === 0 finds the
+      // route already COMPLETED and writes nothing.
+      await tx.deliveryRoute.updateMany({
+        where: { id: routeId, status: { not: "COMPLETED" } },
         data: { status: "COMPLETED", completedAt: new Date() },
       });
       // Link expiry on completion (G-025) with a short grace window.
@@ -228,18 +244,29 @@ export async function markStopDelivered(seasonId: string, routeId: string, stopI
  * money is deliberately untouched — the order's paid fee snapshot stays what
  * the customer owed (G-028); the audit records who switched what and when.
  * Switching a shipping package away voids its printed-but-unshipped label.
+ *
+ * Atomicity: the label void (DB flip + carrier call) and every switch write
+ * commit in ONE transaction — same pattern as buyLabelForPackage. A carrier
+ * refusal or any later failure rolls everything back: no voided label with
+ * the package still on shipping. The optional `extend` callback runs inside
+ * the same transaction so a caller (reroute) can make its stop creation
+ * atomic with the switch.
  */
-export async function switchPackageMethod(
+export async function switchPackageMethod<T = undefined>(
   seasonId: string,
   packageId: string,
   targetMethodId: string,
-  staff: { id: string; email: string }
+  staff: { id: string; email: string },
+  extend?: (tx: Prisma.TransactionClient) => Promise<T>
 ) {
   const pkg = await db.package.findFirst({
     where: { id: packageId, seasonId },
     include: {
       fulfillmentMethod: true,
-      shipments: { where: { status: "PURCHASED" }, select: { id: true } },
+      shipments: {
+        where: { status: "PURCHASED" },
+        select: { id: true, shippoTransactionId: true, carrier: true, costCents: true },
+      },
       routeStop: { select: { id: true, deliveredAt: true } },
     },
   });
@@ -261,48 +288,67 @@ export async function switchPackageMethod(
     throw new ActionError("This package sits on a delivery route — remove the stop before switching it to shipping");
   }
 
-  // Void the printed-not-shipped label BEFORE the switch (P8 hook): if the
-  // carrier refuses the refund this throws and nothing changes.
-  for (const shipment of pkg.shipments) {
-    await voidShipmentById(seasonId, shipment.id, staff.id);
-  }
+  const extra = await db.$transaction(
+    async (tx) => {
+      // Void the printed-not-shipped label INSIDE the switch transaction (P8
+      // hook): the guarded flip refuses a concurrent void, the carrier call is
+      // bounded by SHIPPO_TIMEOUT_MS, and a refusal rolls the whole switch
+      // back — label, method, and (via extend) route stop move together.
+      for (const shipment of pkg.shipments) {
+        const flipped = await tx.shipment.updateMany({
+          where: { id: shipment.id, status: "PURCHASED" },
+          data: { status: "VOIDED", voidedAt: new Date(), voidedByStaffId: staff.id },
+        });
+        if (flipped.count === 0) throw new ActionError("Only an active label can be voided");
+        if (shipment.shippoTransactionId) await voidLabel(shipment.shippoTransactionId);
+        await tx.packageAudit.create({
+          data: {
+            packageId: pkg.id,
+            actorStaffId: staff.id,
+            action: "label_voided",
+            detail: { shipmentId: shipment.id, carrier: shipment.carrier, costCents: shipment.costCents },
+          },
+        });
+      }
 
-  await db.$transaction(async (tx) => {
-    await tx.package.update({
-      where: { id: pkg.id },
-      data: {
-        fulfillmentMethodId: target.id,
-        // Retired suffix key: finalize must never merge new lines into a
-        // package staff deliberately re-routed (same discipline as splits).
-        groupingKey: `${pkg.groupingKey.split("#")[0]}#switched-${randomBytes(4).toString("hex")}`,
-        version: { increment: 1 },
-      },
-    });
-    await tx.orderLine.updateMany({
-      where: { packageId: pkg.id },
-      data: { fulfillmentMethodId: target.id },
-    });
-    const detail = {
-      from: pkg.fulfillmentMethod.name,
-      to: target.name,
-      voidedShipmentIds: pkg.shipments.map((shipment) => shipment.id),
-      chargePreserved: true,
-    };
-    await tx.packageAudit.create({
-      data: { packageId: pkg.id, actorStaffId: staff.id, action: "method_switched", detail },
-    });
-    await tx.auditLog.create({
-      data: {
-        actorStaffId: staff.id,
-        actorEmail: staff.email,
-        action: "package.method_switched",
-        targetType: "Package",
-        targetId: pkg.id,
-        detail,
-      },
-    });
-  });
-  return { from: pkg.fulfillmentMethod, to: target };
+      await tx.package.update({
+        where: { id: pkg.id },
+        data: {
+          fulfillmentMethodId: target.id,
+          // Retired suffix key: finalize must never merge new lines into a
+          // package staff deliberately re-routed (same discipline as splits).
+          groupingKey: `${pkg.groupingKey.split("#")[0]}#switched-${randomBytes(4).toString("hex")}`,
+          version: { increment: 1 },
+        },
+      });
+      await tx.orderLine.updateMany({
+        where: { packageId: pkg.id },
+        data: { fulfillmentMethodId: target.id },
+      });
+      const detail = {
+        from: pkg.fulfillmentMethod.name,
+        to: target.name,
+        voidedShipmentIds: pkg.shipments.map((shipment) => shipment.id),
+        chargePreserved: true,
+      };
+      await tx.packageAudit.create({
+        data: { packageId: pkg.id, actorStaffId: staff.id, action: "method_switched", detail },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorStaffId: staff.id,
+          actorEmail: staff.email,
+          action: "package.method_switched",
+          targetType: "Package",
+          targetId: pkg.id,
+          detail,
+        },
+      });
+      return extend ? extend(tx) : (undefined as T);
+    },
+    { maxWait: 10_000, timeout: 45_000 }
+  );
+  return { from: pkg.fulfillmentMethod, to: target, extra };
 }
 
 export type RerouteSuggestion = {
@@ -373,8 +419,10 @@ export async function rerouteSuggestions(seasonId: string, routeId: string): Pro
 
 /**
  * Manager-confirmed reroute (UR-004, G-023): switch the shipping package to
- * the route's delivery method (voiding its label via the switch), then append
- * it as the route's last stop. A sent package refuses in the switch guard.
+ * the route's delivery method (voiding its label via the switch) and create
+ * the route stop — all in ONE transaction. The stop lands after its nearest
+ * existing stop (later positions shift), so the driver's nearest-neighbor
+ * order survives the reroute. A sent package refuses in the switch guard.
  */
 export async function confirmReroute(
   seasonId: string,
@@ -395,30 +443,66 @@ export async function confirmReroute(
     (await db.fulfillmentMethod.findFirst({ where: { kind: "PER_PACKAGE_DELIVERY", isActive: true } }))?.id;
   if (!targetMethodId) throw new ActionError("No delivery method exists to reroute onto", 409);
 
-  await switchPackageMethod(seasonId, packageId, targetMethodId, staff);
-
-  const pkg = await db.package.findUniqueOrThrow({ where: { id: packageId } });
+  const pkg = await db.package.findFirst({ where: { id: packageId, seasonId } });
+  if (!pkg) throw new ActionError("Package not found", 404);
+  // External geocode stays outside the transaction; coordinates are a snapshot.
   const coordinates = await geocodeAddress(addressOf(pkg));
-  const lastPosition = await db.routeStop.aggregate({ where: { routeId }, _max: { position: true } });
-  const stop = await db.routeStop.create({
-    data: {
-      routeId,
-      packageId,
-      position: (lastPosition._max.position ?? 0) + 1,
-      latitude: coordinates?.latitude,
-      longitude: coordinates?.longitude,
-    },
+
+  const { extra: stop } = await switchPackageMethod(seasonId, packageId, targetMethodId, staff, async (tx) => {
+    // Re-verify inside the transaction: a concurrent build/reroute may have
+    // placed this package on a route since the suggestion was rendered.
+    const existing = await tx.routeStop.findUnique({ where: { packageId }, select: { id: true } });
+    if (existing) throw new ActionError("This package just landed on another route — refresh the suggestions", 409);
+
+    const stops = await tx.routeStop.findMany({
+      where: { routeId },
+      select: { position: true, latitude: true, longitude: true, deliveredAt: true },
+      orderBy: { position: "asc" },
+    });
+    // Insert after the geographically nearest stop, but never before a stop
+    // the driver already delivered.
+    const lastPosition = stops.length > 0 ? stops[stops.length - 1].position : 0;
+    let insertAfter = lastPosition;
+    if (coordinates) {
+      let bestDistance = Infinity;
+      for (const entry of stops) {
+        if (entry.latitude === null || entry.longitude === null) continue;
+        const d = distanceMiles(coordinates, { latitude: entry.latitude, longitude: entry.longitude });
+        if (d < bestDistance) {
+          bestDistance = d;
+          insertAfter = entry.position;
+        }
+      }
+    }
+    const lastDelivered = stops.reduce((max, entry) => (entry.deliveredAt ? Math.max(max, entry.position) : max), 0);
+    insertAfter = Math.max(insertAfter, lastDelivered);
+
+    await tx.routeStop.updateMany({
+      where: { routeId, position: { gt: insertAfter } },
+      data: { position: { increment: 1 } },
+    });
+    const created = await tx.routeStop.create({
+      data: {
+        routeId,
+        packageId,
+        position: insertAfter + 1,
+        latitude: coordinates?.latitude,
+        longitude: coordinates?.longitude,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorStaffId: staff.id,
+        actorEmail: staff.email,
+        action: "route.rerouted_package",
+        targetType: "Package",
+        targetId: packageId,
+        detail: { routeId, stopId: created.id },
+      },
+    });
+    return created;
   });
-  await db.auditLog.create({
-    data: {
-      actorStaffId: staff.id,
-      actorEmail: staff.email,
-      action: "route.rerouted_package",
-      targetType: "Package",
-      targetId: packageId,
-      detail: { routeId, stopId: stop.id },
-    },
-  });
+
   // A route already on the road still owes the customer a day-of heads-up.
   if (route.status === "IN_PROGRESS") await captureDayOfNotifications(routeId, route.name);
   return stop;

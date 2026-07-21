@@ -50,7 +50,10 @@ async function pickupPackages(seasonId: string) {
 
 /**
  * Sweep eligible pickups and capture the ready notification exactly once per
- * package (stamped in pickupReadyAt; the dedupe key backstops a race).
+ * package. Stamp + notify commit together in one transaction: a failed
+ * notification rolls the pickupReadyAt stamp back, so the next sweep retries
+ * instead of skipping the customer forever. The guarded claim (updateMany on
+ * pickupReadyAt null) makes two concurrent sweeps count each package once.
  */
 export async function sendPickupReadyNotifications(seasonId: string) {
   const packages = await pickupPackages(seasonId);
@@ -58,18 +61,32 @@ export async function sendPickupReadyNotifications(seasonId: string) {
   let notified = 0;
   for (const pkg of packages.filter((entry) => !entry.pickupReadyAt && !entry.pickupExpiredAt)) {
     if (!(await isPackageStockReady(pkg.id))) continue;
-    await db.package.update({ where: { id: pkg.id }, data: { pickupReadyAt: new Date() } });
-    readied += 1;
-    const customers = new Map(pkg.lines.map((line) => [line.order.customer.id, line.order.customer]));
-    for (const customer of customers.values()) {
-      notified += await notifyCustomer(customer, {
-        kind: "pickup_ready",
-        subject: "Your Mishloach Manos order is ready for pickup",
-        body: `${customer.name}, the package for ${pkg.recipientName} is packed and waiting at the pickup door.`,
-        dedupeKey: `pickup-ready|${pkg.id}|${customer.id}`,
-        packageId: pkg.id,
+    const outcome = await db.$transaction(async (tx) => {
+      const claimed = await tx.package.updateMany({
+        where: { id: pkg.id, pickupReadyAt: null, pickupExpiredAt: null },
+        data: { pickupReadyAt: new Date() },
       });
-    }
+      if (claimed.count === 0) return null;
+      let captured = 0;
+      const customers = new Map(pkg.lines.map((line) => [line.order.customer.id, line.order.customer]));
+      for (const customer of customers.values()) {
+        captured += await notifyCustomer(
+          customer,
+          {
+            kind: "pickup_ready",
+            subject: "Your Mishloach Manos order is ready for pickup",
+            body: `${customer.name}, the package for ${pkg.recipientName} is packed and waiting at the pickup door.`,
+            dedupeKey: `pickup-ready|${pkg.id}|${customer.id}`,
+            packageId: pkg.id,
+          },
+          tx
+        );
+      }
+      return captured;
+    });
+    if (outcome === null) continue;
+    readied += 1;
+    notified += outcome;
   }
   return { readied, notified };
 }

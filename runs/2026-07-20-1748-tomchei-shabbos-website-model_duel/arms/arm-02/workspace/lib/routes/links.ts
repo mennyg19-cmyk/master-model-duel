@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 
@@ -47,6 +47,10 @@ export function pinCookieValid(linkId: string, value: string | undefined): boole
  */
 export async function createRouteLink(routeId: string, pin: string | null, staffId?: string) {
   const token = randomBytes(32).toString("base64url");
+  // The PIN hash is keyed by the link id, so mint the id up front — the link
+  // row is born WITH its pinHash in one insert. A PIN-protected link can never
+  // exist, even transiently, without its PIN gate.
+  const linkId = randomUUID();
   const link = await db.$transaction(async (tx) => {
     await tx.routeLink.updateMany({
       where: { routeId, revokedAt: null },
@@ -54,17 +58,14 @@ export async function createRouteLink(routeId: string, pin: string | null, staff
     });
     return tx.routeLink.create({
       data: {
+        id: linkId,
         routeId,
         tokenHash: hashLinkToken(token),
-        pinHash: null,
+        pinHash: pin ? hashPin(linkId, pin) : null,
         createdByStaffId: staffId,
       },
     });
   });
-  // PIN hash is keyed by the link id, which doesn't exist before the insert.
-  if (pin) {
-    await db.routeLink.update({ where: { id: link.id }, data: { pinHash: hashPin(link.id, pin) } });
-  }
   return { link, token, url: `${env.APP_URL}/d/${token}` };
 }
 
@@ -85,7 +86,7 @@ export async function loadLinkByToken(token: string): Promise<LinkAccess> {
 
 export type PinCheck =
   | { ok: true }
-  | { ok: false; locked: boolean; attemptsLeft: number };
+  | { ok: false; locked: boolean; attemptsLeft: number; noPin?: boolean };
 
 /** Throttled PIN check (UR-015): 5 wrong tries lock the link for 15 minutes. */
 export async function verifyPin(linkId: string, pin: string): Promise<PinCheck> {
@@ -93,7 +94,9 @@ export async function verifyPin(linkId: string, pin: string): Promise<PinCheck> 
     where: { id: linkId },
     select: { pinHash: true, pinAttempts: true, pinLockedUntil: true },
   });
-  if (!link?.pinHash) return { ok: true };
+  // A link with no pinHash never passes the PIN gate — posting a PIN to a
+  // no-PIN link must not mint a cookie or read as success.
+  if (!link?.pinHash) return { ok: false, locked: false, attemptsLeft: 0, noPin: true };
   if (link.pinLockedUntil && link.pinLockedUntil > new Date()) {
     return { ok: false, locked: true, attemptsLeft: 0 };
   }

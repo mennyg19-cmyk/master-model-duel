@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { RouteBuilder } from "@/components/admin/route-actions";
 import { BulkDeliveryForm } from "@/components/admin/bulk-delivery-form";
 
-const STATUS_TONE = { PLANNED: "neutral", IN_PROGRESS: "brand", COMPLETED: "success" } as const;
+import { ROUTE_STATUS_TONE } from "@/lib/routes/status";
 
 export default async function RoutesPage() {
   await requirePermissionPage("fulfillment.manage");
@@ -75,7 +75,7 @@ export default async function RoutesPage() {
                         {route.name}
                       </Link>
                     </td>
-                    <td><Badge tone={STATUS_TONE[route.status]}>{route.status.replace("_", " ")}</Badge></td>
+                    <td><Badge tone={ROUTE_STATUS_TONE[route.status]}>{route.status.replace("_", " ")}</Badge></td>
                     <td>{route.driverStaff?.name ?? <span className="text-muted">unassigned</span>}</td>
                     <td>{delivered}/{route.stops.length} delivered</td>
                     <td className="text-muted">{route.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>

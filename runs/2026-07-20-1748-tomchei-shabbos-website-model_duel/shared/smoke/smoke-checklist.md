@@ -83,13 +83,13 @@ See `shared/phases/PHASE-P8-EXPECTED.md`. Both arms P8 **gated**.
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Driver magic link | ✓ | |
-| S2 | Maps + print fallback | ✓ | |
-| S3 | Method switch + reroute | ✓ | |
-| S4 | Bulk + day-of notify | ✓ | |
-| S5 | Pickup + crons | ✓ | |
+| S1 | Driver magic link | ✓ | ✓ |
+| S2 | Maps + print fallback | ✓ | ✓ |
+| S3 | Method switch + reroute | ✓ | ✓ |
+| S4 | Bulk + day-of notify | ✓ | ✓ |
+| S5 | Pickup + crons | ✓ | ✓ |
 
-See `shared/phases/PHASE-P9-EXPECTED.md`. arm-01 P9 **gated**.
+See `shared/phases/PHASE-P9-EXPECTED.md`. Both arms P9 **gated**.
 
 ## P10
 

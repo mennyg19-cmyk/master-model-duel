@@ -1,35 +1,21 @@
 import { z } from "zod";
-import { requirePermissionApi } from "@/lib/auth/current-user";
-import { ActionError } from "@/lib/packages/actions";
+import { adminHandler } from "@/lib/api/admin-handler";
 import { confirmReroute } from "@/lib/routes/service";
-import { getOpenSeason } from "@/lib/season";
 
 const schema = z.object({ packageId: z.string().min(1) });
 
 /**
  * Manager-confirmed reroute (G-023): pull a nearby unshipped shipping package
- * onto this route — voids its label, switches the method, appends the stop.
+ * onto this route — voids its label, switches the method, inserts the stop.
  * This endpoint IS the explicit confirm; suggestions alone never mutate.
  */
-export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  const gate = await requirePermissionApi("fulfillment.manage");
-  if ("response" in gate) return gate.response;
-  const { id } = await context.params;
-
-  const season = await getOpenSeason();
-  if (!season) return Response.json({ error: "No open season" }, { status: 409 });
-
-  const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "Pick a package to reroute" }, { status: 400 });
-
-  try {
-    const stop = await confirmReroute(season.id, id, parsed.data.packageId, {
-      id: gate.staff.realUser.id,
-      email: gate.staff.realUser.email,
+export const POST = adminHandler<{ id: string }, z.infer<typeof schema>>(
+  { schema, invalidMessage: "Pick a package to reroute" },
+  async ({ params, staff, season, body }) => {
+    const stop = await confirmReroute(season.id, params.id, body.packageId, {
+      id: staff.realUser.id,
+      email: staff.realUser.email,
     });
     return Response.json({ ok: true, stopId: stop.id, position: stop.position });
-  } catch (error) {
-    if (error instanceof ActionError) return Response.json({ error: error.message }, { status: error.status });
-    throw error;
   }
-}
+);

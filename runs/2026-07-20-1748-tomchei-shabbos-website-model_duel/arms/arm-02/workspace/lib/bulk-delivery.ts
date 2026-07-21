@@ -51,7 +51,9 @@ export async function scheduleBulkDelivery(
       kind: "bulk_delivery_scheduled",
       subject: `Your Mishloach Manos delivery is scheduled for ${input.date}`,
       body: `${customer.name}, your bulk delivery is scheduled for ${input.date}, ${input.window}. No need to be home — packages are left at the door.`,
-      dedupeKey: `bulk|${schedule.id}|${customer.id}`,
+      // Keyed by the scheduling INTENT (season+date+window), not the schedule
+      // row id — a double-click or re-submit on timeout never double-notifies.
+      dedupeKey: `bulk|${seasonId}|${input.date}|${input.window}|${customer.id}`,
     });
   }
   return { schedule, notified, customers: customers.size, packages: packages.length };

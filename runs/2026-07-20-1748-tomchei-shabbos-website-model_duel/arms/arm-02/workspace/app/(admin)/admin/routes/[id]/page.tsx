@@ -16,7 +16,7 @@ import {
   StopDeliveredButton,
 } from "@/components/admin/route-actions";
 
-const STATUS_TONE = { PLANNED: "neutral", IN_PROGRESS: "brand", COMPLETED: "success" } as const;
+import { ROUTE_STATUS_TONE } from "@/lib/routes/status";
 
 export default async function RouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermissionPage("fulfillment.manage");
@@ -56,7 +56,7 @@ export default async function RouteDetailPage({ params }: { params: Promise<{ id
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{route.name}</h1>
-        <Badge tone={STATUS_TONE[route.status]}>{route.status.replace("_", " ")}</Badge>
+        <Badge tone={ROUTE_STATUS_TONE[route.status]}>{route.status.replace("_", " ")}</Badge>
         <span className="text-sm text-muted">{delivered}/{route.stops.length} delivered</span>
         <Link href="/admin/routes" className="text-sm text-brand-strong underline">← All routes</Link>
       </div>

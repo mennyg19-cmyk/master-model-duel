@@ -9,8 +9,11 @@ export type GeocodableAddress = { line1: string; city: string; state: string; zi
 // local provider answers: the ZIP centroid plus a deterministic street-level
 // offset (hash of street + house number, up to ~0.35 mile), so route ordering
 // and the nearby-reroute rule behave like real coordinates in dev.
+/** Warehouse centroid (Lakewood 08701) — the single source of the route-origin fallback. */
+export const WAREHOUSE_ORIGIN = { latitude: 40.0821, longitude: -74.2097 };
+
 const ZIP_CENTROIDS: Record<string, { latitude: number; longitude: number }> = {
-  "08701": { latitude: 40.0821, longitude: -74.2097 },
+  "08701": WAREHOUSE_ORIGIN,
   "08527": { latitude: 40.1004, longitude: -74.3126 },
   "08753": { latitude: 39.9779, longitude: -74.1832 },
   "08755": { latitude: 40.0069, longitude: -74.2205 },

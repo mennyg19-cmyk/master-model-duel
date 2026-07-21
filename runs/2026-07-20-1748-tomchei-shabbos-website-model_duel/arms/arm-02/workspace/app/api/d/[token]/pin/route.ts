@@ -23,6 +23,9 @@ export async function POST(request: Request, context: { params: Promise<{ token:
 
   const check = await verifyPin(access.link.id, parsed.data.pin);
   if (!check.ok) {
+    if (check.noPin) {
+      return Response.json({ error: "This link has no PIN — open it directly" }, { status: 400 });
+    }
     return Response.json(
       {
         error: check.locked

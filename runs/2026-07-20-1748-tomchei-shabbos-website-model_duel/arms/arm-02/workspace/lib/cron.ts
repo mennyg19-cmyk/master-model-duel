@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 
@@ -10,7 +11,11 @@ export function requireCronAuth(request: Request): Response | null {
     return Response.json({ error: "Cron endpoints are disabled — set CRON_SECRET" }, { status: 503 });
   }
   const header = request.headers.get("authorization") ?? "";
-  if (header !== `Bearer ${env.CRON_SECRET}`) {
+  // Constant-time compare — same posture as the driver PIN gate.
+  const expected = Buffer.from(`Bearer ${env.CRON_SECRET}`);
+  const actual = Buffer.from(header);
+  const matches = expected.length === actual.length && timingSafeEqual(expected, actual);
+  if (!matches) {
     return Response.json({ error: "Missing or wrong cron bearer secret" }, { status: 401 });
   }
   return null;

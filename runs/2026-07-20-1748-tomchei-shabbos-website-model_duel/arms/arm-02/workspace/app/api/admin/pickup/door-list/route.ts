@@ -1,15 +1,8 @@
-import { requirePermissionApi } from "@/lib/auth/current-user";
+import { adminHandler } from "@/lib/api/admin-handler";
 import { renderDoorList } from "@/lib/pickup";
-import { getOpenSeason } from "@/lib/season";
 
 /** Printable door list of ready pickups with a picked-up stamp box (G-026). */
-export async function GET() {
-  const gate = await requirePermissionApi("fulfillment.manage");
-  if ("response" in gate) return gate.response;
-
-  const season = await getOpenSeason();
-  if (!season) return Response.json({ error: "No open season" }, { status: 409 });
-
+export const GET = adminHandler({}, async ({ season }) => {
   const pdf = await renderDoorList(season.id);
   return new Response(new Uint8Array(pdf), {
     headers: {
@@ -17,4 +10,4 @@ export async function GET() {
       "content-disposition": 'inline; filename="pickup-door-list.pdf"',
     },
   });
-}
+});
