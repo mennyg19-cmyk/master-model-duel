@@ -181,3 +181,11 @@
 2026-07-21T14:15:03Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-03,,reviewer,glm-5.2-high,d8d77458-bf6d-4daa-a484-ef0af94c7f05,,,,,,,,grill turns grade 8/8; usage_missing_pending_export
 2026-07-21T14:17:28Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-03,,plan,cursor-grok-4.5-high,0396d4c9-7bd0-42ad-9c7a-c312d3aa8de2,,,,,,,,12 phases BUILD-PLAN; late_join; usage_missing_pending_export
 2026-07-21T14:18:19Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-03,,reviewer,glm-5.2-high,5eafd426-7bd7-4ba8-872f-4ac8ae110dc3,,,,,,,,plan review 15/15 bonus_plan; late_join; usage_missing_pending_export
+2026-07-21T14:18:58Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P1,build,cursor-grok-4.5-high,,,,,,,,,P1 foundation build greenfield; late_join; usage_missing_pending_export
+2026-07-21T14:32:42Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P1,build,cursor-grok-4.5-high,be7ddb25-d6c6-4b25-8996-86a7ab4d1963,,,,,,,,P1 shipped S1-S5; AUTH_MODE=dev; late_join; usage_missing_pending_export
+2026-07-21T14:32:43Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P1,review_security,glm-5.2-high,06ec603f-92e9-41e9-a718-9c1270b06d97,,,,,,,,10 findings 1 crit; usage_missing_pending_export
+2026-07-21T14:32:43Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P1,review_quality,glm-5.2-high,fcda9a78-04ea-41b2-9fc7-ee29f5ae13a6,,,,,,,,14 findings; usage_missing_pending_export
+2026-07-21T14:32:43Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P1,review_rules,glm-5.2-high,0ea6bc77-85be-467d-8910-aca50b7b1894,,,,,,,,28 findings 3 crit; usage_missing_pending_export
+2026-07-21T14:32:44Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P1,review_clean_code,glm-5.2-high,c7aac9f0-1f52-402a-8bfb-de7a21ba8b4c,,,,,,,,16 findings 3 high; usage_missing_pending_export
+2026-07-21T14:36:07Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P1,review_aggregate,glm-5.2-high,f501d1b5-ba8f-4a98-8d27-4e2417de68d9,,,,,,,,5 crit 3 high 45 deduped; usage_missing_pending_export
+2026-07-21T14:40:54Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P1,fix,cursor-grok-4.5-high,32f700a2-e637-4075-8105-c1e6a8b88dec,,,,,,,,A1-A8 fixed S1-S5 pass; A9-A44 deferred; usage_missing_pending_export
