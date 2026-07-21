@@ -4,6 +4,12 @@ import { z } from "zod";
 // set) and production both fail startup if the webhook secret is still this value.
 export const DEV_WEBHOOK_SECRET = "whsec_dev_mock_secret";
 
+// Publicly-known SESSION_SECRET values (shipped in .env.example / docs). An
+// operator who copies one unchanged would sign every staff session with an
+// HMAC key anyone can read from the repo — real mode refuses to start (B1,
+// same fail-closed posture as the Stripe webhook secret guard below).
+const PUBLIC_SESSION_SECRET_DEFAULTS = new Set(["change-me-to-a-random-string"]);
+
 // `next build` evaluates modules with NODE_ENV=production before any real env
 // exists; the production-only guards must not fire during the build phase.
 const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
@@ -41,6 +47,9 @@ const envSchema = z
     // UPS credentials (plan P8 declaration-only carry).
     SHIPPO_FEDEX_ACCOUNT_ID: z.string().optional(),
     SHIPPO_UPS_ACCOUNT_ID: z.string().optional(),
+    // Optional USPS carrier account: when set, live getRates quotes USPS
+    // alongside the negotiated FedEx/UPS accounts (EXPECTED §2).
+    SHIPPO_USPS_ACCOUNT_ID: z.string().optional(),
   })
   .refine(
     (vars) => vars.AUTH_MODE !== "clerk" || (vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && vars.CLERK_SECRET_KEY),
@@ -50,6 +59,21 @@ const envSchema = z
   // event with STRIPE_WEBHOOK_SECRET, so real mode must never run with the
   // public repo default, and production must never fall back to the mock gateway.
   .superRefine((vars, ctx) => {
+    // Real mode = anything beyond the purely-local mock harness: production
+    // runtime, or a live Stripe/Shippo credential present. The secret that
+    // signs every staff session must never be a repo-published value there.
+    const realMode =
+      (process.env.NODE_ENV === "production" && !isBuildPhase) ||
+      Boolean(vars.STRIPE_SECRET_KEY) ||
+      Boolean(vars.SHIPPO_API_TOKEN);
+    if (realMode && PUBLIC_SESSION_SECRET_DEFAULTS.has(vars.SESSION_SECRET)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["SESSION_SECRET"],
+        message:
+          "SESSION_SECRET is still the public .env.example placeholder — staff sessions would be forgeable. Generate a random secret (e.g. `openssl rand -hex 32`)",
+      });
+    }
     if (vars.STRIPE_SECRET_KEY && vars.STRIPE_WEBHOOK_SECRET === DEV_WEBHOOK_SECRET) {
       ctx.addIssue({
         code: "custom",

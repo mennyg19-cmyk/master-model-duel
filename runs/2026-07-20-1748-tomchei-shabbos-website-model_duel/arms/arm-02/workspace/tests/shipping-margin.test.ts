@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolveMargin } from "../lib/shipping/margin";
-import { mockRates, type CarrierRate } from "../lib/shipping/mock-rates";
+import { mockRates } from "../lib/shipping/mock-rates";
+import type { CarrierRate } from "../lib/shipping/types";
 
 const rate = (carrier: string, service: string, amountCents: number): CarrierRate => ({
   rateId: `${carrier}|${service}|${amountCents}`,

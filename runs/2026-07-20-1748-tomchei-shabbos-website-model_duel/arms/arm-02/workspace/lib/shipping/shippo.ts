@@ -1,5 +1,6 @@
 import { env } from "@/lib/env";
-import { mockRates, type CarrierRate, type Parcel, type ShipAddress } from "@/lib/shipping/mock-rates";
+import { mockRates } from "@/lib/shipping/mock-rates";
+import type { CarrierRate, Parcel, ShipAddress } from "@/lib/shipping/types";
 
 // Shippo wrapper (R-173, R-177): rate / buy / void / track / validate. With
 // SHIPPO_API_TOKEN set it talks REST to api.goshippo.com using the org's
@@ -9,7 +10,7 @@ import { mockRates, type CarrierRate, type Parcel, type ShipAddress } from "@/li
 // tests — the same pattern as the Stripe mock gateway (plan risk #3:
 // negotiated rates aren't reproducible in Shippo test mode anyway).
 
-export type { CarrierRate, Parcel, ShipAddress } from "@/lib/shipping/mock-rates";
+export type { CarrierRate, Parcel, ShipAddress } from "@/lib/shipping/types";
 
 export type PurchasedLabel = {
   transactionId: string;
@@ -30,16 +31,27 @@ export class ShippoError extends Error {}
 // ---------------------------------------------------------------------------
 
 const SHIPPO_BASE = "https://api.goshippo.com";
+// Every P8 money path (checkout quoting, buy, void, tracking, validation)
+// rides this fetch — a hung Shippo endpoint must never pin a worker forever.
+const SHIPPO_TIMEOUT_MS = 15_000;
 
 async function shippoFetch(path: string, body?: unknown): Promise<Record<string, unknown>> {
-  const response = await fetch(`${SHIPPO_BASE}${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    headers: {
-      authorization: `ShippoToken ${env.SHIPPO_API_TOKEN}`,
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${SHIPPO_BASE}${path}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers: {
+        authorization: `ShippoToken ${env.SHIPPO_API_TOKEN}`,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(SHIPPO_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw new ShippoError(
+      `Shippo ${path} did not answer within ${SHIPPO_TIMEOUT_MS / 1000}s (${(error as Error).name}: ${(error as Error).message})`
+    );
+  }
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     throw new ShippoError(`Shippo ${path} failed (${response.status}): ${JSON.stringify(payload).slice(0, 300)}`);
@@ -75,7 +87,14 @@ export async function getRates(from: ShipAddress, to: ShipAddress, parcels: Parc
       weight: parcel.weightGrams,
       mass_unit: "g",
     })),
-    carrier_accounts: [env.SHIPPO_FEDEX_ACCOUNT_ID, env.SHIPPO_UPS_ACCOUNT_ID],
+    // USPS quotes alongside the negotiated FedEx/UPS accounts when its Shippo
+    // carrier account is configured (EXPECTED §2: "+USPS where applicable" —
+    // Shippo itself omits services the parcels aren't eligible for).
+    carrier_accounts: [
+      env.SHIPPO_FEDEX_ACCOUNT_ID,
+      env.SHIPPO_UPS_ACCOUNT_ID,
+      ...(env.SHIPPO_USPS_ACCOUNT_ID ? [env.SHIPPO_USPS_ACCOUNT_ID] : []),
+    ],
     async: false,
   });
   const rates = Array.isArray(shipment.rates) ? (shipment.rates as Record<string, unknown>[]) : [];

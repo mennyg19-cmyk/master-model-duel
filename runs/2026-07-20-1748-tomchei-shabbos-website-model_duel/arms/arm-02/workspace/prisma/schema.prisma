@@ -571,6 +571,7 @@ model ShippingQuote {
   quotedAt  DateTime              @default(now())
   expiresAt DateTime
   options   ShippingQuoteOption[]
+  shipments Shipment[]
 }
 
 model ShippingQuoteOption {
@@ -600,6 +601,11 @@ model Shipment {
   packageId           String
   package             Package        @relation(fields: [packageId], references: [id])
   status              ShipmentStatus
+  // The ShippingQuote the charge is anchored to: the customer-paid checkout
+  // quote when the label matched one, else the label-time comparison quote.
+  // P12 reconciliation follows this FK back to what the customer saw.
+  quoteId             String?
+  quote               ShippingQuote? @relation(fields: [quoteId], references: [id])
   carrier             String
   service             String
   shippoRateId        String?

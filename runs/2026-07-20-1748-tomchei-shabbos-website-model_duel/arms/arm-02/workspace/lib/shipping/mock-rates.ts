@@ -7,29 +7,7 @@
 //   destination — exactly what the S1 margin fixtures need.
 // - USPS only quotes when every parcel is under 4.5kg ("where applicable").
 
-export type ShipAddress = {
-  name: string;
-  line1: string;
-  line2?: string | null;
-  city: string;
-  state: string;
-  zip: string;
-};
-
-export type Parcel = {
-  lengthCm: number;
-  widthCm: number;
-  heightCm: number;
-  weightGrams: number;
-};
-
-export type CarrierRate = {
-  rateId: string;
-  carrier: string;
-  service: string;
-  amountCents: number;
-  estimatedDays: number | null;
-};
+import type { CarrierRate, Parcel, ShipAddress } from "@/lib/shipping/types";
 
 const MOCK_SURCHARGE_CENTS = 400;
 const MOCK_CARRIERS = [

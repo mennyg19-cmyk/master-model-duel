@@ -19,6 +19,8 @@ export type FeeRuleConfig = {
   perPackageFeeCents: number;
   /** Live margin-engine charge per destinationKey (P8). */
   shippingRateByDestination: Record<string, number>;
+  /** ShippingQuote row behind each live rate — anchors labels to the paid quote. */
+  shippingQuoteIdByDestination?: Record<string, string>;
   deliveryZips: string[];
   purimDayChoices: string[];
 };
@@ -28,6 +30,9 @@ export type FeeLine = {
   methodId: string;
   amountCents: number;
   recipientKeys: string[];
+  /** Shipping lines only: destinationKey + quote row, so label purchase can anchor to this charge. */
+  destination?: string;
+  quoteId?: string;
 };
 
 export type FeeResult =
@@ -126,6 +131,8 @@ export function computeFees(
       methodId: entry.methodId,
       amountCents: liveRate,
       recipientKeys: entry.keys,
+      destination,
+      quoteId: config.shippingQuoteIdByDestination?.[destination],
     });
   }
 

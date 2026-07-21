@@ -153,6 +153,18 @@ export async function createOrderFromCart(input: CheckoutInput): Promise<Checkou
       },
     });
 
+    // Anchor the customer-paid shipping quotes to this order (M4/M6): label
+    // purchase records THIS charge, not a fresh label-time re-quote.
+    const paidQuoteIds = quote.fees!.ok
+      ? quote.fees!.feeLines.map((line) => line.quoteId).filter((id): id is string => Boolean(id))
+      : [];
+    if (paidQuoteIds.length > 0) {
+      await tx.shippingQuote.updateMany({
+        where: { id: { in: paidQuoteIds } },
+        data: { orderId: created.id },
+      });
+    }
+
     for (const line of input.cart.lines) {
       const priced = pricedById.get(line.id);
       const recipient = recipientByKey.get(assignmentKey(line.assignment!));

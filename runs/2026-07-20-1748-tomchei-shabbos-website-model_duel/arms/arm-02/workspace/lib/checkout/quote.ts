@@ -57,14 +57,14 @@ async function quoteShippingDestinations(
   recipients: CheckoutRecipient[],
   choices: MethodChoice[],
   methods: { id: string; kind: "BULK_DELIVERY" | "PER_PACKAGE_DELIVERY" | "SHIPPING" | "PICKUP" }[]
-): Promise<Record<string, number>> {
+): Promise<{ rates: Record<string, number>; quoteIds: Record<string, string> }> {
   const shippingMethodIds = new Set(methods.filter((method) => method.kind === "SHIPPING").map((method) => method.id));
   const choiceByRecipient = new Map(choices.map((choice) => [choice.recipientKey, choice.methodId]));
   const shippingRecipients = recipients.filter((recipient) => {
     const methodId = choiceByRecipient.get(recipient.key);
     return methodId !== undefined && shippingMethodIds.has(methodId);
   });
-  if (shippingRecipients.length === 0) return {};
+  if (shippingRecipients.length === 0) return { rates: {}, quoteIds: {} };
 
   const pricedById = new Map(priced.lines.map((line) => [line.id, line]));
   const productIds = [
@@ -105,14 +105,18 @@ async function quoteShippingDestinations(
   }
 
   const rates: Record<string, number> = {};
+  const quoteIds: Record<string, string> = {};
   for (const [destination, { to, items }] of byDestination) {
     const quoted = await quoteShipping(
       { name: to.recipientName, ...to.address },
       items
     );
-    if (!("error" in quoted)) rates[destination] = quoted.decision.chargeCents;
+    if (!("error" in quoted)) {
+      rates[destination] = quoted.decision.chargeCents;
+      quoteIds[destination] = quoted.quoteId;
+    }
   }
-  return rates;
+  return { rates, quoteIds };
 }
 
 /**
@@ -141,7 +145,9 @@ export async function buildCheckoutQuote(
 
   let fees: FeeResult | null = null;
   if (choices) {
-    config.shippingRateByDestination = await quoteShippingDestinations(priced, recipients, choices, methods);
+    const quoted = await quoteShippingDestinations(priced, recipients, choices, methods);
+    config.shippingRateByDestination = quoted.rates;
+    config.shippingQuoteIdByDestination = quoted.quoteIds;
     fees = computeFees(recipients, choices, methods, config, deliveryDay);
   }
 

@@ -73,11 +73,11 @@ See `shared/phases/PHASE-P7-EXPECTED.md`. Both arms P7 **gated**.
 
 | # | Check | arm-01 | arm-02 |
 |---|---|---|---|
-| S1 | Margin math | ✓ | |
-| S2 | Void + rebuy | ✓ | |
-| S3 | Unshipped label guard | ✓ | |
+| S1 | Margin math | ✓ | ✓ |
+| S2 | Void + rebuy | ✓ | ✓ |
+| S3 | Unshipped label guard | ✓ | ✓ |
 
-See `shared/phases/PHASE-P8-EXPECTED.md`. arm-01 P8 **gated**.
+See `shared/phases/PHASE-P8-EXPECTED.md`. Both arms P8 **gated**.
 
 ## P9
 
