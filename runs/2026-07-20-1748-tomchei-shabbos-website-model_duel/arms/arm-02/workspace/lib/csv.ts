@@ -4,6 +4,19 @@
 
 export const MAX_IMPORT_ROWS = 5000;
 
+// CSV writer half (P12 export center, R-092). Quotes any field containing a
+// comma, quote, or newline; doubles embedded quotes — the inverse of parseCsv,
+// so an exported file round-trips through our own reader.
+export function csvField(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+export function csvLine(values: (string | number | null | undefined)[]): string {
+  return values.map(csvField).join(",") + "\r\n";
+}
+
 export type CsvTable = { headers: string[]; rows: string[][] };
 
 export function parseCsv(text: string): CsvTable | { error: string } {

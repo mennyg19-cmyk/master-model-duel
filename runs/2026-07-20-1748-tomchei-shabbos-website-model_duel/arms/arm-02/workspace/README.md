@@ -87,6 +87,42 @@ inside the same transactions that finalize orders and book refunds. Settings →
 Email owns sender identity, branding footer, a live test sender, and the log
 retention the purge cron (`/api/cron/email-log-purge`) enforces.
 
+## Reports, exports, reconciliation (P12)
+
+`/admin/reports` (permission `reports.view`) has multi-season performance, per-season
+drill-downs, and the shipping-margin reconciliation (charged vs paid per label).
+`/admin/exports` downloads audited CSVs (deliveries, year-end, year metrics, item
+sales, lapsed customers — streamed in pages) and runs Stripe payment reconciliation:
+the matcher compares checkout sessions/intents against the posted payment ledger and
+upserts `PaymentReconFlag` rows on unique references, so reruns (button or the
+`stripe-reconciliation` cron) never duplicate a finding.
+
+## Legacy migration
+
+`/admin/import` → Legacy migration (permission `imports.legacy`). Entity map:
+`order_number` → Order.orderNumber (blank/duplicate numbers repaired sequentially);
+`order_date` → Order.finalizedAt + the "Legacy YYYY" closed season; customer columns →
+Customer (dedupe on email, then normalized phone); `product_name`/`product_price` →
+Product in the legacy season, `replacementId` pointed at the closest-priced active
+product so repeat-order works year one; recipient/address columns → OrderLine
+snapshots + CustomerAddress book entries (dedupe on the normalized key, suspect rows
+land in the address review queue); `method` → FulfillmentMethod by keyword.
+
+Dry-run writes nothing and stores a full report on a `LegacyImportRun` keyed by the
+file hash. Commit runs four staged atomic transactions (catalog → customers →
+addresses → orders); each stage records completion inside its own transaction, so an
+interrupted commit resumes at the first missing stage when the same file is committed
+again.
+
+## Test mode & console
+
+Test mode = no `STRIPE_SECRET_KEY` (mock money) or explicit `TEST_MODE=true`. A banner
+shows on every surface; `/admin/test-console` (managers) can wipe the open season's
+transactional data and reseed a demo order. Outside test mode the console page and its
+API return 404. All six crons are registered in `vercel.json` and bearer-authed with
+`CRON_SECRET`. Scale fixtures: `npm run db:seed-scale` (1k finalized orders / 5k
+packages).
+
 ## Patterns (one per concern)
 
 - Data access: Prisma via `lib/db.ts` singleton.

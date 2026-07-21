@@ -998,3 +998,84 @@ model AssemblyBatch {
   assembledAt DateTime @default(now())
   note        String?
 }
+
+// ---------------------------------------------------------------------------
+// P12 — payment reconciliation + legacy migration.
+// ---------------------------------------------------------------------------
+
+// One reconciliation finding (R-093). reference (the Stripe session / intent /
+// refund id the finding is anchored to) is unique, so re-running the matcher
+// upserts instead of duplicating — "rerun without duplicate adjustments" is a
+// DB guarantee. Resolving keeps the row as the audit trail of what was found.
+model PaymentReconFlag {
+  id                String    @id @default(cuid())
+  kind              String // orphaned_payment | amount_mismatch | unmatched_refund | missing_payment_row
+  reference         String    @unique
+  orderId           String?
+  detail            Json
+  status            String    @default("open") // open | resolved
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  resolvedAt        DateTime?
+  resolvedByStaffId String?
+
+  @@index([status, createdAt])
+}
+
+enum LegacyImportStatus {
+  DRY_RUN
+  COMMITTING
+  COMPLETED
+  FAILED
+}
+
+// One legacy-export file worked through the migration pipeline (R-186, G-029).
+// fileHash is unique: re-uploading the same bytes resumes the existing run
+// instead of importing twice; completed stages (below) skip on resume.
+model LegacyImportRun {
+  id               String              @id @default(cuid())
+  fileHash         String              @unique
+  fileName         String
+  status           LegacyImportStatus  @default(DRY_RUN)
+  // Dry-run report snapshot: per-row buckets, merges, repairs, source totals.
+  report           Json
+  createdByStaffId String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  stages           LegacyImportStage[]
+  reviewItems      AddressReviewItem[]
+}
+
+// One committed stage (customers | addresses | catalog | orders). Each stage
+// is a single transaction that writes its rows AND this record — a crash
+// between stages leaves earlier stages durably marked done, so a re-commit
+// resumes exactly where it stopped.
+model LegacyImportStage {
+  id         String          @id @default(cuid())
+  runId      String
+  run        LegacyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stage      String
+  counts     Json
+  finishedAt DateTime        @default(now())
+
+  @@unique([runId, stage])
+}
+
+// Staff review queue for suspect imported addresses (UR-014): rows the
+// cleanup pass couldn't confidently normalize (bad zip/state, ambiguous
+// recipient). Resolving is a staff action, audited via AuditLog.
+model AddressReviewItem {
+  id                String           @id @default(cuid())
+  runId             String?
+  run               LegacyImportRun? @relation(fields: [runId], references: [id])
+  customerId        String?
+  addressId         String?
+  reason            String
+  detail            Json?
+  status            String           @default("open") // open | resolved
+  createdAt         DateTime         @default(now())
+  resolvedAt        DateTime?
+  resolvedByStaffId String?
+
+  @@index([status, createdAt])
+}

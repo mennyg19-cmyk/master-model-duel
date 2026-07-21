@@ -17,3 +17,6 @@ export async function POST(request: Request) {
   });
   return Response.json({ ok: true, ...result });
 }
+
+// Vercel cron invokes with GET (R-185); same bearer-authed handler either way.
+export { POST as GET };

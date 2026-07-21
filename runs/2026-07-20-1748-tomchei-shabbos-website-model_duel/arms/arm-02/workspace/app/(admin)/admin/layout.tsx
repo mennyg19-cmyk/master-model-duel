@@ -6,6 +6,8 @@ import type { Permission } from "@/lib/auth/permissions";
 import { BRAND } from "@/lib/brand";
 import { Badge } from "@/components/ui/badge";
 import { StopImpersonationButton, LogoutButton } from "@/components/session-buttons";
+import { TestModeBanner } from "@/components/test-mode-banner";
+import { isTestMode } from "@/lib/test-mode";
 
 const NAV_ITEMS: { href: string; label: string; permission: Permission | null }[] = [
   { href: "/admin", label: "Dashboard", permission: null },
@@ -16,6 +18,8 @@ const NAV_ITEMS: { href: string; label: string; permission: Permission | null }[
   { href: "/admin/routes", label: "Routes", permission: "fulfillment.manage" },
   { href: "/admin/pickup", label: "Pickup", permission: "fulfillment.manage" },
   { href: "/admin/follow-up", label: "Follow-up", permission: "orders.view" },
+  { href: "/admin/reports", label: "Reports", permission: "reports.view" },
+  { href: "/admin/exports", label: "Exports", permission: "reports.view" },
   { href: "/admin/customers", label: "Customers", permission: "customers.manage" },
   { href: "/admin/email", label: "Email", permission: "email.manage" },
   { href: "/admin/import", label: "Import", permission: "customers.manage" },
@@ -24,6 +28,7 @@ const NAV_ITEMS: { href: string; label: string; permission: Permission | null }[
   { href: "/admin/staff", label: "Staff", permission: "staff.manage" },
   { href: "/admin/audit", label: "Audit log", permission: "audit.view" },
   { href: "/admin/settings", label: "Settings", permission: "settings.manage" },
+  { href: "/admin/help", label: "Help", permission: null },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -36,11 +41,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const visibleNavItems = NAV_ITEMS.filter(
     (item) => item.permission === null || staff.actingAs.permissions.has(item.permission)
   );
+  // The test console only exists in test mode (R-103) — no live nav entry.
+  if (isTestMode() && staff.actingAs.permissions.has("settings.manage")) {
+    visibleNavItems.push({ href: "/admin/test-console", label: "Test console", permission: "settings.manage" });
+  }
   // Alert banner (R-106): remind staff when customers currently see the closed store.
   const openSeason = await getOpenSeason();
 
   return (
     <div className="flex-1 flex flex-col">
+      <TestModeBanner />
       {!openSeason && (
         <div className="bg-amber-100 px-4 py-2 text-sm text-amber-900" data-testid="admin-alert-banner">
           No season is open — the storefront shows the closed notice. Open a season under Settings.

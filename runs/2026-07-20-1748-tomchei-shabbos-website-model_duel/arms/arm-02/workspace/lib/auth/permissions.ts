@@ -14,6 +14,8 @@ export const PERMISSIONS = {
   "orders.manage": "Finalize and discard orders on behalf of customers",
   "fulfillment.manage": "Work the package board: split, regroup, statuses, print batches",
   "email.manage": "Run the email hub: campaigns, lists, subscribers, templates",
+  "reports.view": "View financial reports, run CSV exports and payment reconciliation",
+  "imports.legacy": "Run the legacy data migration pipeline (audited)",
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

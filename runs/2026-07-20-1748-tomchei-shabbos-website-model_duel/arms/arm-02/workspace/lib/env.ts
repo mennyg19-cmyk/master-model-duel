@@ -65,6 +65,12 @@ const envSchema = z
       .string()
       .optional()
       .transform((value) => value === "true" || value === "1"),
+    // Explicit test-environment switch (P12, R-101/R-129). Test mode is also
+    // inferred from mock money (no STRIPE_SECRET_KEY) — see lib/test-mode.ts.
+    TEST_MODE: z
+      .string()
+      .optional()
+      .transform((value) => value === "true" || value === "1"),
     // Twilio-class SMS (P11, G-021). All three required together for live mode.
     TWILIO_ACCOUNT_SID: z.string().optional(),
     TWILIO_AUTH_TOKEN: z.string().optional(),
