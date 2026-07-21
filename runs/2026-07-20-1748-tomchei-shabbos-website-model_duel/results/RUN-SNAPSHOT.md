@@ -21,7 +21,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- arm-01 P12: fix pass pending spawn
+- arm-01 P12: [arm-01 P12 fix pass](0928fbd8-52ba-4d0b-9ee5-15afbde01091) → gate (+1.5 → **18.0/20**)
 - arm-02 P7: [arm-02 P7 fix pass](7ce7cef3-9903-4bed-801b-38e6736bda5b)
 
 ## P12 aggregate (arm-01)
