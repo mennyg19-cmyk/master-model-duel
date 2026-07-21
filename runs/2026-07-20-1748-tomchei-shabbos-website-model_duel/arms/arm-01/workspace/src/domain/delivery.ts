@@ -233,14 +233,23 @@ export async function accessDriverRoute(
   }
   const isCorrect = pin ? equalHashes(link.pinHash, pinHash(tokenHash, pin)) : false;
   if (!isCorrect) {
-    const failedAttempts = link.failedAttempts + 1;
-    await prisma.driverMagicLink.update({
-      where: { id: link.id },
-      data: {
-        failedAttempts,
-        lockedUntil: failedAttempts >= 5 ? new Date(Date.now() + pinLockMs) : null,
-      },
-    });
+    const lockedUntil = new Date(now.getTime() + pinLockMs);
+    const [failure] = await prisma.$queryRaw<
+      Array<{ failedAttempts: number; lockedUntil: Date | null }>
+    >`
+      UPDATE "DriverMagicLink"
+      SET "failedAttempts" = "failedAttempts" + 1,
+          "lockedUntil" = CASE
+            WHEN "failedAttempts" + 1 >= 5 THEN ${lockedUntil}
+            ELSE NULL
+          END
+      WHERE "id" = ${link.id}
+        AND ("lockedUntil" IS NULL OR "lockedUntil" <= ${now})
+      RETURNING "failedAttempts", "lockedUntil"
+    `;
+    if (!failure || failure.lockedUntil) {
+      throw new Error("Too many wrong PIN attempts. Try again later.");
+    }
     throw new Error("The driver PIN is incorrect.");
   }
   await prisma.driverMagicLink.update({

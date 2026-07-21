@@ -307,7 +307,10 @@ model ImpersonationSession {
   actorStaffId  String
   targetStaffId String
   startedAt     DateTime  @default(now())
+  expiresAt     DateTime
   endedAt       DateTime?
+
+  @@index([actorStaffId, expiresAt])
 }
 
 model SessionStamp {
@@ -776,6 +779,7 @@ model StripePaymentIntent {
   stripePaymentIntentId String              @unique
   stripeCheckoutSessionId String?           @unique
   idempotencyKey        String              @unique
+  checkoutFingerprint   String              @default("")
   status                PaymentIntentStatus
   amountCents           Int
   currency              String              @default("usd")

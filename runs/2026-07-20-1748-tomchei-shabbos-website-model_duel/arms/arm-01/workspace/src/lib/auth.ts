@@ -83,6 +83,7 @@ export async function getCurrentStaffUser() {
       id: impersonationSessionId,
       actorStaffId: actor.id,
       endedAt: null,
+      expiresAt: { gt: new Date() },
     },
   });
   if (!impersonationSession) return { actor, effective: actor };

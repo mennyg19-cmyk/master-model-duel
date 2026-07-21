@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       intent.orderId,
       paymentIntentId,
       intent.amountCents,
+      intent.checkoutFingerprint,
     );
     return NextResponse.json({ paid: true, orderId: intent.orderId, ...outcome });
   } catch (error) {

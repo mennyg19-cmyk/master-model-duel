@@ -2,7 +2,7 @@
 
 Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
-**UTC snapshot:** 2026-07-21T08:05:00Z (approx)
+**UTC snapshot:** 2026-07-21T08:10:00Z (approx)
 
 ## Status
 
@@ -20,8 +20,9 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- [arm-01 Test5 self-fix](63579377-520d-46f5-a874-9a5c622353c0)
-- [arm-02 Test5 self-fix](1e87a818-4dcf-49f1-b851-e86ca1bccd3c)
+- Test 5 self-fix **1/2**:
+  - [arm-01 Test5 self-fix](63579377-520d-46f5-a874-9a5c622353c0) ✓ — SR-01–07 fixed, CI pass
+  - [arm-02 Test5 self-fix](1e87a818-4dcf-49f1-b851-e86ca1bccd3c) — pending
 
 **Next after fix:** residual reviewer panel (`glm-5.2-high`) → score /15.
 

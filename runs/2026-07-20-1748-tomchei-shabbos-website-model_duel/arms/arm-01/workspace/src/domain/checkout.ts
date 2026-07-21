@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   CachedPaymentStatus,
   PaymentIntentStatus,
@@ -35,6 +36,30 @@ async function loadCheckoutOrder(prisma: PrismaClient | Prisma.TransactionClient
       season: { include: { fulfillmentMethods: true } },
     },
   });
+}
+
+function createCheckoutFingerprint(
+  order: NonNullable<Awaited<ReturnType<typeof loadCheckoutOrder>>>,
+) {
+  const checkoutSnapshot = {
+    donationCents: order.donationCents,
+    defaultGreeting: order.defaultGreeting,
+    totalCents: order.totalCents,
+    lines: order.lines
+      .map((line) => ({
+        id: line.id,
+        quantity: line.quantity,
+        recipientAddressId: line.recipientAddressId,
+        fulfillmentMethodId: line.fulfillmentMethodId,
+        fulfillmentFeeCents: line.fulfillmentFeeCentsSnapshot,
+        greeting: line.greetingSnapshot,
+        deliveryDay: line.deliveryDay,
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  };
+  return createHash("sha256")
+    .update(JSON.stringify(checkoutSnapshot))
+    .digest("hex");
 }
 
 function findCheckoutConflicts(
@@ -209,7 +234,19 @@ export async function prepareCheckout(
       },
     });
   });
-  return { order, subtotalCents, fulfillmentCents, totalCents };
+  const preparedOrder = await loadCheckoutOrder(prisma, orderId);
+  if (!preparedOrder) {
+    throw new CheckoutConflictError("This draft is no longer available.", [
+      "Reload the order before checking out.",
+    ]);
+  }
+  return {
+    order,
+    subtotalCents,
+    fulfillmentCents,
+    totalCents,
+    checkoutFingerprint: createCheckoutFingerprint(preparedOrder),
+  };
 }
 
 export async function commitStripePayment(
@@ -218,6 +255,7 @@ export async function commitStripePayment(
   orderId: string,
   stripePaymentIntentId: string,
   amountCents: number,
+  expectedCheckoutFingerprint: string,
 ) {
   return prisma.$transaction(
     async (transaction) => {
@@ -238,6 +276,9 @@ export async function commitStripePayment(
       const conflicts = findCheckoutConflicts(order);
       if (amountCents !== order.totalCents) {
         conflicts.push("The charged amount does not match the current order total.");
+      }
+      if (expectedCheckoutFingerprint !== createCheckoutFingerprint(order)) {
+        conflicts.push("The checkout choices changed after this payment session was created.");
       }
       if (conflicts.length) {
         throw new CheckoutConflictError("The paid order became stale.", conflicts);

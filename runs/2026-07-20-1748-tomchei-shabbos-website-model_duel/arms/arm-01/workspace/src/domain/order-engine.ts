@@ -54,6 +54,7 @@ async function claimOrderNumber(prisma: PrismaClient, orderId: string) {
         throw new Error("Order finalization lost a concurrent update.");
       }
 
+      await materializeOrderPackages(transaction, orderId);
       return orderNumber;
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -64,9 +65,6 @@ export async function finalizeOrder(prisma: PrismaClient, orderId: string) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const orderNumber = await claimOrderNumber(prisma, orderId);
-      await prisma.$transaction((transaction) =>
-        materializeOrderPackages(transaction, orderId),
-      );
       return orderNumber;
     } catch (error) {
       const canRetry =

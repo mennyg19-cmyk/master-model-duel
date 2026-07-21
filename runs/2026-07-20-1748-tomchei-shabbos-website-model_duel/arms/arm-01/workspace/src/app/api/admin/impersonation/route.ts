@@ -27,11 +27,13 @@ export async function POST(request: Request) {
       );
     }
 
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
     const [impersonationSession] = await db.$transaction([
       db.impersonationSession.create({
         data: {
           actorStaffId: staffSession.actor.id,
           targetStaffId: target.id,
+          expiresAt,
         },
       }),
       db.auditLog.create({
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 60 * 60,
+      expires: expiresAt,
     });
     return response;
   } catch (error) {

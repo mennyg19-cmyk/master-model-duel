@@ -73,8 +73,24 @@ async function processCheckoutCompleted(event: Stripe.CheckoutSessionCompletedEv
     typeof session.payment_intent === "string"
       ? session.payment_intent
       : session.payment_intent?.id;
-  if (!orderId || !paymentIntentId || session.amount_total === null) {
+  const checkoutFingerprint = session.metadata?.checkoutFingerprint;
+  if (
+    !orderId ||
+    !paymentIntentId ||
+    session.amount_total === null ||
+    !checkoutFingerprint
+  ) {
     throw new Error("Stripe checkout event is missing order or payment details.");
+  }
+  if (session.payment_status !== "paid") {
+    await db.$transaction([
+      db.stripePaymentIntent.updateMany({
+        where: { stripeCheckoutSessionId: session.id },
+        data: { status: PaymentIntentStatus.PROCESSING },
+      }),
+      db.stripeWebhookEvent.create({ data: { id: event.id, type: event.type } }),
+    ]);
+    return { pending: true };
   }
   try {
     return await commitStripePayment(
@@ -83,6 +99,7 @@ async function processCheckoutCompleted(event: Stripe.CheckoutSessionCompletedEv
       orderId,
       paymentIntentId,
       session.amount_total,
+      checkoutFingerprint,
     );
   } catch (error) {
     if (!(error instanceof CheckoutConflictError)) throw error;

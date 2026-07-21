@@ -162,7 +162,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const idempotencyKey = `checkout:${draft.id}:${prepared.totalCents}`;
+    const idempotencyKey = `checkout:${draft.id}:${prepared.checkoutFingerprint}`;
     const existingIntent = await db.stripePaymentIntent.findUnique({
       where: { idempotencyKey },
     });
@@ -188,6 +188,7 @@ export async function POST(request: Request) {
         idempotencyKey,
         status: PaymentIntentStatus.CREATED,
         amountCents: prepared.totalCents,
+        checkoutFingerprint: prepared.checkoutFingerprint,
       },
       update: {
         status: PaymentIntentStatus.CREATED,
@@ -199,7 +200,7 @@ export async function POST(request: Request) {
     let sessionId: string;
     let checkoutUrl: string | null;
     if (stripe) {
-      const configuredBaseUrl = process.env.APP_BASE_URL;
+      const configuredBaseUrl = process.env.APP_URL;
       if (!configuredBaseUrl) {
         return NextResponse.json(
           { error: "The trusted application base URL is not configured." },
@@ -216,6 +217,7 @@ export async function POST(request: Request) {
       const session = await stripe.checkout.sessions.create(
         {
           mode: "payment",
+          payment_method_types: ["card"],
           client_reference_id: draft.id,
           line_items: [
             {
@@ -229,9 +231,15 @@ export async function POST(request: Request) {
           ],
           payment_intent_data: {
             capture_method: "automatic",
-            metadata: { orderId: draft.id },
+            metadata: {
+              orderId: draft.id,
+              checkoutFingerprint: prepared.checkoutFingerprint,
+            },
           },
-          metadata: { orderId: draft.id },
+          metadata: {
+            orderId: draft.id,
+            checkoutFingerprint: prepared.checkoutFingerprint,
+          },
           success_url: new URL(
             `/account/orders/${draft.id}?paid=1`,
             applicationBaseUrl,
