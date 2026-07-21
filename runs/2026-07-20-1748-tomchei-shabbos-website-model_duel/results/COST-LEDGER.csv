@@ -197,3 +197,12 @@
 2026-07-21T14:49:23Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P2,review_clean_code,glm-5.2-high,d9d22f7d-097c-47c5-be92-9be47072afef,,,,,,,,10 findings; usage_missing_pending_export
 2026-07-21T14:49:47Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P2,review_aggregate,glm-5.2-high,50626217-2a6c-477f-b447-acb6bc0e9d5d,,,,,,,,3 blocker 2 crit 35 deduped; usage_missing_pending_export
 2026-07-21T14:54:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P2,fix,cursor-grok-4.5-high,341b4628-1061-477f-b828-7142b627661d,,,,,,,,blockers+crit fixed test:domain-p2 pass; usage_missing_pending_export
+2026-07-21T14:54:10Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,build,cursor-grok-4.5-high,18af1716-6769-409d-aa0f-1bb7e0ba260d,,,,,,,,P3 storefront build; late_join; usage_missing_pending_export
+2026-07-21T15:05:16Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,build,cursor-grok-4.5-high,18af1716-6769-409d-aa0f-1bb7e0ba260d,,,,,,,,P3 storefront S1-S5 pass; usage_missing_pending_export
+2026-07-21T15:06:39Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,review_security,glm-5.2-high,b054346f-a143-4d30-9bf8-143bab869ba0,,,,,,,,1 high 3 med; usage_missing_pending_export
+2026-07-21T15:06:40Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,review_quality,glm-5.2-high,39147767-6f64-4d60-8fdd-c1eadb22ced9,,,,,,,,10 findings; usage_missing_pending_export
+2026-07-21T15:06:40Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,review_rules,glm-5.2-high,d76282d5-6777-4dfb-b1f9-2ef1fbe41e2b,,,,,,,,10 findings; usage_missing_pending_export
+2026-07-21T15:06:40Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,review_clean_code,glm-5.2-high,ad232ba7-8d83-4c5e-aaa9-8998765c2212,,,,,,,,10 findings; usage_missing_pending_export
+2026-07-21T15:07:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,review_aggregate,glm-5.2-high,95bf2385-0564-4c6c-a718-19c1eeb16516,,,,,,,,31 deduped 6 blockers; usage_missing_pending_export
+2026-07-21T15:14:35Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,builder,cursor-grok-4.5-high,18af1716-6769-409d-aa0f-1bb7e0ba260d,,,,,,,,storefront catalog archive newsletter admin; usage_missing_pending_export
+2026-07-21T15:14:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P3,fix,cursor-grok-4.5-high,c322c874-6060-489e-9068-3e6389e1a35d,,,,,,,,B1-B6 H1-H3 fixed S1-S5 pass; usage_missing_pending_export

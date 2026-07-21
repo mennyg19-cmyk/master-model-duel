@@ -1,0 +1,712 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  MANAGER
+  STAFF
+  DRIVER
+}
+
+enum PermissionEffect {
+  GRANT
+  DENY
+}
+
+enum AuditAction {
+  STAFF_CREATED
+  STAFF_ROLE_CHANGED
+  STAFF_PERMISSION_CHANGED
+  STAFF_REVOKED
+  STAFF_CONFIRMED
+  STAFF_INVITED
+  IMPERSONATION_STARTED
+  IMPERSONATION_ENDED
+  SETUP_BOOTSTRAP
+  LOGIN
+  SETTINGS_UPDATED
+  VERSIONED_UPDATE
+  ORDER_FINALIZED
+  ORDER_DISCARDED
+  ORDER_TRANSITIONED
+  PACKAGE_STAGE_CHANGED
+  INVENTORY_RESERVED
+  PRODUCT_UPSERTED
+  ADDON_UPSERTED
+  MEDIA_UPLOADED
+  MEDIA_REJECTED
+  NEWSLETTER_SUBSCRIBED
+  NEWSLETTER_UNSUBSCRIBED
+}
+
+enum SeasonStatus {
+  OPEN
+  CLOSED
+}
+
+enum ProductKind {
+  PACKAGE
+  ADDON
+  DONATION
+  MERCH
+}
+
+enum OrderStatus {
+  DRAFT
+  PLACED
+  PAID
+  FULFILLING
+  COMPLETED
+  CANCELLED
+  DISCARDED
+}
+
+enum CachedPaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  REFUNDED
+  OVERPAID
+}
+
+enum PackageStage {
+  NEW
+  PRINTED
+  PACKED
+  SENT
+  PICKED_UP
+}
+
+enum PaymentMethod {
+  STRIPE
+  CASH
+  CHECK
+  COMP
+}
+
+enum PaymentState {
+  POSTED
+  VOIDED
+}
+
+enum CronRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model StaffUser {
+  id              String    @id @default(cuid())
+  clerkUserId     String?   @unique
+  email           String    @unique
+  displayName     String
+  role            StaffRole
+  isActive        Boolean   @default(true)
+  invitationToken String?   @unique
+  confirmedAt     DateTime?
+  revokedAt       DateTime?
+  lastLoginAt     DateTime?
+  version         Int       @default(1)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  permissionOverrides   PermissionOverride[]
+  auditLogsAsActor      AuditLog[]             @relation("AuditActor")
+  auditLogsAsTarget     AuditLog[]             @relation("AuditTarget")
+  impersonationsAsActor ImpersonationSession[] @relation("Impersonator")
+  impersonationsAsTarget ImpersonationSession[] @relation("Impersonated")
+  packageAudits         PackageAuditLog[]
+  paymentsPosted        Payment[]              @relation("PaymentPoster")
+  paymentsVoided        Payment[]              @relation("PaymentVoider")
+  assemblyBatches       AssemblyBatch[]
+}
+
+model PermissionOverride {
+  id          String           @id @default(cuid())
+  staffUserId String
+  permission  String
+  effect      PermissionEffect
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  staffUser StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+
+  @@unique([staffUserId, permission])
+  @@index([staffUserId])
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  clerkUserId String?  @unique
+  email       String?  @unique
+  emailNorm   String?  @unique
+  phone       String?
+  phoneNorm   String?
+  displayName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  addresses SavedAddress[]
+  orders    Order[]
+
+  @@index([phoneNorm])
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  action    AuditAction
+  actorId   String?
+  targetId  String?
+  meta      Json?
+  createdAt DateTime    @default(now())
+
+  actor  StaffUser? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  target StaffUser? @relation("AuditTarget", fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt])
+  @@index([actorId])
+  @@index([targetId])
+}
+
+model ImpersonationSession {
+  id             String    @id @default(cuid())
+  impersonatorId String
+  impersonatedId String
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
+  active         Boolean   @default(true)
+
+  impersonator StaffUser @relation("Impersonator", fields: [impersonatorId], references: [id], onDelete: Cascade)
+  impersonated StaffUser @relation("Impersonated", fields: [impersonatedId], references: [id], onDelete: Cascade)
+
+  @@index([active])
+}
+
+model VersionedFixture {
+  id      String @id @default(cuid())
+  label   String @unique
+  payload String
+  version Int    @default(1)
+}
+
+model Season {
+  id               String       @id @default(cuid())
+  slug             String       @unique
+  name             String
+  year             Int
+  status           SeasonStatus @default(CLOSED)
+  opensAt          DateTime?
+  closesAt         DateTime?
+  scheduledOpenAt  DateTime?
+  scheduledCloseAt DateTime?
+  nextOrderNumber  Int          @default(1)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  products Product[]
+  orders   Order[]
+
+  @@index([year])
+  @@index([status])
+}
+
+model Product {
+  id               String      @id @default(cuid())
+  seasonId         String
+  sku              String
+  name             String
+  slug             String
+  kind             ProductKind @default(PACKAGE)
+  category         String?
+  description      String?
+  basePriceCents   Int
+  weightOz         Int?
+  lengthIn         Float?
+  widthIn          Float?
+  heightIn         Float?
+  tracksInventory  Boolean     @default(true)
+  isActive         Boolean     @default(true)
+  sortOrder        Int         @default(0)
+  primaryImageUrl  String?
+  mediaAssetId     String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  season              Season                 @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  mediaAsset          MediaAsset?            @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  options             ProductOption[]
+  allowedAddOns       ProductAddOnAllow[]
+  replacementsFrom    ProductReplacement[]   @relation("ReplacementFrom")
+  replacementsTo      ProductReplacement[]   @relation("ReplacementTo")
+  orderLines          OrderLine[]
+  inventory           InventoryItem?
+  bomLines            BomLine[]
+  assemblyBatches     AssemblyBatch[]
+
+  @@unique([seasonId, sku])
+  @@unique([seasonId, slug])
+  @@index([seasonId, kind])
+  @@index([seasonId, category])
+}
+
+model MediaAsset {
+  id          String   @id @default(cuid())
+  filename    String
+  contentType String
+  byteSize    Int
+  url         String
+  pathname    String   @unique
+  altText     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+
+  @@index([createdAt])
+}
+
+model NewsletterSubscriber {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  emailNorm      String    @unique
+  preferences    Json
+  confirmedAt    DateTime?
+  unsubscribedAt DateTime?
+  tokenVersion   Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([unsubscribedAt])
+}
+
+model ProductOption {
+  id                   String   @id @default(cuid())
+  productId            String
+  name                 String
+  skuSuffix            String?
+  priceAdjustmentCents Int      @default(0)
+  isActive             Boolean  @default(true)
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderLines OrderLine[]
+
+  @@unique([productId, name])
+  @@index([productId])
+}
+
+model AddOn {
+  id              String   @id @default(cuid())
+  sku             String   @unique
+  name            String
+  description     String?
+  priceCents      Int
+  tracksInventory Boolean  @default(true)
+  isRestricted    Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  allowedOnProducts ProductAddOnAllow[]
+  orderLineAddOns   OrderLineAddOn[]
+  inventory         InventoryItem?
+}
+
+model ProductAddOnAllow {
+  id        String   @id @default(cuid())
+  productId String
+  addOnId   String
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  addOn   AddOn   @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, addOnId])
+}
+
+model ProductReplacement {
+  id            String   @id @default(cuid())
+  fromProductId String
+  toProductId   String
+  note          String?
+  createdAt     DateTime @default(now())
+
+  fromProduct Product @relation("ReplacementFrom", fields: [fromProductId], references: [id], onDelete: Cascade)
+  toProduct   Product @relation("ReplacementTo", fields: [toProductId], references: [id], onDelete: Cascade)
+
+  @@unique([fromProductId, toProductId])
+}
+
+model SavedAddress {
+  id           String   @id @default(cuid())
+  customerId   String
+  label        String?
+  recipientName String
+  line1        String
+  line2        String?
+  city         String
+  state        String
+  postalCode   String
+  country      String   @default("US")
+  phone        String?
+  latitude     Float?
+  longitude    Float?
+  geocodeStatus String?
+  geocodedAt   DateTime?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderLines OrderLine[]
+  packages   Package[]
+
+  @@index([customerId])
+  @@index([postalCode])
+}
+
+model FulfillmentMethod {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  label       String
+  description String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderLines OrderLine[]
+  packages   Package[]
+}
+
+model Order {
+  id                   String              @id @default(cuid())
+  seasonId             String
+  customerId           String?
+  status               OrderStatus         @default(DRAFT)
+  orderNumber          Int?
+  draftRef             String              @unique
+  greetingDefault      String?
+  paymentStatusCached  CachedPaymentStatus @default(UNPAID)
+  version              Int                 @default(1)
+  placedAt             DateTime?
+  discardedAt          DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  season          Season           @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  lines           OrderLine[]
+  packages        Package[]
+  payments        Payment[]
+  stripeIntents   StripePaymentIntent[]
+  shippingQuotes  ShippingQuote[]
+
+  @@unique([seasonId, orderNumber])
+  @@index([seasonId, status])
+  @@index([customerId])
+  @@index([status])
+}
+
+model OrderLine {
+  id                   String   @id @default(cuid())
+  orderId              String
+  productId            String
+  productOptionId      String?
+  quantity             Int      @default(1)
+  unitPriceCents       Int
+  optionAdjustCents    Int      @default(0)
+  recipientName        String
+  addressLine1         String
+  addressLine2         String?
+  city                 String
+  state                String
+  postalCode           String
+  country              String   @default("US")
+  savedAddressId       String?
+  fulfillmentMethodId  String
+  greeting             String   @default("")
+  groupingKey          String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  order             Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productOption     ProductOption?    @relation(fields: [productOptionId], references: [id], onDelete: SetNull)
+  savedAddress      SavedAddress?     @relation(fields: [savedAddressId], references: [id], onDelete: SetNull)
+  fulfillmentMethod FulfillmentMethod @relation(fields: [fulfillmentMethodId], references: [id], onDelete: Restrict)
+  addOns            OrderLineAddOn[]
+  packageItems      PackageItem[]
+
+  @@index([orderId])
+  @@index([groupingKey])
+  @@index([productId])
+}
+
+model OrderLineAddOn {
+  id             String   @id @default(cuid())
+  orderLineId    String
+  addOnId        String
+  quantity       Int      @default(1)
+  unitPriceCents Int
+  createdAt      DateTime @default(now())
+
+  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  addOn     AddOn     @relation(fields: [addOnId], references: [id], onDelete: Restrict)
+
+  @@unique([orderLineId, addOnId])
+}
+
+model Package {
+  id                  String       @id @default(cuid())
+  orderId             String
+  groupingKey         String
+  recipientName       String
+  addressLine1        String
+  addressLine2        String?
+  city                String
+  state               String
+  postalCode          String
+  country             String       @default("US")
+  savedAddressId      String?
+  fulfillmentMethodId String
+  greeting            String       @default("")
+  stage               PackageStage @default(NEW)
+  version             Int          @default(1)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  order             Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  savedAddress      SavedAddress?     @relation(fields: [savedAddressId], references: [id], onDelete: SetNull)
+  fulfillmentMethod FulfillmentMethod @relation(fields: [fulfillmentMethodId], references: [id], onDelete: Restrict)
+  items             PackageItem[]
+  audits            PackageAuditLog[]
+
+  @@index([orderId])
+  @@index([groupingKey])
+  @@index([stage])
+}
+
+model PackageItem {
+  id          String @id @default(cuid())
+  packageId   String
+  orderLineId String
+  quantity    Int    @default(1)
+
+  package   Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, orderLineId])
+}
+
+model PackageAuditLog {
+  id          String   @id @default(cuid())
+  packageId   String
+  actorId     String?
+  fromStage   PackageStage?
+  toStage     PackageStage
+  note        String?
+  createdAt   DateTime @default(now())
+
+  package Package    @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  actor   StaffUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([packageId, createdAt])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  orderId     String
+  method      PaymentMethod
+  state       PaymentState  @default(POSTED)
+  amountCents Int
+  reference   String?
+  postedById  String?
+  voidedById  String?
+  postedAt    DateTime      @default(now())
+  voidedAt    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  order    Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  postedBy StaffUser? @relation("PaymentPoster", fields: [postedById], references: [id], onDelete: SetNull)
+  voidedBy StaffUser? @relation("PaymentVoider", fields: [voidedById], references: [id], onDelete: SetNull)
+
+  @@index([orderId, state])
+}
+
+model StripePaymentIntent {
+  id                    String   @id @default(cuid())
+  orderId               String
+  stripePaymentIntentId String   @unique
+  clientSecret          String?
+  status                String
+  amountCents           Int
+  currency              String   @default("usd")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model ShippingQuote {
+  id        String   @id @default(cuid())
+  orderId   String?
+  requestKey String
+  options   Json
+  expiresAt DateTime
+  selectedOptionId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([expiresAt])
+}
+
+model PickupLocation {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  postalCode String
+  country   String   @default("US")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PackageType {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  lengthIn    Float
+  widthIn     Float
+  heightIn    Float
+  maxWeightOz Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  boxes ShipmentBox[]
+}
+
+model ShipmentBox {
+  id            String   @id @default(cuid())
+  packageTypeId String
+  label         String
+  barcode       String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  packageType PackageType @relation(fields: [packageTypeId], references: [id], onDelete: Cascade)
+
+  @@index([packageTypeId])
+}
+
+/// Unified finished inventory for products XOR add-ons.
+/// DB CHECK InventoryItem_target_xor_check (migration p2_domain):
+/// CHECK (("productId" IS NOT NULL AND "addOnId" IS NULL) OR ("productId" IS NULL AND "addOnId" IS NOT NULL))
+/// App guard: assertInventoryTargetXor() in src/lib/inventory/target-xor.ts
+model InventoryItem {
+  id        String   @id @default(cuid())
+  /// Exactly one of productId / addOnId (XOR — see model CHECK docs above).
+  productId String?  @unique
+  addOnId   String?  @unique
+  onHand    Int      @default(0)
+  reserved  Int      @default(0)
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  addOn   AddOn?   @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+
+  @@index([version])
+}
+
+model GeocodeCache {
+  id          String   @id @default(cuid())
+  queryKey    String   @unique
+  latitude    Float?
+  longitude   Float?
+  success     Boolean
+  provider    String?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+model CronRunLog {
+  id         String        @id @default(cuid())
+  jobName    String
+  status     CronRunStatus @default(RUNNING)
+  startedAt  DateTime      @default(now())
+  finishedAt DateTime?
+  message    String?
+  meta       Json?
+
+  @@index([jobName, startedAt])
+}
+
+model Ingredient {
+  id          String   @id @default(cuid())
+  sku         String   @unique
+  name        String
+  unit        String
+  onHand      Decimal  @default(0) @db.Decimal(12, 3)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bomLines BomLine[]
+}
+
+model BomLine {
+  id           String  @id @default(cuid())
+  productId    String
+  ingredientId String
+  quantity     Decimal @db.Decimal(12, 3)
+
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, ingredientId])
+}
+
+model AssemblyBatch {
+  id          String   @id @default(cuid())
+  productId   String
+  quantity    Int
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy StaffUser? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+}

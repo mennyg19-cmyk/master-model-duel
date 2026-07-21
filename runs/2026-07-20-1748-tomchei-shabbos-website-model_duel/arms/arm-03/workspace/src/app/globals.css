@@ -1,0 +1,25 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-forest: #1b4332;
+  --color-leaf: #2d6a4f;
+  --color-cream: #f8f4ec;
+  --color-ink: #14201a;
+  --color-accent: #bc6c25;
+  --color-danger: #9b2226;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Source Sans 3", system-ui, sans-serif;
+}
+
+body {
+  color: var(--color-ink);
+  background: var(--color-cream);
+  font-family: var(--font-body);
+}
