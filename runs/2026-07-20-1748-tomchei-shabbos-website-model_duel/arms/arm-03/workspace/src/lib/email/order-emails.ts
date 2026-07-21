@@ -1,11 +1,13 @@
 import { NotifyChannel, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { appUrl } from "@/lib/stripe/client";
 import { enqueueNotification } from "@/lib/notify/outbox";
 import {
   DEFAULT_TEMPLATES,
   TRIGGERED_KEYS,
   type TriggeredKey,
   renderTemplate,
+  sanitizeSameOriginUrl,
 } from "@/lib/email/templates";
 import { err, ok, type Result } from "@/lib/result";
 
@@ -130,11 +132,12 @@ export async function enqueueOrderEmail(input: {
   const content = await resolveTriggeredContent(input.key, input.vars);
   if (!content.ok) return content;
 
-  const idempotencyKey = `${input.key}:${input.orderId}:${input.recipientEmail.toLowerCase()}`;
-  const result = await enqueueNotification({
+  const recipientKey = input.recipientEmail.trim().toLowerCase();
+  const idempotencyKey = `${input.key}:${input.orderId}:${recipientKey}`;
+  const enqueueResult = await enqueueNotification({
     channel: NotifyChannel.EMAIL,
     templateKey: input.key,
-    recipientKey: input.recipientEmail,
+    recipientKey,
     idempotencyKey,
     subject: content.value.subject,
     body: content.value.htmlBody,
@@ -143,9 +146,9 @@ export async function enqueueOrderEmail(input: {
     forceCapture: input.forceCapture,
   });
   return ok({
-    created: result.created,
-    outboxId: result.row.id,
-    status: result.row.status,
+    created: enqueueResult.created,
+    outboxId: enqueueResult.row.id,
+    status: enqueueResult.row.status,
     idempotencyKey,
   });
 }
@@ -180,6 +183,8 @@ export async function enqueuePaymentLinkEmail(order: {
 }) {
   const email = order.recipientEmail || order.customer?.email || null;
   if (!email) return err("no_email", "Order has no recipient email.");
+  const paymentUrl =
+    sanitizeSameOriginUrl(order.paymentUrl, appUrl()) || `${appUrl()}/checkout`;
   return enqueueOrderEmail({
     key: "order.payment_link",
     orderId: order.id,
@@ -187,7 +192,7 @@ export async function enqueuePaymentLinkEmail(order: {
     vars: {
       orderNumber: String(order.orderNumber ?? "—"),
       customerName: order.customer?.displayName ?? "there",
-      paymentUrl: order.paymentUrl,
+      paymentUrl,
     },
   });
 }

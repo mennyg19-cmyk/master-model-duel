@@ -17,14 +17,14 @@ import {
   listTriggeredOverrides,
   setTriggeredOverride,
   upsertTemplate,
-  TRIGGERED_KEYS,
-  type TriggeredKey,
+  enqueueOrderEmail,
 } from "@/lib/email/order-emails";
+import { TRIGGERED_KEYS, type TriggeredKey, sanitizeSameOriginUrl } from "@/lib/email/templates";
 import { db } from "@/lib/db";
-import { enqueueOrderEmail } from "@/lib/email/order-emails";
 import { sendTestEmail } from "@/lib/email/purge";
 import { EMAIL_SETTINGS } from "@/lib/resend/client";
 import { setSetting, getSetting } from "@/lib/settings";
+import { appUrl } from "@/lib/stripe/client";
 
 export async function GET(request: Request) {
   try {
@@ -193,24 +193,42 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, override: result.value });
       }
       case "trigger_transactional": {
-        const result = await enqueueOrderEmail({
+        const order = await db.order.findUnique({
+          where: { id: body.orderId },
+          include: {
+            customer: { select: { displayName: true, email: true } },
+          },
+        });
+        const base = appUrl();
+        const requestedPaymentUrl = body.vars?.paymentUrl;
+        const paymentUrl =
+          (requestedPaymentUrl
+            ? sanitizeSameOriginUrl(requestedPaymentUrl, base)
+            : "") || `${base}/checkout`;
+        const enqueueResult = await enqueueOrderEmail({
           key: body.key,
           orderId: body.orderId,
           recipientEmail: body.recipientEmail,
           vars: {
-            orderNumber: body.vars?.orderNumber ?? "1001",
-            customerName: body.vars?.customerName ?? "Friend",
-            total: body.vars?.total ?? "$0.00",
-            paymentUrl: body.vars?.paymentUrl ?? "http://127.0.0.1:3103/checkout",
+            orderNumber:
+              body.vars?.orderNumber ??
+              (order?.orderNumber != null ? String(order.orderNumber) : "—"),
+            customerName:
+              body.vars?.customerName ?? order?.customer?.displayName ?? "Friend",
+            total:
+              body.vars?.total ??
+              (order?.expectedTotalCents != null
+                ? `$${(order.expectedTotalCents / 100).toFixed(2)}`
+                : "$0.00"),
+            paymentUrl,
             refundAmount: body.vars?.refundAmount ?? "$0.00",
-            ...body.vars,
           },
           actorId: ctx.effectiveStaff.id,
         });
-        if (!result.ok) {
-          return NextResponse.json({ error: result.publicMessage }, { status: 400 });
+        if (!enqueueResult.ok) {
+          return NextResponse.json({ error: enqueueResult.publicMessage }, { status: 400 });
         }
-        return NextResponse.json({ ok: true, ...result.value });
+        return NextResponse.json({ ok: true, ...enqueueResult.value });
       }
       case "test_email": {
         const result = await sendTestEmail({

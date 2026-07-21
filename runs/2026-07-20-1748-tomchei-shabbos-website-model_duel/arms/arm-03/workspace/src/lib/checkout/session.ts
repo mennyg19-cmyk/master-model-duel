@@ -275,8 +275,9 @@ export async function prepareCheckout(
       input.greetingDefault !== undefined
         ? (input.greetingDefault ?? "")
         : order.greetingDefault;
-    const donationCents =
-      input.donationCents !== undefined ? input.donationCents : order.donationCents;
+    void (
+      input.donationCents !== undefined ? input.donationCents : order.donationCents
+    );
 
     // Validate recipients before writes.
     for (const recipient of input.recipients) {
@@ -544,6 +545,16 @@ export async function createHostedCheckoutSession(input: {
         },
         tx,
       );
+    });
+
+    // Payment-link transactional email (R-087) — idempotent per order+recipient.
+    const { enqueuePaymentLinkEmail } = await import("@/lib/email/order-emails");
+    await enqueuePaymentLinkEmail({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      paymentUrl: url,
+      customer: order.customer,
+      recipientEmail: order.customer?.email ?? null,
     });
 
     return ok({ sessionId, url, amountCents });

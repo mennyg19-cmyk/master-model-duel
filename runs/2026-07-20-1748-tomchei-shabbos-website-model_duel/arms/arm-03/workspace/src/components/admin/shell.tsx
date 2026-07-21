@@ -19,6 +19,7 @@ const NAV: { href: string; label: string; permission: Permission }[] = [
   { href: "/admin/media", label: "Media", permission: "settings.write" },
   { href: "/admin/staff", label: "Staff", permission: "staff.manage" },
   { href: "/admin/audit", label: "Audit", permission: "audit.read" },
+  { href: "/admin/email", label: "Email", permission: "settings.read" },
   { href: "/admin/settings", label: "Settings", permission: "settings.read" },
 ];
 

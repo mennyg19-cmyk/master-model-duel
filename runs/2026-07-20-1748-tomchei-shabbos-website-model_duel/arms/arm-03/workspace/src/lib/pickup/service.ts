@@ -3,7 +3,7 @@ import { ApiError } from "@/lib/api-error";
 import { writeAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { availableUnits } from "@/lib/inventory/reserve";
-import { captureEmailAndSms } from "@/lib/notify/outbox";
+import { enqueueEmailAndSms } from "@/lib/notify/outbox";
 import { transitionPackage } from "@/lib/orders/package-stages";
 
 const DEFAULT_PICKUP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -67,7 +67,7 @@ export async function markPickupReadyIfEligible(input: {
   const customer = pkg.order.customer;
   const recipientKey =
     customer?.emailNorm || customer?.phoneNorm || customer?.id || pkg.orderId;
-  const notify = await captureEmailAndSms({
+  const notify = await enqueueEmailAndSms({
     templateKey: "pickup-ready",
     recipientKey,
     idempotencyBase: `pickup-ready:${pkg.id}`,

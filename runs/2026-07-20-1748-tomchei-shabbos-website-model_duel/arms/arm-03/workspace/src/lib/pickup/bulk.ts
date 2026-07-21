@@ -1,7 +1,7 @@
 import { AuditAction, CronRunStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
-import { captureEmailAndSms } from "@/lib/notify/outbox";
+import { enqueueEmailAndSms } from "@/lib/notify/outbox";
 
 export async function runPickupExpiryCron() {
   const run = await db.cronRunLog.create({
@@ -24,7 +24,7 @@ export async function runPickupExpiryCron() {
       const customer = pkg.order.customer;
       const recipientKey =
         customer?.emailNorm || customer?.phoneNorm || customer?.id || pkg.orderId;
-      const result = await captureEmailAndSms({
+      const result = await enqueueEmailAndSms({
         templateKey: "pickup-expired",
         recipientKey,
         idempotencyBase: `pickup-expired:${pkg.id}`,
@@ -79,7 +79,7 @@ export async function runPaymentReminderCron() {
       const customer = order.customer;
       const recipientKey =
         customer?.emailNorm || customer?.phoneNorm || customer?.id || order.id;
-      const result = await captureEmailAndSms({
+      const result = await enqueueEmailAndSms({
         templateKey: "payment-reminder",
         recipientKey,
         idempotencyBase: `payment-reminder:${order.id}:${new Date().toISOString().slice(0, 10)}`,
@@ -169,7 +169,7 @@ export async function scheduleBulkDelivery(input: {
       customer?.emailNorm || customer?.phoneNorm || customer?.id || pkg.orderId;
     if (seen.has(recipientKey)) continue;
     seen.add(recipientKey);
-    await captureEmailAndSms({
+    await enqueueEmailAndSms({
       templateKey: "bulk-delivery-scheduled",
       recipientKey,
       idempotencyBase: `bulk-sched:${window.id}:${recipientKey}`,

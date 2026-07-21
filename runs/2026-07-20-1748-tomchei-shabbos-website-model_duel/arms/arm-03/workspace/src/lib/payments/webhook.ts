@@ -262,6 +262,19 @@ async function handleCheckoutSessionCompleted(
     }
   });
 
+  const paidOrder = await db.order.findUnique({
+    where: { id: orderId },
+    include: { customer: { select: { email: true, displayName: true } } },
+  });
+  if (
+    paidOrder &&
+    (paidOrder.paymentStatusCached === CachedPaymentStatus.PAID ||
+      paidOrder.paymentStatusCached === CachedPaymentStatus.OVERPAID)
+  ) {
+    const { enqueueOrderConfirmation } = await import("@/lib/email/order-emails");
+    await enqueueOrderConfirmation(paidOrder);
+  }
+
   return ok({ orderId, replay: false });
 }
 

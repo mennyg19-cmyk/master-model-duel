@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     if (!draftRef) {
       return NextResponse.json({ ok: false, error: "draft required" }, { status: 400 });
     }
-    const { order } = await loadDraftForAccess(draftRef, request);
+    const { order } = await loadDraftForAccess(draftRef);
     const summary = await buildCheckoutSummary(order.id);
     return NextResponse.json({ ok: true, summary });
   } catch (error) {

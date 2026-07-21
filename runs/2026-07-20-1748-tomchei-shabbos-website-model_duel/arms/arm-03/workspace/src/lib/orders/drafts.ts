@@ -199,7 +199,7 @@ export async function getOrCreateActiveDraft(input: {
   const draftRef = formatDraftRef(season.year, randomBytes(6).toString("hex"));
   let guestAccessToken: string | undefined;
   let guestAccessTokenHash: string | null = null;
-  let guestTokenVersion = 1;
+  const guestTokenVersion = 1;
 
   if (!input.customerId) {
     guestAccessToken = mintGuestToken();

@@ -10,7 +10,7 @@ import {
 import { ApiError } from "@/lib/api-error";
 import { writeAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
-import { captureEmailAndSms } from "@/lib/notify/outbox";
+import { enqueueEmailAndSms } from "@/lib/notify/outbox";
 import { voidLabelForPackage } from "@/lib/shipping/labels";
 import {
   geocodePackageAddress,
@@ -497,7 +497,7 @@ async function sendDayOfNotifications(routeId: string) {
       customer?.phoneNorm ||
       customer?.id ||
       stop.package.orderId;
-    await captureEmailAndSms({
+    await enqueueEmailAndSms({
       templateKey: "day-of-delivery",
       recipientKey,
       idempotencyBase: `day-of:${routeId}:${stop.packageId}`,

@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     });
     if (!guarded.ok) return guarded.response;
 
-    const { order } = await loadDraftForAccess(guarded.data.draftRef, request);
+    const { order } = await loadDraftForAccess(guarded.data.draftRef);
     if (order.id !== guarded.data.orderId) {
       return NextResponse.json({ ok: false, error: "Draft not found" }, { status: 404 });
     }

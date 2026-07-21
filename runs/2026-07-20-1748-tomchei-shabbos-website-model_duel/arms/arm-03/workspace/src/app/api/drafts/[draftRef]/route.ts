@@ -17,7 +17,7 @@ type Ctx = { params: Promise<{ draftRef: string }> };
 export async function GET(request: Request, ctx: Ctx) {
   try {
     const { draftRef } = await ctx.params;
-    const { order } = await loadDraftForAccess(draftRef, request);
+    const { order } = await loadDraftForAccess(draftRef);
     const full = await db.order.findUniqueOrThrow({
       where: { id: order.id },
       include: draftInclude,
@@ -40,7 +40,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
     if (body.action === "guest_success") {
       // Must not use assertCanMutateDraft — order is PLACED after finalize.
-      const { order, actor } = await loadDraftForAccess(draftRef, request);
+      const { order, actor } = await loadDraftForAccess(draftRef);
       if (actor.kind !== "guest" && actor.kind !== "staff") {
         return NextResponse.json({ ok: false, error: "Guest draft required" }, { status: 400 });
       }

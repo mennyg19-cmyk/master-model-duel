@@ -6,6 +6,15 @@ import { enqueueNotification, writeEmailLog } from "@/lib/notify/outbox";
 import { getEmailMode, resendSend, defaultFromAddress } from "@/lib/resend/client";
 import { getSetting } from "@/lib/settings";
 import { STORE_SETTINGS } from "@/lib/storefront/settings-keys";
+import { mintUnsubscribeToken } from "@/lib/storefront/newsletter";
+import { appUrl } from "@/lib/stripe/client";
+import { escapeHtml } from "@/lib/email/templates";
+
+type CampaignRecipient = {
+  email: string;
+  subscriberId: string;
+  tokenVersion: number;
+};
 
 export async function createCampaign(input: {
   name: string;
@@ -58,12 +67,13 @@ export async function testSendCampaign(input: {
   const fromSetting = await getSetting<{ address?: string }>(STORE_SETTINGS.emailFrom);
   const from = fromSetting?.address?.trim() || defaultFromAddress();
   const mode = getEmailMode();
+  const recipientKey = input.to.trim().toLowerCase();
 
   if (mode === "capture") {
     await writeEmailLog({
       channel: NotifyChannel.EMAIL,
       templateKey: `campaign.test:${campaign.id}`,
-      recipientKey: input.to,
+      recipientKey,
       subject: campaign.subject,
       body: campaign.htmlBody,
       status: "captured",
@@ -72,27 +82,27 @@ export async function testSendCampaign(input: {
     await writeAudit({
       action: AuditAction.EMAIL_TEST_SENT,
       actorId: input.actorId,
-      meta: { campaignId: campaign.id, to: input.to, captured: true },
+      meta: { campaignId: campaign.id, to: recipientKey, captured: true },
     });
     return ok({ captured: true });
   }
 
-  const result = await resendSend({
-    to: input.to,
+  const sendResult = await resendSend({
+    to: recipientKey,
     from,
     subject: `[TEST] ${campaign.subject}`,
     html: campaign.htmlBody,
   });
-  if (!result.ok) return err("send", result.error || "Test send failed.");
+  if (!sendResult.ok) return err("send", sendResult.error || "Test send failed.");
 
   await writeEmailLog({
     channel: NotifyChannel.EMAIL,
     templateKey: `campaign.test:${campaign.id}`,
-    recipientKey: input.to,
+    recipientKey,
     subject: campaign.subject,
     body: campaign.htmlBody,
-    status: result.captured ? "captured" : "sent",
-    providerId: result.providerId,
+    status: sendResult.captured ? "captured" : "sent",
+    providerId: sendResult.providerId,
     campaignId: campaign.id,
   });
   await writeAudit({
@@ -100,29 +110,51 @@ export async function testSendCampaign(input: {
     actorId: input.actorId,
     meta: {
       campaignId: campaign.id,
-      to: input.to,
-      providerId: result.providerId,
-      captured: Boolean(result.captured),
+      to: recipientKey,
+      providerId: sendResult.providerId,
+      captured: Boolean(sendResult.captured),
     },
   });
-  return ok({ providerId: result.providerId, captured: Boolean(result.captured) });
+  return ok({ providerId: sendResult.providerId, captured: Boolean(sendResult.captured) });
 }
 
 async function resolveRecipients(campaign: {
   listId: string | null;
-}): Promise<string[]> {
+}): Promise<CampaignRecipient[]> {
   if (!campaign.listId) {
     const all = await db.newsletterSubscriber.findMany({
       where: { unsubscribedAt: null },
-      select: { email: true },
+      select: { id: true, email: true, tokenVersion: true },
     });
-    return all.map((s) => s.email);
+    return all.map((s) => ({
+      email: s.email,
+      subscriberId: s.id,
+      tokenVersion: s.tokenVersion,
+    }));
   }
   const members = await db.mailingListMember.findMany({
     where: { listId: campaign.listId, subscriber: { unsubscribedAt: null } },
-    include: { subscriber: { select: { email: true } } },
+    include: {
+      subscriber: { select: { id: true, email: true, tokenVersion: true } },
+    },
   });
-  return members.map((m) => m.subscriber.email);
+  return members.map((m) => ({
+    email: m.subscriber.email,
+    subscriberId: m.subscriber.id,
+    tokenVersion: m.subscriber.tokenVersion,
+  }));
+}
+
+function appendPrefsFooter(htmlBody: string, recipient: CampaignRecipient): string {
+  const token = mintUnsubscribeToken(recipient.subscriberId, recipient.tokenVersion);
+  const base = appUrl();
+  const prefsHref = escapeHtml(
+    `${base}/newsletter/preferences?token=${encodeURIComponent(token)}`,
+  );
+  const unsubHref = escapeHtml(
+    `${base}/newsletter/unsubscribe?token=${encodeURIComponent(token)}`,
+  );
+  return `${htmlBody}<hr /><p style="font-size:12px;color:#666"><a href="${prefsHref}">Email preferences</a> · <a href="${unsubHref}">Unsubscribe</a></p>`;
 }
 
 /** Send campaign; reruns skip existing (campaignId, recipient) deliveries (R-083). */
@@ -138,12 +170,14 @@ export async function sendCampaign(input: {
   let skipped = 0;
 
   for (const recipient of recipients) {
-    const idempotencyKey = `campaign:${campaign.id}:${recipient.toLowerCase()}`;
+    const recipientKey = recipient.email.trim().toLowerCase();
+    const idempotencyKey = `campaign:${campaign.id}:${recipientKey}`;
+    const htmlBody = appendPrefsFooter(campaign.htmlBody, recipient);
     try {
       const delivery = await db.emailCampaignDelivery.create({
         data: {
           campaignId: campaign.id,
-          recipientKey: recipient,
+          recipientKey,
           idempotencyKey,
           status: "queued",
         },
@@ -151,10 +185,10 @@ export async function sendCampaign(input: {
       const outbox = await enqueueNotification({
         channel: NotifyChannel.EMAIL,
         templateKey: `campaign:${campaign.id}`,
-        recipientKey: recipient,
+        recipientKey,
         idempotencyKey,
         subject: campaign.subject,
-        body: campaign.htmlBody,
+        body: htmlBody,
         meta: { campaignId: campaign.id, deliveryId: delivery.id } as Prisma.InputJsonValue,
         actorId: input.actorId,
       });

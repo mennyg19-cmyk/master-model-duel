@@ -17,93 +17,6 @@ type DbClient = Prisma.TransactionClient | typeof db;
 const EMAIL_LOG_RETENTION_MS = 1000 * 60 * 60 * 24 * 30;
 const CLAIM_STALE_MS = 1000 * 60 * 2;
 
-export async function captureNotification(
-  input: {
-    channel: NotifyChannel;
-    templateKey: string;
-    recipientKey: string;
-    idempotencyKey: string;
-    subject?: string;
-    body: string;
-    meta?: Prisma.InputJsonValue;
-    actorId?: string | null;
-  },
-  client: DbClient = db,
-) {
-  try {
-    const row = await client.notificationOutbox.create({
-      data: {
-        channel: input.channel,
-        templateKey: input.templateKey,
-        recipientKey: input.recipientKey,
-        idempotencyKey: input.idempotencyKey,
-        subject: input.subject ?? null,
-        body: input.body,
-        status: NotifyStatus.CAPTURED,
-        meta: input.meta ?? Prisma.JsonNull,
-      },
-    });
-    await writeAudit(
-      {
-        action: AuditAction.NOTIFICATION_CAPTURED,
-        actorId: input.actorId,
-        meta: {
-          outboxId: row.id,
-          channel: input.channel,
-          templateKey: input.templateKey,
-          recipientKey: input.recipientKey,
-          idempotencyKey: input.idempotencyKey,
-        },
-      },
-      client,
-    );
-    return { created: true as const, row };
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      const existing = await client.notificationOutbox.findUnique({
-        where: { idempotencyKey: input.idempotencyKey },
-      });
-      return { created: false as const, row: existing! };
-    }
-    throw error;
-  }
-}
-
-export async function captureEmailAndSms(input: {
-  templateKey: string;
-  recipientKey: string;
-  idempotencyBase: string;
-  emailSubject: string;
-  emailBody: string;
-  smsBody: string;
-  meta?: Prisma.InputJsonValue;
-  actorId?: string | null;
-}) {
-  const email = await captureNotification({
-    channel: NotifyChannel.EMAIL,
-    templateKey: input.templateKey,
-    recipientKey: input.recipientKey,
-    idempotencyKey: `${input.idempotencyBase}:email`,
-    subject: input.emailSubject,
-    body: input.emailBody,
-    meta: input.meta,
-    actorId: input.actorId,
-  });
-  const sms = await captureNotification({
-    channel: NotifyChannel.SMS,
-    templateKey: input.templateKey,
-    recipientKey: input.recipientKey,
-    idempotencyKey: `${input.idempotencyBase}:sms`,
-    body: input.smsBody,
-    meta: input.meta,
-    actorId: input.actorId,
-  });
-  return { email, sms };
-}
-
 function initialStatus(channel: NotifyChannel): NotifyStatus {
   if (channel === NotifyChannel.EMAIL) {
     return getEmailMode() === "capture" ? NotifyStatus.CAPTURED : NotifyStatus.PENDING;
@@ -181,20 +94,59 @@ export async function enqueueNotification(
   }
 }
 
-export async function writeEmailLog(input: {
-  channel: NotifyChannel;
+/**
+ * Enqueue paired email+SMS using mode-aware status (PENDING in live/mock, CAPTURED in capture).
+ * Replaces the old capture-only path so the sweeper can deliver in live mode.
+ */
+export async function enqueueEmailAndSms(input: {
   templateKey: string;
   recipientKey: string;
-  subject?: string | null;
-  body: string;
-  status: string;
-  providerId?: string | null;
-  outboxId?: string | null;
-  campaignId?: string | null;
+  idempotencyBase: string;
+  emailSubject: string;
+  emailBody: string;
+  smsBody: string;
   meta?: Prisma.InputJsonValue;
-  purgeAfter?: Date;
+  actorId?: string | null;
 }) {
-  return db.emailLog.create({
+  const email = await enqueueNotification({
+    channel: NotifyChannel.EMAIL,
+    templateKey: input.templateKey,
+    recipientKey: input.recipientKey,
+    idempotencyKey: `${input.idempotencyBase}:email`,
+    subject: input.emailSubject,
+    body: input.emailBody,
+    meta: input.meta,
+    actorId: input.actorId,
+  });
+  const sms = await enqueueNotification({
+    channel: NotifyChannel.SMS,
+    templateKey: input.templateKey,
+    recipientKey: input.recipientKey,
+    idempotencyKey: `${input.idempotencyBase}:sms`,
+    body: input.smsBody,
+    meta: input.meta,
+    actorId: input.actorId,
+  });
+  return { email, sms };
+}
+
+export async function writeEmailLog(
+  input: {
+    channel: NotifyChannel;
+    templateKey: string;
+    recipientKey: string;
+    subject?: string | null;
+    body: string;
+    status: string;
+    providerId?: string | null;
+    outboxId?: string | null;
+    campaignId?: string | null;
+    meta?: Prisma.InputJsonValue;
+    purgeAfter?: Date;
+  },
+  client: DbClient = db,
+) {
+  return client.emailLog.create({
     data: {
       channel: input.channel,
       templateKey: input.templateKey,
@@ -303,78 +255,119 @@ async function deliverClaimed(row: {
   return result;
 }
 
-export async function processClaimedMessage(rowId: string) {
-  const row = await db.notificationOutbox.findUnique({ where: { id: rowId } });
-  if (!row || row.status !== NotifyStatus.CLAIMED) {
+/**
+ * Deliver one claimed row. Requires claimedBy === workerId so a stale-claim
+ * reaper cannot race a second delivery (R-088 / S2 / S3).
+ */
+export async function processClaimedMessage(rowId: string, workerId: string) {
+  // Lease heartbeat: refresh claimedAt and abort if we lost ownership.
+  const heartbeat = await db.notificationOutbox.updateMany({
+    where: {
+      id: rowId,
+      status: NotifyStatus.CLAIMED,
+      claimedBy: workerId,
+    },
+    data: { claimedAt: new Date() },
+  });
+  if (heartbeat.count !== 1) {
     return { processed: false as const };
   }
 
-  const result = await deliverClaimed(row);
-  if (result.ok) {
-    const status = result.captured ? NotifyStatus.CAPTURED : NotifyStatus.SENT;
-    const log = await writeEmailLog({
-      channel: row.channel,
-      templateKey: row.templateKey,
-      recipientKey: row.recipientKey,
-      subject: row.subject,
-      body: row.body,
-      status: result.captured ? "captured" : "sent",
-      providerId: result.providerId,
-      outboxId: row.id,
-      meta: row.meta ?? undefined,
+  const row = await db.notificationOutbox.findUnique({ where: { id: rowId } });
+  if (!row || row.status !== NotifyStatus.CLAIMED || row.claimedBy !== workerId) {
+    return { processed: false as const };
+  }
+
+  const sendResult = await deliverClaimed(row);
+  if (sendResult.ok) {
+    const status = sendResult.captured ? NotifyStatus.CAPTURED : NotifyStatus.SENT;
+    const finalized = await db.$transaction(async (tx) => {
+      const updated = await tx.notificationOutbox.updateMany({
+        where: {
+          id: row.id,
+          status: NotifyStatus.CLAIMED,
+          claimedBy: workerId,
+        },
+        data: {
+          status,
+          sentAt: new Date(),
+          providerId: sendResult.providerId ?? null,
+          lastError: null,
+          claimedAt: null,
+          claimedBy: null,
+          attempts: { increment: 1 },
+        },
+      });
+      if (updated.count !== 1) return null;
+      const log = await writeEmailLog(
+        {
+          channel: row.channel,
+          templateKey: row.templateKey,
+          recipientKey: row.recipientKey,
+          subject: row.subject,
+          body: row.body,
+          status: sendResult.captured ? "captured" : "sent",
+          providerId: sendResult.providerId,
+          outboxId: row.id,
+          meta: row.meta ?? undefined,
+        },
+        tx,
+      );
+      await tx.notificationOutbox.update({
+        where: { id: row.id },
+        data: { emailLogId: log.id },
+      });
+      return status;
     });
-    await db.notificationOutbox.update({
-      where: { id: row.id },
-      data: {
-        status,
-        sentAt: new Date(),
-        providerId: result.providerId ?? null,
-        emailLogId: log.id,
-        lastError: null,
-        claimedAt: null,
-        claimedBy: null,
-        attempts: { increment: 1 },
-      },
-    });
+    if (!finalized) {
+      return { processed: false as const };
+    }
     await writeAudit({
-      action: result.captured
+      action: sendResult.captured
         ? AuditAction.NOTIFICATION_CAPTURED
         : AuditAction.NOTIFICATION_SENT,
       meta: {
         outboxId: row.id,
-        providerId: result.providerId,
+        providerId: sendResult.providerId,
         templateKey: row.templateKey,
-        captured: Boolean(result.captured),
+        captured: Boolean(sendResult.captured),
       },
     });
-    return { processed: true as const, status };
+    return { processed: true as const, status: finalized };
   }
 
   const attempts = row.attempts + 1;
   const exhausted = attempts >= row.maxAttempts;
   const backoffMs = Math.min(1000 * 60 * 30, 1000 * Math.pow(2, attempts));
-  await db.notificationOutbox.update({
-    where: { id: row.id },
+  const failedUpdate = await db.notificationOutbox.updateMany({
+    where: {
+      id: row.id,
+      status: NotifyStatus.CLAIMED,
+      claimedBy: workerId,
+    },
     data: {
       status: NotifyStatus.FAILED,
       attempts,
-      lastError: result.error ?? "send failed",
+      lastError: sendResult.error ?? "send failed",
       nextAttemptAt: exhausted ? null : new Date(Date.now() + backoffMs),
       claimedAt: null,
       claimedBy: null,
     },
   });
+  if (failedUpdate.count !== 1) {
+    return { processed: false as const };
+  }
   await writeAudit({
     action: AuditAction.NOTIFICATION_FAILED,
     meta: {
       outboxId: row.id,
-      error: result.error,
+      error: sendResult.error,
       attempts,
       exhausted,
       templateKey: row.templateKey,
     },
   });
-  return { processed: true as const, status: NotifyStatus.FAILED, error: result.error };
+  return { processed: true as const, status: NotifyStatus.FAILED, error: sendResult.error };
 }
 
 /** Sweep pending outbox with overlap-safe claims (R-088, R-181). */
@@ -390,7 +383,7 @@ export async function sweepOutbox(input?: { workerId?: string; limit?: number })
     const row = await claimOutboxMessage(workerId);
     if (!row) break;
     claimed += 1;
-    const outcome = await processClaimedMessage(row.id);
+    const outcome = await processClaimedMessage(row.id, workerId);
     if (!outcome.processed) continue;
     if (outcome.status === NotifyStatus.SENT) sent += 1;
     else if (outcome.status === NotifyStatus.CAPTURED) captured += 1;

@@ -57,7 +57,8 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **P7 arm-03:** gated ([fix notes](arms/arm-03/results/P7-FIX-NOTES.md); B1–B19 + M1–M8; smoke 16/16)
 - **P8 arm-03:** gated ([fix notes](arms/arm-03/results/P8-FIX-NOTES.md); B1–B6 + critical majors; smoke 3/3)
 - **P9 arm-03:** gated ([fix notes](arms/arm-03/results/P9-FIX-NOTES.md); B1–B5 + M5/M6/m1; smoke 5/5)
-- **P10 arm-03:** gated ([fix notes](arms/arm-03/results/P10-FIX-NOTES.md); B1–B3 + M1/M3/M6–M9/M12; smoke 3/3)
+- **P10 arm-03:** **1.5/20** → **15.0/20** ([fix notes](arms/arm-03/results/P10-FIX-NOTES.md); B1–B5 + M1/M3/M6–M9/M12; S1–S3 3/3)
+- **P11 arm-03:** gated ([fix notes](arms/arm-03/results/P11-FIX-NOTES.md); B1 + M1/M2/M3/M5/M22; smoke 5/5)
 - **Test 6 winner:** tie **15.0/15** both arms (detect 8/8 · vague fix 7/7)
 
 ## Test 6 notes

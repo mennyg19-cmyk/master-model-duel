@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { SetupForm } from "@/components/admin/setup-form";
 import { isSetupComplete } from "@/lib/auth";
 

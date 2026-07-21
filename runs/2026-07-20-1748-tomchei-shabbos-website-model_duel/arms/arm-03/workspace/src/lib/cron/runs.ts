@@ -1,11 +1,38 @@
-import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
-import { writeAudit } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
 
-/** Claim a cron sweep slot; overlapping calls with same token collide on unique (R-163). */
+/** Shared slot for Vercel Cron (no ?token=). Released on finish so the next tick can claim. */
+function inflightToken(jobKey: string) {
+  return `${jobKey}:inflight`;
+}
+
+const INFLIGHT_STALE_MS = 1000 * 60 * 10;
+
+/**
+ * Claim a cron sweep slot.
+ * - Explicit `claimedToken` (smoke): unique forever → sequential reuse skips as overlap.
+ * - No token (Vercel): uses `${jobKey}:inflight` so overlapping production calls collide.
+ */
 export async function beginCronRun(jobKey: string, claimedToken?: string) {
-  const token = claimedToken ?? `${jobKey}:${randomBytes(12).toString("hex")}`;
+  const token = claimedToken ?? inflightToken(jobKey);
+
+  // Reap a crashed holder of the production inflight slot so the next tick is not stuck.
+  if (!claimedToken) {
+    const stale = await db.cronJobRun.findFirst({
+      where: {
+        claimedToken: token,
+        finishedAt: null,
+        startedAt: { lt: new Date(Date.now() - INFLIGHT_STALE_MS) },
+      },
+    });
+    if (stale) {
+      await finishCronRun(stale.id, {
+        ok: false,
+        meta: { reason: "stale_inflight_reaper" },
+      });
+    }
+  }
+
   try {
     const row = await db.cronJobRun.create({
       data: { jobKey, claimedToken: token },
@@ -26,24 +53,18 @@ export async function finishCronRun(
   runId: string,
   result: { ok: boolean; meta?: Prisma.InputJsonValue },
 ) {
+  const run = await db.cronJobRun.findUnique({ where: { id: runId } });
+  const releaseInflight =
+    run != null && run.claimedToken === inflightToken(run.jobKey);
+
   return db.cronJobRun.update({
     where: { id: runId },
     data: {
       finishedAt: new Date(),
       ok: result.ok,
       meta: result.meta ?? Prisma.JsonNull,
+      // Free the production slot; leave smoke/explicit tokens unique for overlap tests.
+      ...(releaseInflight ? { claimedToken: `${runId}:done` } : {}),
     },
   });
-}
-
-export async function writeCronAudit(
-  action:
-    | "NOTIFICATION_SENT"
-    | "NOTIFICATION_FAILED"
-    | "EMAIL_LOG_PURGED"
-    | "EMAIL_CAMPAIGN_SENT"
-    | "EMAIL_TEST_SENT",
-  meta: Prisma.InputJsonValue,
-) {
-  await writeAudit({ action, meta });
 }

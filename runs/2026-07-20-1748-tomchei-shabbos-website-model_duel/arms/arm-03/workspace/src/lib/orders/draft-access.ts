@@ -31,7 +31,7 @@ export async function resolveCustomerId(): Promise<string | null> {
 }
 
 /** Guest draft auth is cookie-only (httpOnly) — no header exfil path. */
-export async function readGuestTokenFromRequest(_request?: Request): Promise<string | null> {
+export async function readGuestTokenFromRequest(): Promise<string | null> {
   const jar = await cookies();
   return jar.get(GUEST_DRAFT_COOKIE)?.value ?? null;
 }
@@ -43,7 +43,6 @@ export async function readGuestTokenFromRequest(_request?: Request): Promise<str
  */
 export async function loadDraftForAccess(
   draftRef: string,
-  request?: Request,
 ): Promise<{ order: Order & { lines: unknown[] }; actor: DraftActor }> {
   const found = await db.order.findUnique({
     where: { draftRef },
@@ -99,7 +98,7 @@ export async function loadDraftForAccess(
   if (order.guestClearedAt) {
     throw new AuthError(404, "Draft not found");
   }
-  const token = await readGuestTokenFromRequest(request);
+  const token = await readGuestTokenFromRequest();
   if (!token || !guestTokenMatches(token, order.guestAccessTokenHash, order.guestTokenVersion)) {
     throw new AuthError(404, "Draft not found");
   }
@@ -108,9 +107,10 @@ export async function loadDraftForAccess(
 
 export async function assertCanMutateDraft(
   draftRef: string,
-  request?: Request,
+  _request?: Request,
 ) {
-  const loaded = await loadDraftForAccess(draftRef, request);
+  void _request;
+  const loaded = await loadDraftForAccess(draftRef);
   if (loaded.order.status !== OrderStatus.DRAFT) {
     throw new AuthError(409, "Only draft orders can be edited");
   }

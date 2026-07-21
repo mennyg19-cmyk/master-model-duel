@@ -36,9 +36,37 @@ export const BRANDING_DEFAULT = {
   logoUrl: "",
 } as const;
 
+/** Escape untrusted values before substituting into HTML email bodies. */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Allow only http(s) URLs on the app origin (blocks javascript: and off-site phishing links).
+ * Returns empty string when the candidate is unsafe.
+ */
+export function sanitizeSameOriginUrl(raw: string, appOriginBase: string): string {
+  try {
+    const allowed = new URL(appOriginBase).origin;
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+    if (parsed.origin !== allowed) return "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
 export function renderTemplate(
   template: string,
   vars: Record<string, string>,
 ): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? "");
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) =>
+    escapeHtml(vars[key] ?? ""),
+  );
 }

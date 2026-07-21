@@ -58,6 +58,7 @@ export async function resendSend(input: ResendSendInput): Promise<ResendSendResu
   if (mode === "mock") {
     return {
       ok: true,
+      captured: true,
       providerId: `mock_${randomBytes(8).toString("hex")}`,
     };
   }

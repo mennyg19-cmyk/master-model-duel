@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
+import { randomBytes } from "node:crypto";
 import { apiErrorResponse } from "@/lib/api-error";
 import { requireCronBearer } from "@/lib/cron/auth";
 import { beginCronRun, finishCronRun } from "@/lib/cron/runs";
-import { runPickupExpiryCron } from "@/lib/pickup/bulk";
+import { sweepOutbox } from "@/lib/notify/outbox";
 
-async function runPickupExpiry(request: Request) {
+async function runOutboxSweep(request: Request) {
   requireCronBearer(request);
   const url = new URL(request.url);
   const claimedToken = url.searchParams.get("token") || undefined;
-  const claim = await beginCronRun("pickup-expiry", claimedToken);
+  const claim = await beginCronRun("outbox-sweep", claimedToken);
   if (!claim.claimed) {
     return NextResponse.json({
       ok: true,
@@ -19,19 +20,20 @@ async function runPickupExpiry(request: Request) {
   }
 
   try {
-    const cronResult = await runPickupExpiryCron();
-    await finishCronRun(claim.run.id, { ok: true, meta: cronResult });
+    const workerId = `cron_${claim.run.id}_${randomBytes(3).toString("hex")}`;
+    const sweepResult = await sweepOutbox({ workerId, limit: 40 });
+    await finishCronRun(claim.run.id, { ok: true, meta: sweepResult });
     return NextResponse.json({
       ok: true,
       skipped: false,
-      ...cronResult,
+      ...sweepResult,
       runId: claim.run.id,
     });
   } catch (error) {
     await finishCronRun(claim.run.id, {
       ok: false,
       meta: {
-        error: error instanceof Error ? error.message : "pickup-expiry failed",
+        error: error instanceof Error ? error.message : "outbox-sweep failed",
       },
     });
     throw error;
@@ -41,7 +43,7 @@ async function runPickupExpiry(request: Request) {
 /** Vercel Cron invokes GET; smoke/manual use POST. */
 export async function GET(request: Request) {
   try {
-    return await runPickupExpiry(request);
+    return await runOutboxSweep(request);
   } catch (error) {
     return apiErrorResponse(error);
   }
@@ -49,7 +51,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    return await runPickupExpiry(request);
+    return await runOutboxSweep(request);
   } catch (error) {
     return apiErrorResponse(error);
   }

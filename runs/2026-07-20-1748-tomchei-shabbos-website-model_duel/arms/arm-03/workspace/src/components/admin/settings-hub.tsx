@@ -16,6 +16,7 @@ export function SettingsHub() {
   const [zipAllowed, setZipAllowed] = useState<boolean | null>(null);
   const [emailFrom, setEmailFrom] = useState("");
   const [emailReplyTo, setEmailReplyTo] = useState("");
+  const [testEmailTo, setTestEmailTo] = useState("manager@tomchei.local");
   const [shippingRates, setShippingRates] = useState("{}");
   const [shippingRules, setShippingRules] = useState("{}");
   const [developerNotes, setDeveloperNotes] = useState("");
@@ -268,6 +269,37 @@ export function SettingsHub() {
             onClick={() => patchSetting(STORE_SETTINGS.emailReplyTo, { address: emailReplyTo })}
           >
             Save reply-to
+          </Button>
+          <label className="block font-semibold">
+            Test send to
+            <input
+              className="mt-1 w-full rounded border px-2 py-1.5 font-normal"
+              value={testEmailTo}
+              onChange={(e) => setTestEmailTo(e.target.value)}
+              data-testid="email-test-to"
+            />
+          </label>
+          <Button
+            type="button"
+            data-testid="email-test-send"
+            onClick={async () => {
+              setMessage(null);
+              const res = await fetch("/api/admin/email", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ action: "test_email", to: testEmailTo }),
+              });
+              const json = await res.json();
+              setMessage(
+                res.ok
+                  ? json.captured
+                    ? "Test captured (no provider)."
+                    : "Test sent."
+                  : json.error || "Test failed",
+              );
+            }}
+          >
+            Send test email
           </Button>
           {message ? <p>{message}</p> : null}
         </section>

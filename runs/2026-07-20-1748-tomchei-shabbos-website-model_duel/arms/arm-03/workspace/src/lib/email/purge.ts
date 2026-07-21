@@ -68,7 +68,8 @@ export async function sendTestEmail(input: {
     "<p>This is a test email from settings (R-090).</p>";
 
   const mode = getEmailMode();
-  if (mode === "capture") {
+  // capture + mock both avoid live providers (R-090 / S5).
+  if (mode === "capture" || mode === "mock") {
     await writeEmailLog({
       channel: NotifyChannel.EMAIL,
       templateKey: "settings.test",
@@ -80,7 +81,7 @@ export async function sendTestEmail(input: {
     await writeAudit({
       action: AuditAction.EMAIL_TEST_SENT,
       actorId: input.actorId,
-      meta: { to, captured: true },
+      meta: { to, captured: true, mode },
     });
     return ok({ captured: true });
   }
