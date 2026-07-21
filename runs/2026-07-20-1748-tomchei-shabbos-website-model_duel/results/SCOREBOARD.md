@@ -53,7 +53,7 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **P10 arm-01:** **1.5/20** → **15.0/20** ([fix notes](arms/arm-01/results/P10-FIX-NOTES.md); B1 + A-H1/H2/H3 + A-M2/M3/M5/M6/M7; S1–S3 pass)
 - **P11 arm-01:** **1.5/20** → **16.5/20** ([fix notes](arms/arm-01/results/P11-FIX-NOTES.md); A-H1–A-H6 + A-M1/M2/M3/M5/M6/M7; S1–S5 pass)
 - **P12 arm-01:** **1.5/20** → **18.0/20** ([fix notes](arms/arm-01/results/P12-FIX-NOTES.md); B1–B4 + M1/M3/M5–M7/M9–M11; S1–S5 pass) — **Test 4 complete**
-- **Next:** Tests 5–6 (both arms Test 4 complete) — per `protocol/EXPERIMENT-PLAN.md`
+- **Next:** Test 5 in progress (self-review) — Tests 6 after Test 5 scores
 
 ## Test 2 notes
 
