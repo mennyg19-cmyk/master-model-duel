@@ -19,6 +19,6 @@
 | 2 plan (not merged) + bonus_plan | pending |
 | 4 build from merged plan | pending (Test 3 skipped like originals) |
 | 5 self-review | pending |
-| 6 detect/fix | **ask user** — originals already gated (skip vs fresh wave) |
+| 6 detect/fix | **rerun** (arm-03 only) — same arm-02 clone + B1–B5 seeds; arm-01/02 scores frozen |
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [FINAL-REPORT.md](./FINAL-REPORT.md) · protocol/LATE-JOIN.md
