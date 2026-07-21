@@ -25,6 +25,7 @@
     "smoke:p6": "node --env-file=.env scripts/smoke-p6.mjs",
     "smoke:p7": "node --env-file=.env --import tsx scripts/smoke-p7.mjs",
     "smoke:p8": "node --env-file=.env --import tsx scripts/smoke-p8.mjs",
+    "smoke:p9": "node --env-file=.env --import tsx scripts/smoke-p9.mjs",
     "db:seed-scale-p6": "node --env-file=.env --import tsx scripts/seed-scale-p6.ts"
   },
   "dependencies": {

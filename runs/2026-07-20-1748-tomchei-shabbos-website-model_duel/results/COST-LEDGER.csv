@@ -253,3 +253,12 @@
 2026-07-21T21:19:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P8,review_aggregate,glm-5.2-high,ad31fbbf-8d00-4f3f-b086-2d77d9546971,,,,,,,,6 blockers; usage_missing
 2026-07-21T21:19:42Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P8,fix,cursor-grok-4.5-high,f5d70002-d693-4f70-b177-0bc266d4715a,,,,,,,,B1-B6 fixed smoke 3/3; usage_missing
 2026-07-21T21:21:13Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P8,contestant-fix,cursor-grok-4.5-high,ef08eda4-1e81-400f-a4ac-b1b7cb2980b3,,,,,,,,usage_missing
+2026-07-21T21:28:14Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P9,contestant,cursor-grok-4.5-high,5cef9031-d09b-4c2b-a4e1-782a07efef08,,,,,,,,build; usage_missing
+2026-07-21T21:28:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P9,builder,cursor-grok-4.5-high,6fde5ba2-9d86-4ba8-b967-3feb38dfb6cf,,,,,,,,routes magic links pickup crons; smoke 5/5; usage_missing
+2026-07-21T21:30:12Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P9,reviewer-rules,glm-5.2-high,a01ceed5-8670-446b-a3df-161445979671,,,,,,,,usage_missing
+2026-07-21T21:30:24Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P9,reviewer-clean-code,glm-5.2-high,db429761-f955-4e95-aac7-8cc02a589d3a,,,,,,,,usage_missing
+2026-07-21T21:32:05Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P9,reviewer-quality,glm-5.2-high,bffd0464-d91e-492a-9de4-330dd0e40b60,,,,,,,,usage_missing
+2026-07-21T21:32:15Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P9,reviewer-security,glm-5.2-high,a572411c-ce1b-4e6f-a501-75f4e01a4d85,,,,,,,,usage_missing
+2026-07-21T21:32:42Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P9,review_aggregate,glm-5.2-high,a56c2878-6ca5-4abc-9892-965fafc00b64,,,,,,,,30 deduped 3 blockers; usage_missing
+2026-07-21T21:35:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P9,reviewer-aggregate,glm-5.2-high,3a7cd4b6-bcdb-41b2-ac5a-43cb71261b67,,,,,,,,usage_missing
+2026-07-21T21:35:12Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P9,fix,cursor-grok-4.5-high,f045bf02-b9f3-4c4f-a794-3c7e44d038ed,,,,,,,,B1-B3 fixed smoke 5/5; usage_missing

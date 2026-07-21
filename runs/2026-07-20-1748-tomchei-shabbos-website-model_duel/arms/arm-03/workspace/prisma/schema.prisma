@@ -67,6 +67,42 @@ enum AuditAction {
   LABEL_VOIDED
   LABEL_FAILED
   TRACKING_REFRESHED
+  ROUTE_CREATED
+  ROUTE_ASSIGNED
+  ROUTE_STARTED
+  ROUTE_COMPLETED
+  ROUTE_REASSIGNED
+  DRIVER_DELIVERED
+  METHOD_SWITCHED
+  REROUTE_CONFIRMED
+  PICKUP_READY
+  PICKUP_STAMPED
+  BULK_DELIVERY_SCHEDULED
+  NOTIFICATION_CAPTURED
+}
+
+enum DeliveryRouteStatus {
+  DRAFT
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RouteStopStatus {
+  PENDING
+  DELIVERED
+  SKIPPED
+}
+
+enum NotifyChannel {
+  EMAIL
+  SMS
+}
+
+enum NotifyStatus {
+  CAPTURED
+  SENT
 }
 
 enum ImportKind {
@@ -189,6 +225,9 @@ model StaffUser {
   assemblyBatches       AssemblyBatch[]
   importBatchesStaged   ImportBatch[]          @relation("ImportStagedBy")
   importBatchesCommitted ImportBatch[]         @relation("ImportCommittedBy")
+  routesDriven          DeliveryRoute[]        @relation("RouteDriver")
+  routesCreated         DeliveryRoute[]        @relation("RouteCreator")
+  bulkWindowsScheduled  BulkDeliveryWindow[]
 }
 
 model PermissionOverride {
@@ -301,6 +340,8 @@ model Season {
   products    Product[]
   orders      Order[]
   printBatches PrintBatch[]
+  deliveryRoutes DeliveryRoute[]
+  bulkWindows BulkDeliveryWindow[]
 
   @@index([year])
   @@index([status])
@@ -590,6 +631,15 @@ model Package {
   greeting            String       @default("")
   stage               PackageStage @default(NEW)
   version             Int          @default(1)
+  latitude            Float?
+  longitude           Float?
+  geocodedAt          DateTime?
+  /// Pickup readiness (UR-010 / G-017).
+  pickupReadyAt       DateTime?
+  pickupReadyNotifiedAt DateTime?
+  pickedUpAt          DateTime?
+  pickupExpiresAt     DateTime?
+  bulkWindowId        String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -599,12 +649,16 @@ model Package {
   items             PackageItem[]
   audits            PackageAuditLog[]
   shippingLabels    ShippingLabel[]
+  routeStop         RouteStop?
+  bulkWindow        BulkDeliveryWindow? @relation(fields: [bulkWindowId], references: [id], onDelete: SetNull)
   /// Bin-packing / shipment plan snapshot (R-081).
   shipmentPlan      Json?
 
   @@index([orderId])
   @@index([groupingKey])
   @@index([stage])
+  @@index([pickupReadyAt])
+  @@index([bulkWindowId])
 }
 
 model PackageItem {
@@ -948,4 +1002,132 @@ model ImportRow {
   @@unique([batchId, rowNumber])
   @@index([batchId, status])
   @@index([targetKey])
+}
+
+/// Volunteer delivery route (P9 / R-074..R-076).
+model DeliveryRoute {
+  id              String              @id @default(cuid())
+  seasonId        String
+  name            String
+  status          DeliveryRouteStatus @default(DRAFT)
+  driverStaffId   String?
+  createdById     String?
+  /// Optional 4-digit PIN hash (sha256) — manager texts raw PIN to driver.
+  pinHash         String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  /// Optional short grace after completion (default 2h).
+  graceExpiresAt  DateTime?
+  dayOfNotifiedAt DateTime?
+  printPayload    Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  season    Season            @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  driver    StaffUser?        @relation("RouteDriver", fields: [driverStaffId], references: [id], onDelete: SetNull)
+  createdBy StaffUser?        @relation("RouteCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  stops     RouteStop[]
+  magicLinks DriverMagicLink[]
+
+  @@index([seasonId, status])
+  @@index([driverStaffId])
+}
+
+model RouteStop {
+  id            String          @id @default(cuid())
+  routeId       String
+  packageId     String          @unique
+  sequence      Int
+  status        RouteStopStatus @default(PENDING)
+  latitude      Float?
+  longitude     Float?
+  recipientName String
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  state         String
+  postalCode    String
+  country       String          @default("US")
+  mapsUrl       String
+  deliveredAt   DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  route   DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  package Package       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  events  DriverDeliveryEvent[]
+
+  @@index([routeId, sequence])
+  @@index([status])
+}
+
+model DriverMagicLink {
+  id             String    @id @default(cuid())
+  routeId        String
+  /// SHA-256 of raw token — raw never stored.
+  tokenHash      String    @unique
+  pinRequired    Boolean   @default(false)
+  revokedAt      DateTime?
+  completedAt    DateTime?
+  graceExpiresAt DateTime?
+  pinFailCount   Int       @default(0)
+  pinLockedUntil DateTime?
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  route  DeliveryRoute          @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  events DriverDeliveryEvent[]
+
+  @@index([routeId])
+}
+
+model DriverDeliveryEvent {
+  id          String   @id @default(cuid())
+  magicLinkId String
+  routeStopId String?
+  action      String
+  createdAt   DateTime @default(now())
+  meta        Json?
+
+  magicLink DriverMagicLink @relation(fields: [magicLinkId], references: [id], onDelete: Cascade)
+  routeStop RouteStop?      @relation(fields: [routeStopId], references: [id], onDelete: SetNull)
+
+  @@index([magicLinkId, createdAt])
+  @@index([routeStopId])
+}
+
+/// Test-capture + future send outbox for email/SMS (P9 / G-021 channel stub).
+model NotificationOutbox {
+  id              String        @id @default(cuid())
+  channel         NotifyChannel
+  templateKey     String
+  recipientKey    String
+  idempotencyKey  String        @unique
+  subject         String?
+  body            String
+  status          NotifyStatus  @default(CAPTURED)
+  createdAt       DateTime      @default(now())
+  meta            Json?
+
+  @@index([templateKey, createdAt])
+  @@index([recipientKey])
+}
+
+model BulkDeliveryWindow {
+  id            String   @id @default(cuid())
+  seasonId      String
+  deliveryDate  DateTime
+  windowLabel   String?
+  scheduledById String?
+  scheduledAt   DateTime @default(now())
+  notifiedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  season      Season     @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  scheduledBy StaffUser? @relation(fields: [scheduledById], references: [id], onDelete: SetNull)
+  packages    Package[]
+
+  @@index([seasonId, deliveryDate])
 }

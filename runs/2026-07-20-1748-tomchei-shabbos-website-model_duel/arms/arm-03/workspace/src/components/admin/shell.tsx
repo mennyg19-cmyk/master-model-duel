@@ -9,6 +9,7 @@ const NAV: { href: string; label: string; permission: Permission }[] = [
   { href: "/admin/orders", label: "Orders", permission: "admin.access" },
   { href: "/admin/packages", label: "Packages", permission: "admin.access" },
   { href: "/admin/fulfillment", label: "Fulfillment", permission: "admin.access" },
+  { href: "/admin/routes", label: "Routes", permission: "admin.access" },
   { href: "/admin/print-batches", label: "Print", permission: "admin.access" },
   { href: "/admin/customers", label: "Customers", permission: "admin.access" },
   { href: "/admin/pos", label: "POS", permission: "admin.access" },

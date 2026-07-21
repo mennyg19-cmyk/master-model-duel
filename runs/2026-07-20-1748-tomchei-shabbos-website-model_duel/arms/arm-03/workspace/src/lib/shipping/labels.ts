@@ -253,6 +253,8 @@ export async function voidLabelForPackage(input: {
   packageId: string;
   actorId?: string | null;
   seasonId?: string;
+  /** When set, DB void runs on this client (caller owns the transaction). Shippo still runs first. */
+  tx?: Prisma.TransactionClient;
 }): Promise<{ labelId: string }> {
   const label = await db.shippingLabel.findFirst({
     where: {
@@ -277,8 +279,8 @@ export async function voidLabelForPackage(input: {
     }
   }
 
-  await db.$transaction(async (tx) => {
-    await tx.shippingLabel.update({
+  const persist = async (client: Prisma.TransactionClient | typeof db) => {
+    await client.shippingLabel.update({
       where: { id: label.id },
       // Clear key so a later re-purchase can reuse label-buy:{packageId}.
       data: { status: ShippingLabelStatus.VOIDED, voidedAt: new Date(), idempotencyKey: null },
@@ -289,9 +291,15 @@ export async function voidLabelForPackage(input: {
         actorId: input.actorId,
         meta: labelAuditMeta(label),
       },
-      tx,
+      client,
     );
-  });
+  };
+
+  if (input.tx) {
+    await persist(input.tx);
+  } else {
+    await db.$transaction(async (tx) => persist(tx));
+  }
 
   return { labelId: label.id };
 }
