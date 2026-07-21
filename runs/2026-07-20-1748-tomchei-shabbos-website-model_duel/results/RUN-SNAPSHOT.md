@@ -20,7 +20,7 @@ Updated for GitHub/mobile tracking (orchestrator commits after each gate).
 
 ## In flight
 
-- Residual aggregate (`glm-5.2-high`): arm-01 · arm-02
+- Residual aggregate: [arm-01](180ce7ca-24fd-4fbb-a9d9-f6ad315f20c9) · [arm-02](4c39ba96-9f68-43db-a2fb-ecefe5d845e8)
 - Then score Test 5 /15
 
 See [SCOREBOARD.md](./SCOREBOARD.md) · [COST-LEDGER.csv](./COST-LEDGER.csv)
