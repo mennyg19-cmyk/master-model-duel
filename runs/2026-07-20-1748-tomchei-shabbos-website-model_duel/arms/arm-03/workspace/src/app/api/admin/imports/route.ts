@@ -9,6 +9,7 @@ const stageSchema = z.object({
   kind: z.nativeEnum(ImportKind),
   csvText: z.string().min(1).max(2_000_000),
   filename: z.string().max(200).optional(),
+  dryRun: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
       csvText: body.csvText,
       filename: body.filename,
       staffId: staff.effectiveStaff.id,
+      dryRun: body.dryRun,
     });
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });
@@ -33,7 +35,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    await requirePermission("admin.access");
+    await requirePermission("settings.write");
     const batchId = new URL(request.url).searchParams.get("batchId");
     if (!batchId) {
       return NextResponse.json({ ok: false, error: "batchId required" }, { status: 400 });
@@ -51,6 +53,7 @@ export async function GET(request: Request) {
 const commitSchema = z.object({
   batchId: z.string().min(1),
   commit: z.literal(true),
+  maxRows: z.number().int().positive().optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -60,6 +63,7 @@ export async function PATCH(request: Request) {
     const result = await commitImport({
       batchId: body.batchId,
       staffId: staff.effectiveStaff.id,
+      maxRows: body.maxRows,
     });
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.publicMessage }, { status: 409 });

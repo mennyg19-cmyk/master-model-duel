@@ -84,6 +84,12 @@ enum AuditAction {
   EMAIL_CAMPAIGN_SENT
   EMAIL_TEST_SENT
   EMAIL_LOG_PURGED
+  EXPORT_RUN
+  RECONCILE_RUN
+  ADDRESS_REVIEW_FLAGGED
+  ADDRESS_MERGED
+  TEST_OPS_ACTION
+  LEGACY_IMPORT_DRY_RUN
 }
 
 enum DeliveryRouteStatus {
@@ -121,12 +127,29 @@ enum CampaignStatus {
 enum ImportKind {
   CUSTOMERS
   PRODUCTS
+  ORDERS
 }
 
 enum ImportBatchStatus {
   STAGED
   COMMITTED
   CANCELLED
+  INTERRUPTED
+}
+
+enum ExportDataset {
+  DELIVERIES
+  YEAR_END
+  YEAR_METRICS
+  ITEM_SALES
+  LAPSED_CUSTOMERS
+  SHIPPING_MARGIN
+}
+
+enum ReconcileStatus {
+  RUNNING
+  COMPLETED
+  FAILED
 }
 
 enum ImportRowStatus {
@@ -242,6 +265,8 @@ model StaffUser {
   routesCreated         DeliveryRoute[]        @relation("RouteCreator")
   bulkWindowsScheduled  BulkDeliveryWindow[]
   emailCampaignsCreated EmailCampaign[]
+  exportAudits          ExportAudit[]
+  reconcileRuns         PaymentReconcileRun[]
 }
 
 model PermissionOverride {
@@ -511,16 +536,23 @@ model SavedAddress {
   geocodeStatus String?
   geocodedAt    DateTime?
   isDefault     Boolean   @default(false)
+  /// UR-014 — staff review queue for messy/legacy addresses.
+  needsReview   Boolean   @default(false)
+  reviewReason  String?
+  mergedIntoId  String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
   orderLines OrderLine[]
   packages   Package[]
+  mergedInto SavedAddress?  @relation("AddressMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergeSources SavedAddress[] @relation("AddressMerge")
 
   @@unique([customerId, addressNorm])
   @@index([customerId])
   @@index([postalCode])
+  @@index([needsReview])
 }
 
 model FulfillmentMethod {
@@ -986,6 +1018,9 @@ model ImportBatch {
   kind          ImportKind
   status        ImportBatchStatus @default(STAGED)
   filename      String?
+  dryRun        Boolean           @default(false)
+  /// Resume cursor — last committed rowNumber (R-186).
+  commitCursor  Int               @default(0)
   stagedById    String?
   committedById String?
   stagedAt      DateTime          @default(now())
@@ -1000,6 +1035,62 @@ model ImportBatch {
 
   @@index([kind, status])
   @@index([stagedAt])
+}
+
+/// CSV export center audit (R-092).
+model ExportAudit {
+  id           String        @id @default(cuid())
+  dataset      ExportDataset
+  seasonId     String?
+  rowCount     Int
+  byteCount    Int
+  checksum     String
+  staffId      String?
+  params       Json?
+  createdAt    DateTime      @default(now())
+
+  staff StaffUser? @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  @@index([dataset, createdAt])
+  @@index([staffId])
+}
+
+/// Stripe payment reconciliation run (R-093).
+model PaymentReconcileRun {
+  id              String          @id @default(cuid())
+  status          ReconcileStatus @default(RUNNING)
+  triggeredBy     String
+  staffId         String?
+  orphanedCount   Int             @default(0)
+  matchedCount    Int             @default(0)
+  adjustedCount   Int             @default(0)
+  summary         Json?
+  startedAt       DateTime        @default(now())
+  finishedAt      DateTime?
+
+  staff       StaffUser?                 @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  adjustments PaymentReconcileAdjustment[]
+
+  @@index([startedAt])
+  @@index([status])
+}
+
+model PaymentReconcileAdjustment {
+  id                    String   @id @default(cuid())
+  runId                 String
+  /// Stable key so reruns do not duplicate adjustments.
+  fingerprint           String   @unique
+  kind                  String
+  stripePaymentIntentId String?
+  orderId               String?
+  amountCents           Int?
+  note                  String?
+  createdAt             DateTime @default(now())
+
+  run PaymentReconcileRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([stripePaymentIntentId])
 }
 
 model ImportRow {

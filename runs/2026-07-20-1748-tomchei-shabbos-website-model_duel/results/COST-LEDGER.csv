@@ -294,3 +294,16 @@
 2026-07-21T22:16:50Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P11,review_aggregate,glm-5.2-high,6bd995fc-a093-454d-988a-fff1c321467a,,,,,,,,51 deduped 3 blockers; usage_missing
 2026-07-21T22:19:03Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P11,contestant-fix,cursor-grok-4.5-high,5dc710c4-66b3-4d60-91d3-90fbe5685a6d,,,,,,,,usage_missing
 2026-07-21T22:21:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P11,fix,cursor-grok-4.5-high,4c89e3cf-e863-4f31-a5f1-951386af1d02,,,,,,,,B1-B3 M1 M7 M11 M12 smoke 5/5; usage_missing
+2026-07-21T22:31:10Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,build,cursor-grok-4.5-high,02ded440-d2dc-4130-9690-df5dd056a146,,,,,,,,P12 launch readiness smoke 5/5; usage_missing
+2026-07-21T22:31:59Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,contestant,cursor-grok-4.5-high,b251dd88-29d0-4a05-ad95-f5b21e00865a,,,,,,,,build; usage_missing
+2026-07-21T22:34:08Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,review_security,glm-5.2-high,18b8dcca-8c0e-43ed-9761-7bbc5ccc213b,,,,,,,,11 findings; usage_missing
+2026-07-21T22:34:09Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,review_quality,glm-5.2-high,7c7972f0-3766-4d2c-b249-a5a0bfde3f64,,,,,,,,11 findings 2 blockers; usage_missing
+2026-07-21T22:34:09Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,review_rules,glm-5.2-high,e59b1380-cfc4-4ba3-aea9-b6777aba0506,,,,,,,,16 findings; usage_missing
+2026-07-21T22:34:09Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,review_clean_code,glm-5.2-high,eda31037-ff70-460d-a7aa-d8457ae1ddec,,,,,,,,15 findings 6 critical; usage_missing
+2026-07-21T22:34:12Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,reviewer-clean-code,glm-5.2-high,4471dfa6-9f1a-4b38-bd9c-ab8171013878,,,,,,,,usage_missing
+2026-07-21T22:34:25Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,reviewer-quality,glm-5.2-high,7fb41a25-8538-40bb-8691-64c5e45943b2,,,,,,,,usage_missing
+2026-07-21T22:34:25Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,reviewer-rules,glm-5.2-high,04d1de8f-6014-42c4-a2d1-57c3ef0c8533,,,,,,,,usage_missing
+2026-07-21T22:34:34Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,reviewer-security,glm-5.2-high,91fd41f5-8341-46ca-b86e-9e6c7786d7db,,,,,,,,usage_missing
+2026-07-21T22:38:40Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,review_aggregate,glm-5.2-high,cc911e69-45ad-42cd-8ceb-737dd5c42c45,,,,,,,,34 deduped 3 blockers; usage_missing
+2026-07-21T22:40:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,reviewer-aggregate,glm-5.2-high,a6289c7d-6bf7-42a6-b737-dabd839cc4e3,,,,,,,,usage_missing
+2026-07-21T22:43:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,fix,cursor-grok-4.5-high,0fe3f5d0-b54e-45f6-bd70-cf25aff3d94a,,,,,,,,B1-B3 majors smoke 5/5 scale 5k; usage_missing

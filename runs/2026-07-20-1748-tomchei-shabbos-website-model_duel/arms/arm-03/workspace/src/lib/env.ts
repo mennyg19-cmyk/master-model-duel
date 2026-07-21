@@ -17,6 +17,11 @@ const envSchema = z
     DEV_ACTING_USER_ID: z.string().optional(),
     APP_URL: z.string().url().default("http://127.0.0.1:3103"),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    /** Explicit opt-in for destructive test-ops (wipe/reseed/dress). Also allowed when AUTH_MODE=dev. */
+    IS_TEST_ENV: z
+      .enum(["true", "false", "1", "0"])
+      .optional()
+      .transform((v) => v === "true" || v === "1"),
   })
   .superRefine((value, ctx) => {
     if (value.AUTH_MODE === "clerk") {
