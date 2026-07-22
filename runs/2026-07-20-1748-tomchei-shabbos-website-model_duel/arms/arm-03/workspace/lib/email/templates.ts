@@ -63,8 +63,8 @@ export async function resolveTemplate(
 ): Promise<ResolvedTemplate> {
   const override = await tx.emailTemplate.findUnique({ where: { key } });
   return {
-    subject: override?.subject?.trim() ? override.subject : TEMPLATE_DEFAULTS[key].subject,
-    body: override?.body?.trim() ? override.body : TEMPLATE_DEFAULTS[key].body,
+    subject: override?.subject ?? TEMPLATE_DEFAULTS[key].subject,
+    body: override?.body ?? TEMPLATE_DEFAULTS[key].body,
     isEnabled: override?.isEnabled ?? true,
   };
 }

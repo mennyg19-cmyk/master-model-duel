@@ -1,13 +1,13 @@
-import EmbeddedPostgres from "embedded-postgres";
+﻿import EmbeddedPostgres from "embedded-postgres";
 
-// Long-running dev database. Keep this process alive while developing;
+// Long-running dev database on port 4103. Keep this process alive while developing;
 // Ctrl+C stops the cluster cleanly. Data persists in .pgdata between runs.
 async function main() {
   const postgres = new EmbeddedPostgres({
     databaseDir: "./.pgdata",
     user: "duel",
     password: "duel",
-    port: 4102,
+    port: 4103,
     persistent: true,
   });
 
@@ -22,10 +22,11 @@ async function main() {
   );
   const existingNames = existing.rows.map((row: { datname: string }) => row.datname);
   if (!existingNames.includes("tomchei")) await postgres.createDatabase("tomchei");
+  // Shadow database used by the prisma migration guard.
   if (!existingNames.includes("shadow")) await postgres.createDatabase("shadow");
   await client.end();
 
-  console.log("Postgres ready on 127.0.0.1:4102 (databases: tomchei, shadow). Ctrl+C to stop.");
+  console.log("Postgres ready on 127.0.0.1:4103 (databases: tomchei, shadow). Ctrl+C to stop.");
 
   const shutdown = async () => {
     console.log("Stopping Postgres...");
@@ -37,6 +38,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error("Failed to start embedded Postgres:", error);
   process.exit(1);
 });
+

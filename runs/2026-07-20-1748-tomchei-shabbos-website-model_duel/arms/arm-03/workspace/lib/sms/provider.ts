@@ -1,9 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { env } from "@/lib/env";
 
-// SMS provider behind one type (G-021 channel wiring). Modes from SMS_MODE
-// (capture|mock|live). EMAIL_TEST_MODE=true forces capture (same switch as
-// email — documented single capture override). Twilio is the only live backend.
+// SMS provider behind one type (G-021 channel wiring). Twilio-class REST over
+// fetch when the three TWILIO_* vars are set; otherwise the same mock/capture
+// split as the email provider, so the P9 notification rows with channel SMS
+// dispatch through identical code either way. Provider stays swappable — this
+// file is the only place that knows it's Twilio.
 
 export type SmsMessage = { to: string; body: string };
 
@@ -40,22 +42,13 @@ function mockSmsProvider(): SmsProvider {
   return {
     mode: "mock",
     async send(message, attempt) {
-      // Forced-failure hooks keyed on body (phone numbers can't carry tags).
+      // Same forced-failure hooks as email, keyed on the body since phone
+      // numbers can't carry tags: "[failonce]" fails the first attempt only.
       if (message.body.includes("[failonce]") && attempt <= 1) {
         throw new Error("Mock SMS failure (forced by [failonce] marker, first attempt)");
       }
-      if (message.body.includes("[failalways]")) {
-        throw new Error("Mock SMS failure (forced by [failalways] marker)");
-      }
       return { messageId: `sms_mock_${randomBytes(10).toString("hex")}` };
     },
-  };
-}
-
-function captureSmsProvider(): SmsProvider {
-  return {
-    mode: "capture",
-    send: async () => ({ messageId: `captured_${randomBytes(10).toString("hex")}` }),
   };
 }
 
@@ -63,21 +56,11 @@ let provider: SmsProvider | null = null;
 
 export function getSmsProvider(): SmsProvider {
   if (!provider) {
-    if (env.EMAIL_TEST_MODE || env.SMS_MODE === "capture") {
-      provider = captureSmsProvider();
-    } else if (env.SMS_MODE === "live") {
-      if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM_NUMBER) {
-        throw new Error("SMS_MODE=live requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER");
-      }
-      provider = twilioProvider(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN, env.TWILIO_FROM_NUMBER);
-    } else {
-      provider = mockSmsProvider();
-    }
+    provider = env.EMAIL_TEST_MODE
+      ? { mode: "capture", send: async () => ({ messageId: `captured_${randomBytes(10).toString("hex")}` }) }
+      : env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER
+        ? twilioProvider(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN, env.TWILIO_FROM_NUMBER)
+        : mockSmsProvider();
   }
   return provider;
-}
-
-/** Test hook — clears the memoized provider so the next call re-reads env. */
-export function resetSmsProvider(): void {
-  provider = null;
 }

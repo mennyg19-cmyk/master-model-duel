@@ -3,16 +3,12 @@ import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/passwords";
 import { createSession } from "@/lib/auth/session";
 import { writeAudit } from "@/lib/audit";
-import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 const setupSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
-
-const SETUP_LIMIT_PER_IP = 5;
-const SETUP_WINDOW_MS = 15 * 60 * 1000;
 
 export async function GET() {
   const staffCount = await db.staffUser.count();
@@ -21,10 +17,6 @@ export async function GET() {
 
 // Bootstraps the first manager on an empty database, then locks permanently.
 export async function POST(request: Request) {
-  if (!rateLimit(`setup:ip:${clientIp(request)}`, SETUP_LIMIT_PER_IP, SETUP_WINDOW_MS)) {
-    return Response.json({ error: "Too many setup attempts — try again later" }, { status: 429 });
-  }
-
   const parsed = setupSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0].message }, { status: 400 });

@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+﻿import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { loadLinkByToken, pinCookieName, pinCookieValid } from "@/lib/routes/links";
 
@@ -35,3 +35,4 @@ export async function resolveDriverAccess(token: string): Promise<DriverAccess> 
   if (!route) return { ok: false, reason: "not_found" };
   return { ok: true, linkId: access.link.id, route };
 }
+

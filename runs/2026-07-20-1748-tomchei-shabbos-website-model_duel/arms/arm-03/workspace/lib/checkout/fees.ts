@@ -1,4 +1,4 @@
-import { destinationKey, type CheckoutRecipient } from "@/lib/checkout/recipients";
+﻿import { destinationKey, type CheckoutRecipient } from "@/lib/checkout/recipients";
 
 // Delivery fee rules (R-033, G-014, UR-009):
 // - BULK_DELIVERY: one fee per distinct destination address (two recipients at
@@ -150,3 +150,4 @@ export function computeFees(
     requiresDeliveryDay,
   };
 }
+

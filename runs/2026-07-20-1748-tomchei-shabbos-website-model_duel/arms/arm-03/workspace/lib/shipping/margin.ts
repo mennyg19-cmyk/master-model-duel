@@ -1,4 +1,4 @@
-import type { CarrierRate } from "@/lib/shipping/shippo";
+﻿import type { CarrierRate } from "@/lib/shipping/shippo";
 
 // Margin engine (UR-003, G-006). The org's pricing rule: quote every eligible
 // carrier, charge the customer the HIGHEST carrier's best price, then buy the
@@ -30,3 +30,4 @@ export function resolveMargin(rates: CarrierRate[]): MarginDecision | { error: s
   const chargeCents = perCarrierBest[perCarrierBest.length - 1].amountCents;
   return { chargeCents, buy, marginCents: chargeCents - buy.amountCents, perCarrierBest };
 }
+

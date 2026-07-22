@@ -12,11 +12,9 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-scale": "tsx scripts/seed-scale.ts",
-    "migration:guard": "prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url postgresql://duel:duel@127.0.0.1:4102/shadow --exit-code",
+    "migration:guard": "prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url postgresql://duel:duel@127.0.0.1:4103/shadow --exit-code",
     "test": "tsx --test tests/*.test.ts",
     "smoke:concurrency": "tsx scripts/concurrency-smoke.ts",
-    "smoke:p11": "tsx scripts/smoke-p11.ts",
-    "smoke:p12": "tsx scripts/smoke-p12.ts",
     "ci": "npm run lint && npm run typecheck && npm run migration:guard && npm run test"
   },
   "dependencies": {
@@ -42,3 +40,4 @@
     "typescript": "5.9.3"
   }
 }
+

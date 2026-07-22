@@ -75,12 +75,9 @@ the `/api/cron/season-flip` cron and then cleared.
 All outgoing email/SMS goes through one outbox (`Notification` rows). Business
 code only ever enqueues (idempotent by `dedupeKey`); the sweeper cron
 (`/api/cron/notification-sweeper`) delivers with retry/backoff and writes an
-attempt trail. Providers are isolated wrappers: Resend (`lib/email/provider.ts`) and
-Twilio-class SMS (`lib/sms/provider.ts`). Mode comes from `EMAIL_MODE` /
-`SMS_MODE` (`capture` | `mock` | `live`). `EMAIL_TEST_MODE=true` is the single
-capture override — it forces capture on **both** channels even when live keys
-are set. Do not set `RESEND_API_KEY=mock` (truthy → false "live" attempts).
-Optional `EMAIL_FROM` seeds the From address when the settings row is empty.
+attempt trail. Providers are isolated wrappers: Resend (`lib/email/provider.ts`,
+mock without `RESEND_API_KEY`) and Twilio-class SMS (`lib/sms/provider.ts`).
+`EMAIL_TEST_MODE=true` captures everything instead of contacting providers.
 
 The admin Email hub (`/admin/email`) manages campaigns (draft → preview →
 test-send → send, reruns never duplicate), lists, subscribers, and triggered

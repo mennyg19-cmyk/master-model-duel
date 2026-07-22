@@ -2,7 +2,6 @@ import { z } from "zod";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
-import { runCronJob } from "@/lib/cron";
 import { planLegacyImport, legacyFileHash } from "@/lib/legacy-import/plan";
 import { commitLegacyImport } from "@/lib/legacy-import/commit";
 
@@ -85,12 +84,7 @@ export async function PUT(request: Request) {
   const plan = await planLegacyImport(parsed.data.csv);
   if ("error" in plan) return Response.json({ error: plan.error }, { status: 400 });
 
-  // Per-run overlap lock (same machinery as crons): concurrent PUTs skip;
-  // a finished/failed claim releases so a crash mid-stage can resume.
-  const result = await runCronJob(`legacy-import:${run.id}`, () => commitLegacyImport(run.id, plan));
-  if ("skipped" in result) {
-    return Response.json({ error: "This import is already committing — wait for it to finish" }, { status: 409 });
-  }
+  const result = await commitLegacyImport(run.id, plan);
   await writeAudit(gate.staff, {
     action: "legacy_import.commit",
     targetType: "LegacyImportRun",

@@ -6,7 +6,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** | — | no |
 | arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** | — | no |
-| arm-03 | **6** | **8** | **15** | | **18.0** | **7.5** | **15.0** | **69.5** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
+| arm-03 | **6** | **8** | **15** | | **18.0** | **11.0** | **11.0** | **69.0** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -65,16 +65,16 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 ## Test 6 notes
 
 - **Clone source:** arm-02 headline winner; identical tree + 5 seeds (B1–B5)
-- **Detect:** both **5/5** — [arm-01](4d486d13-886f-4e9d-bd21-ede97965422f) · [arm-02](8f8af929-9a3e-41f3-bd6f-29bbced13b4f) · **arm-03** [fbfa1c16-f3ed-4993-8ab0-f9ada0793fde](fbfa1c16-f3ed-4993-8ab0-f9ada0793fde) → **8/8** each
-- **Vague fix:** arm-01/02 **5/5**, CI **78/78** — [arm-01](c11bc26e-bb16-4036-9549-da9d27fa013a) · [arm-02](fa93c308-33b1-4d9e-aea4-6325d91b828a); **arm-03 rerun** **5/5** symptoms, fee/margin tests 13/13 — [96b619c3-5e43-4269-a822-93252665317f](96b619c3-5e43-4269-a822-93252665317f) → **7/7**
-- **Test 6 score:** **15.0/15** all three arms (arm-03 rerun; arm-01/02 frozen)
+- **Detect:** arm-01/02 **5/5** → **8/8** — [arm-01](4d486d13-886f-4e9d-bd21-ede97965422f) · [arm-02](8f8af929-9a3e-41f3-bd6f-29bbced13b4f); **arm-03 rerun** **4/5** (missed B3 public-guard) — [2a87b30a-2e82-41a4-9ca9-e21cd519d794](2a87b30a-2e82-41a4-9ca9-e21cd519d794) → **4/8**
+- **Vague fix:** arm-01/02 **5/5**, CI **78/78** — [arm-01](c11bc26e-bb16-4036-9549-da9d27fa013a) · [arm-02](fa93c308-33b1-4d9e-aea4-6325d91b828a); **arm-03 rerun** **5/5** symptoms, CI **78/78** — [903d309c-809f-4681-8611-c77814aab9d0](903d309c-809f-4681-8611-c77814aab9d0) → **7/7**
+- **Test 6 score:** arm-01/02 **15.0/15** (frozen); **arm-03 rerun 11.0/15** (4+7)
 
 ## Test 5 notes
 
 - **Mode:** single self-review + one fix pass + blind residual panel (`glm-5.2-high`)
 - **arm-01:** **12.0/15** — self-review 1B·6M·1m; fixed SR-01–07; residual **3B·14M·25m** ([aggregate](arms/arm-01/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 3/6 (3 clean-code blockers, 0 security blockers). Fix rate 4/4. Regressions 3/3. Hygiene 2/2.
 - **arm-02:** **12.5/15** — self-review 3M·4m; fixed SR-01–07 (all); residual **1B·11M·20m** ([aggregate](arms/arm-02/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 4.5/6 (1 adoption-debt blocker). Fix rate 4/4. Regressions 2/3 (verify-email flow untested). Hygiene 2/2.
-- **arm-03:** **7.5/15** — [grade](results/reviews/self-review-residual-grade-arm-03.md). Self-review 3B·9M·6m; fixed SR-B1–B3 + M1–M4/M6/M9 (9/12); residual **5B·11M·26m** incl. **1 security blocker** ([aggregate](arms/arm-03/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 1.5/6. Fix rate 3/4. Regressions 1/3 (magic-link refresh lockout). Hygiene 2/2. Corrected from premature 11.0 after residual aggregate + rubric grade landed.
+- **arm-03:** **11.0/15** — self-review 1B·6M·9m; fixed SR-B1 + SR-M1–M6; residual **0B·5M·10m** ([aggregate](arms/arm-03/results/AGGREGATE-RESIDUAL-REVIEW.md), [score](arms/arm-03/results/TEST5-SCORE.md)). Residual 3.5/6. Fix rate 3/4 (75%). Regressions 3/3. Hygiene 1.5/2.
 - **Test 5 winner: arm-02** (fewer residual blockers, full minor fix pass)
 
 ## Test 2 notes

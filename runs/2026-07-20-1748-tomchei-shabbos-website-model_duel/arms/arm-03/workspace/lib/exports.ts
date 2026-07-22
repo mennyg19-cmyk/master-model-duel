@@ -105,28 +105,22 @@ async function* itemSalesCsv(seasonId: string): AsyncGenerator<string> {
 
 async function* lapsedCustomersCsv(currentSeasonId: string): AsyncGenerator<string> {
   yield csvLine(["customer", "email", "phone", "last_order_season", "last_order_at"]);
-  // Set-based: one window ranks each customer's finalized orders, then we keep
-  // rn=1 — no per-customer correlated subquery for the season name.
   const rows = await db.$queryRaw<
     { name: string; email: string; phone: string | null; seasonName: string; lastAt: Date }[]
   >(Prisma.sql`
-    WITH last_orders AS (
-      SELECT o."customerId",
-             o."finalizedAt" AS "lastAt",
-             se.name AS "seasonName",
-             ROW_NUMBER() OVER (PARTITION BY o."customerId" ORDER BY o."finalizedAt" DESC) AS rn
-      FROM "Order" o
-      JOIN "Season" se ON se.id = o."seasonId"
-      WHERE o.status = 'FINALIZED'
-    )
-    SELECT c.name, c.email, c.phone, lo."seasonName", lo."lastAt"
+    SELECT c.name, c.email, c.phone,
+           (SELECT se.name FROM "Order" o2 JOIN "Season" se ON se.id = o2."seasonId"
+            WHERE o2."customerId" = c.id AND o2.status = 'FINALIZED'
+            ORDER BY o2."finalizedAt" DESC LIMIT 1) AS "seasonName",
+           MAX(o."finalizedAt") AS "lastAt"
     FROM "Customer" c
-    JOIN last_orders lo ON lo."customerId" = c.id AND lo.rn = 1
+    JOIN "Order" o ON o."customerId" = c.id AND o.status = 'FINALIZED'
     WHERE NOT EXISTS (
       SELECT 1 FROM "Order" cur
       WHERE cur."customerId" = c.id AND cur."seasonId" = ${currentSeasonId} AND cur.status <> 'DISCARDED'
     )
-    ORDER BY lo."lastAt" DESC
+    GROUP BY c.id, c.name, c.email, c.phone
+    ORDER BY "lastAt" DESC
   `);
   for (const row of rows) {
     yield csvLine([row.name, row.email, row.phone, row.seasonName, row.lastAt?.toISOString() ?? ""]);

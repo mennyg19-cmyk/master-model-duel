@@ -1,100 +1,117 @@
 # Test 5 — External residual review (quality): arm-03
 
 **Reviewer:** external (blind, quality focus)
-**Tree (post self-fix):** `arms/arm-03/workspace`
-**Basis:** `SELF-REVIEW-AGGREGATE.md` (18 findings) + `SELF-FIX-NOTES.md` (blockers + agreed majors fixed; SR-M5/M7/M8/m1–m6 skipped).
-**Scope:** Fresh review of the post-self-fix tree. Findings only — no fixes. Focus: correctness, broken flows, stubs.
+**Tree (post self-fix):** `arms/arm-03/workspace` (HEAD `d27690e`, "arm-03 P12 gated")
+**Basis:** `SELF-REVIEW.md` (16 findings: 1 blocker, 6 majors, 9 minors) + `SELF-FIX-NOTES.md` (SR-B1 + SR-M1–M6 fixed; SR-m1–m9 deferred). `npm run ci` pass (79 tests) per fix notes.
+**Scope:** Fresh review of the post-self-fix tree. Findings only — no fixes. Focus: correctness, broken flows, stubs, regressions vs the self-fix claims.
 
 ## Severity counts
 
 | Severity | Count |
 |---|---:|
-| major | 2 |
-| minor | 4 |
-| **Total** | **6** |
+| major | 0 |
+| minor | 8 |
+| **Total** | **8** |
 
 ## Verification of self-fix claims (sampled)
 
-Spot-checked the nine fixed items. All land where the notes claim:
+All seven fixed items land where the notes claim, and the money-path logic is transactional/idempotent where it needs to be:
 
-- **SR-B1** `src/lib/auth.ts` `getStaffContext` now prefers `clerkUserId`; email rematch auto-links only when `clerkUserId` is null and denies when bound to a different Clerk id (lines 92–109). Correct.
-- **SR-B2** `src/app/api/driver/[token]/route.ts` GET returns `{ok, linkId, pinRequired:true, unlocked:false}` until `isMagicPinUnlocked(link.id)` is true (lines 48–56). Client `driver-client.tsx` `applySession` honors `unlocked`/`pinRequired`. Correct as far as the GET path goes — see RQ-2 for the gap on the mutating paths.
-- **SR-B3** `src/lib/stripe/client.ts` `getStripeMode` throws on `STRIPE_MODE=mock` or mock-looking keys in production (lines 14–30); `mock-complete/route.ts` returns 404 in production (lines 23–28). Correct.
-- **SR-M2** `webhook.ts` branches `refund.created` (Refund) vs `charge.refunded` (Charge, iterates `refunds.data`) with a per-refund idempotency key `refund_applied:${refund.id}` (lines 289–399). Cross-event dedup works; see RQ-1 for the retry-window gap.
-- **SR-M3** `middleware.ts` `isDevAuthBypass` now requires `NODE_ENV !== "production"` (lines 62–65). Correct.
-- **SR-M4** `guest-token.ts` `guestDraftCookieOptions` derives `secure` from `APP_URL` https / production (lines 40–49). Correct.
-- **SR-M6** `finalize.ts` is now 259 lines, ~4% blank — normal single-spaced. Confirmed.
-- **SR-M9** `routes/service.ts` `hashPin` uses scrypt + per-hash salt (`scrypt$salt$hash`); `verifyPinHash` accepts legacy sha256; `routes-admin.tsx` PIN field defaults to `""` (lines 36–60; component line 19). Correct.
+- **SR-B1** `lib/payments/post-payment.ts:45-115` `recordRefund` — finds a `pending_*` placeholder by (orderId, stripePaymentIntentId, amountCents, POSTED, `startsWith("pending_")`) and rewrites its `stripeRefundId` to the real `re_…` instead of inserting a second negative row. P2002 catch (lines 84-94) deletes the placeholder when `resolveStaffRefund` raced. `enqueueRefundEmail` dedupes on `refund|${stripeRefundId}` (`lib/email/transactional.ts:95`), so the webhook-claim path and the `resolveStaffRefund` path cannot double-email. Correct.
+- **SR-M1** `app/api/webhooks/stripe/route.ts:224-258` `handleChargeRefunded` — iterates `charge.refunds.data` for succeeded refunds and calls `recordRefund` with the real `refund.id`; when the embedded list is omitted, checks whether posted negatives already cover `amount_refunded` and skips otherwise. No synthetic `${charge.id}:refunded:…` keys. Correct (see RQ-1 for the tradeoff).
+- **SR-M2** `lib/env.ts:89-95` refuses `AUTH_MODE=clerk` at load (build phase exempt); `middleware.ts` is cookie-session only. Correct.
+- **SR-M3** `lib/test-mode.ts:23-30` `allowsDestructiveTestConsole()` requires non-production AND explicit `TEST_MODE`/`IS_TEST_ENV`; `app/api/admin/test-console/route.ts:14` uses it. Correct (see RQ-4 for comment drift).
+- **SR-M4** `app/api/admin/reconciliation/route.ts:42` PATCH uses `permission: "payments.refund"`; GET/POST stay `reports.view`. Correct.
+- **SR-M5** `lib/reports.ts:156-214` `marginReport({ seasonId?, limit? })` filters per-label rows by `package: { seasonId }` and totals by `pkg."seasonId" = ${seasonId}`; reports page passes drill/open season (`app/(admin)/admin/reports/page.tsx:16`). Correct (see RQ-3 for the no-open-season fallback).
+- **SR-M6** `lib/api/admin-handler.ts:36-47` `requireSeason` defaults true, opt-out via `false`; refund, void, settings, recon, season-status, payments migrated. Correct.
 
-Skipped items (SR-M5 process-local rate limits, SR-M7/M8 god-file splits, SR-m1–m6) remain open by design; not re-counted here except where they produce a correctness surface (RQ-4).
+The old `AGGREGATE-RESIDUAL-REVIEW.md` (42 findings) and the prior `residual-quality-arm-03.md` (RQ-1…RQ-6) cited `src/lib/…` paths and a magic-link/PIN flow that do not exist in this tree (`lib/routes/service.ts` here is 476 lines and has no PIN/magic-link code; there is no `app/api/driver/[token]`). They were treated as non-authoritative for this review and not re-counted.
 
 ## Findings
 
-### RQ-1 — major — Refund increment is non-transactional; retry after partial failure double-counts
+### RQ-1 — minor — `handleChargeRefunded` skip-and-wait has no backstop detector
 
-**Location:** `src/lib/payments/webhook.ts:313–329` (`handleChargeRefunded`)
+**Location:** `app/api/webhooks/stripe/route.ts:248-258`; `lib/payments/reconcile.ts` (whole matcher)
 
-`db.payment.update({ data: { refundedCents: { increment: refund.amount } } })`, `db.auditLog.create`, `recalcOrderPaymentStatus`, and `markWebhookEventProcessed(appliedKey, "refund.applied")` are four independent non-transactional writes. The per-refund idempotency key `refund_applied:${refund.id}` is only set to `processed` by the last step.
+When `charge.refunded` arrives without an expanded `refunds.data` list (newer Stripe API versions omit it unless expanded) and posted negatives do not yet cover `amount_refunded`, the handler logs a warning and returns. The main POST then marks the event `processed` (line 104), so this delivery will not retry. Booking is deferred to a later `charge.refund.updated` (handled at lines 98-101).
 
-If the increment commits but any later step throws (audit log write, recalc, or the processed-mark itself), the key stays in `processing`. On Stripe retry, `claimWebhookEvent(appliedKey)` sees `status !== "processed"` and re-claims (lines 76–82), so `handleChargeRefunded` re-runs and the increment fires again — `refundedCents` is double-counted, and `recalcOrderPaymentStatus` then caches an inflated refund total.
+If `charge.refund.updated` never arrives (Stripe event loss, or a refund that is already terminal when `charge.refunded` fires and emits no further status transition), the refund is permanently unbooked — the ledger over-states the order's paid balance. The reconciliation matcher (`runPaymentReconciliation`) only compares sessions against *positive* payments (orphaned / amount-mismatch / ledger-only); it never compares posted refund totals against Stripe's `amount_refunded`, so the under-booking is not flagged. This is the deliberate tradeoff of the SR-M1 fix (avoid the double-booking the synthetic key caused), but the under-booking path has no detector. Most material residual on the money path; still minor because it depends on Stripe event loss, which is rare, and no money is lost (the customer's refund reached Stripe regardless).
 
-The SR-M2 fix correctly prevents cross-event double-increment (a `refund.created` and a `charge.refunded` for the same `re_…` id), but the retry-after-partial-failure window is still open. On a money path this can mis-state order payment status (PAID → PARTIALLY_REFUNDED → fully refunded when only one refund occurred).
-
-**Fix direction (not applied):** wrap the increment + audit log in one `db.$transaction`, and only call `markWebhookEventProcessed` after the transaction commits; or use a conditional increment guarded by the processed-mark.
+**Fix direction (not applied):** in the reconciliation matcher, compare the sum of posted negative rows per intent against the charge's `amount_refunded` (via Stripe API or a stored charge snapshot) and flag shortfalls; or expand `refunds` on `charge.refunded` so the handler books from the embedded list.
 
 ---
 
-### RQ-2 — major — Start/deliver re-verify PIN even when link already unlocked → refresh-induced lockout
+### RQ-2 — minor — `recordRefund` P2002 catch can fall through to an unhandled create
 
-**Location:** `src/lib/routes/service.ts:446–462` (`startRouteViaMagicLink`), `:551–568` (`markStopDelivered`); contrast `src/app/api/driver/[token]/route.ts:48–56` (GET uses `isMagicPinUnlocked`).
+**Location:** `lib/payments/post-payment.ts:71-94`, `:98-107`
 
-The SR-B2 fix made GET release stop PII as soon as `isMagicPinUnlocked(link.id)` is true (a `PIN_OK` event exists). The mutating paths do not consult that flag: when `link.pinRequired` is true they always call `verifyMagicPin({ pin: input.pin ?? "" })`, which re-runs `verifyPinHash` and increments `pinFailCount` on mismatch.
+In the placeholder-claim path, the `update` (line 72) can P2002 when a concurrent `resolveStaffRefund` already set the real `re_…` id on another row. The catch deletes the placeholder, recalcs, and `findUnique`s the winner (line 89). If the winner is `null` (the winning row was deleted between the `update` and the `findUnique`), control falls through to `tx.payment.create` at line 98 under the same `stripeRefundId` — which can P2002 again (the key is still held by a concurrent transaction) and that second P2002 is unhandled (no try/catch around line 98). The whole `$transaction` rolls back and Stripe retries; on retry `findUnique(stripeRefundId)` returns the now-committed row and the call is a no-op. Self-healing, but the error path is rougher than the claim path. Narrow race on a money path.
 
-Concrete broken flow: driver enters PIN → unlocks (stops render) → refreshes the page. After refresh, `pin` state is gone; GET returns the full roster (`unlocked: true`), so the UI shows stops and the Start/Deliver buttons. Clicking "Start route" or "Mark delivered" sends `pin: undefined`; `verifyMagicPin({pin: ""})` fails, increments the fail counter, and after three such clicks locks the driver out for 60s — even though the link is already unlocked. The GET and the POSTs disagree on what "unlocked" means.
-
-**Fix direction (not applied):** in `startRouteViaMagicLink` and `markStopDelivered`, skip the PIN re-check (or accept any pin) when `await isMagicPinUnlocked(link.id)` is already true.
+**Fix direction (not applied):** after the P2002 catch, `return` explicitly when the winner exists, and when the winner is `null` re-`findUnique` once more or `return` rather than falling into the create path.
 
 ---
 
-### RQ-3 — minor — `getStripeMode` silently labels a live key as "test" in production when `STRIPE_MODE` is unset
+### RQ-3 — minor — `marginReport` falls back to cross-season when no OPEN season and no drill
 
-**Location:** `src/lib/stripe/client.ts:8–36`
+**Location:** `lib/reports.ts:156-214`; `app/(admin)/admin/reports/page.tsx:16`
 
-In production with a real `STRIPE_SECRET_KEY` but `STRIPE_MODE` unset, the function falls through to `return mode === "live" ? "live" : "test"` and returns `"test"` (lines 24–29). The fail-closed guard correctly forbids mock and rejects missing/mock-looking keys, but it does not require `STRIPE_MODE` to be explicit. `getStripe()` charges the real key regardless of the label, so charges are not broken, but any branch that keys off `getStripeMode() === "test"` (e.g. test-only logging, future test-mode stubs) will behave as if in test while live money is moving.
+The reports page passes `marginSeasonId = drillSeason?.seasonId ?? performance.find((row) => row.seasonStatus === "OPEN")?.seasonId`. When the user has not drilled and there is no OPEN season, `marginSeasonId` is `undefined`. `marginReport({ seasonId: undefined })` then looks for an OPEN season internally; finding none, `seasonId` stays `undefined` and the query falls back to the cross-season branch — per-label rows are unscoped (`where: { status: "PURCHASED" }`, line 166) while totals are grouped per season. The doc comment (lines 154-155) says per-label rows are "scoped to one season … so the table matches the season-picker mental model," which the fallback contradicts. The SR-M5 fix closed the scoped case; the no-open-season fallback is still cross-season. Edge case (every season CLOSED/ARCHIVED and no drill selected).
 
-**Fix direction (not applied):** in production, require `STRIPE_MODE` to be `"live"` or `"test"` explicitly (throw on empty), mirroring the mock refusal.
-
----
-
-### RQ-4 — minor — Dead stub shipped: `stubAssignLabelToRoute`
-
-**Location:** `src/lib/shipping/labels.ts:340–346`
-
-`export async function stubAssignLabelToRoute(labelId: string)` is defined (P9 hook stub) but has zero callers anywhere under `src/` (grep confirms only the definition site). It is exported from a production module and ships in the bundle as dead code. The "P9 hook stub" naming also signals it was meant to be wired into route assignment and never was.
-
-**Fix direction (not applied):** delete it, or wire it into the route-build/reroute path if the non-voidable-once-on-a-route guarantee is actually required.
+**Fix direction (not applied):** when no season resolves, return empty rows + a single all-seasons total (or render an empty-state message) instead of the cross-season per-label query.
 
 ---
 
-### RQ-5 — minor — Prior-year import remains a stub bypassing the real ORDERS pipeline (SR-m6, deferred)
+### RQ-4 — minor — Stale doc comment in `lib/test-console.ts` after SR-M3 fix
 
-**Location:** `src/lib/ops/prior-year-stub.ts:16–155`; `src/app/api/admin/imports/prior-year-stub/route.ts`
+**Location:** `lib/test-console.ts:6`
 
-`seedImportedPriorYearOrder` directly creates a prior-year `PAID` order with `kind: "prior_year_order_stub"` rather than exercising the real `ImportKind.ORDERS` `classifyOrderRows` / `commitOrderRow` pipeline. The route is correctly dev-gated (`AUTH_MODE=dev` + non-production + `settings.write`, lines 11–14), so it cannot ship to production. The residual concern is evidentiary: the P10/P12 smoke treats this stub as migration proof, so the real historical ORDERS import path remains unexercised end-to-end. This was explicitly deferred in `SELF-FIX-NOTES.md` (SR-m6) and is recorded here only for completeness — no new defect.
+The module doc says "the API route enforces isTestMode" but the route (`app/api/admin/test-console/route.ts:14`) now enforces `allowsDestructiveTestConsole()` (explicit `TEST_MODE`/`IS_TEST_ENV` AND non-production), which is stricter than `isTestMode()` (the latter still infers from missing Stripe). The comment drift was introduced by the SR-M3 fix; `isTestMode()` is now only the banner/mock-awareness signal, not the destructive gate. A reader following the comment would believe missing Stripe alone exposes wipe on staging, which is exactly the bug SR-M3 closed.
+
+**Fix direction (not applied):** update the comment to "the API route enforces `allowsDestructiveTestConsole()` — explicit test-env allowlist AND non-production; `isTestMode()` is banner-only."
 
 ---
 
-### RQ-6 — minor — Gated GET still loads full stop PII from DB before discarding it
+### RQ-5 — minor — `/api/health` still leaks `AUTH_MODE` (SR-m1, deferred)
 
-**Location:** `src/lib/routes/service.ts:370–390` (`loadMagicLinkSession`); `src/app/api/driver/[token]/route.ts:48–56`
+**Location:** `app/api/health/route.ts:10`
 
-`loadMagicLinkSession` always `include`s `route.stops` (line 376). On the PIN-gated GET path the handler then returns only `{ok, linkId, pinRequired:true, unlocked:false}` and throws the stops away. No data leaks (the stops are never serialized), but every locked-GET touches recipient names/addresses in the DB and the ORM hydrates the full stop graph for nothing — wasted query + unnecessary PII hydration on the most-hit driver endpoint.
+Public `GET /api/health` returns `authMode: env.AUTH_MODE`. After the SR-M2 fix the value can only be `dev` (clerk is refused at load), so the leak is bounded to advertising `dev` — still a reconnaissance signal for the cookie-session stack on any reachable host. Deferred as SR-m1 in the self-fix notes; still present.
 
-**Fix direction (not applied):** load link + route without stops for the gated branch, or split `loadMagicLinkSession` into a light variant for the unlock check.
+**Fix direction (not applied):** return `{ status, database, timestamp }` only; keep `authMode` in server logs or a staff-only diagnostic.
+
+---
+
+### RQ-6 — minor — `/api/dev/stripe-checkout` mock pay still triggerable unauthenticated (SR-m2, deferred)
+
+**Location:** `app/api/dev/stripe-checkout/route.ts:31-49`
+
+The route now applies `guardPublicEndpoint` (same-origin + rate limit, line 31) and the `amountCents` override requires a staff session (line 44). But an unauthenticated caller who satisfies same-origin and knows a `stripeSessionId` can still POST without `amountCents` and trigger `checkout.session.completed` through the real webhook, completing an open mock checkout for someone else's order. The customer check (line 47) only fires when `customer` is non-null; an unauthenticated caller has no customer context and passes through. Bounded to mock mode (line 27 refuses when Stripe is configured), but still an unauthenticated money-path trigger on the mock harness. Deferred as SR-m2; still present.
+
+**Fix direction (not applied):** require a customer session matching `session.order.customerId`, or a staff session, for *all* mock pays — not only amount overrides.
+
+---
+
+### RQ-7 — minor — CSV export `rowCount` off-by-one (SR-m3, deferred)
+
+**Location:** `app/api/admin/exports/[dataset]/route.ts:55`
+
+`rowCount += 1` fires for every yielded CSV line, including the header, so audit `detail.rows` overstates data rows by 1 for every export. Deferred as SR-m3; still present.
+
+**Fix direction (not applied):** count only data lines, or store `{ header: 1, dataRows: n }` and subtract 1 in the audit detail.
+
+---
+
+### RQ-8 — minor — Mojibake in `lib/public-guard.ts` comments and 429 copy (SR-m5, deferred)
+
+**Location:** `lib/public-guard.ts:6`, `:36`
+
+Line 6 comment and the 429 body (`Too many requests â€" try again in a minute`) contain `â€"` where an em dash belongs — UTF-8 mis-decoded as Latin-1. The 429 string is user-facing. Deferred as SR-m5; still present.
+
+**Fix direction (not applied):** re-save the file as UTF-8 (em dash / minus) and fix the 429 message body.
 
 ## Notes
 
-- Reviewed against the post-self-fix tree (HEAD `15dcf3f`, "arm-03 P12 gated"). `npm run typecheck` reported pass in `SELF-FIX-NOTES.md`; not re-run here (findings-only scope).
-- God-file sizes (SR-M7/M8, deferred) re-measured for context, not re-counted as findings: `routes/service.ts` 1028 lines (grew from scrypt + unlock helper), `ops/import.ts` 716, `ops/repeat.ts` 710.
-- Admin page guards (SR-M1) re-verified: every page under `src/app/(admin)/admin/**` calls `requireAdminPage` or `requirePermission`; the `(admin)/layout.tsx` fallback that still renders `{children}` for non-staff is now harmless because every child page throws `AuthError(403)` and renders `<Forbidden>`.
-- No new blockers found. The two majors (RQ-1, RQ-2) are both in code touched by the self-fix pass and represent incomplete closure of the underlying issues (retry safety for refunds; consistency of the "unlocked" concept across GET vs POST).
+- Reviewed against the post-self-fix tree (HEAD `d27690e`). `npm run ci` (lint, typecheck, migration:guard, 79 tests) reported pass in `SELF-FIX-NOTES.md`; not re-run here (findings-only scope).
+- `lib/routes/service.ts` measured at 476 lines (borderline, under the 500-line split trigger); `scripts/smoke-p12.ts` at 751 lines. Both are deferred structural minors (SR-m8/SR-m9), not re-counted here — no correctness surface.
+- `adminHandler` casts `season as OpenSeason` even when `requireSeason: false` leaves it `null` (`lib/api/admin-handler.ts:76`); the comment warns `requireSeason:false` handlers must not read `season`, but the type permits it. No current `requireSeason:false` handler reads `season`, so this is a type-safety hedge, not a live defect — not counted.
+- No new blockers or majors found. The self-fix closed the blocker and all six majors it claimed; the residuals are one money-path edge case with no detector (RQ-1), one narrow race in the same fix (RQ-2), one scoped-report fallback (RQ-3), one comment drift introduced by the fix (RQ-4), and four deferred minors reproduced from the self-review (RQ-5…RQ-8).

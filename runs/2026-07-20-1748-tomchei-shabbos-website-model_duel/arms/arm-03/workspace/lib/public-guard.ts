@@ -1,4 +1,4 @@
-import { env } from "@/lib/env";
+﻿import { env } from "@/lib/env";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 // Public endpoint guard (R-122): state-changing routes reachable without a
@@ -37,3 +37,4 @@ export function guardPublicEndpoint(
   }
   return null;
 }
+

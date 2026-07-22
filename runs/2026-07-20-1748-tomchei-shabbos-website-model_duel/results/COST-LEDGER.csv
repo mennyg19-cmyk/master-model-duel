@@ -339,3 +339,12 @@
 2026-07-22T01:14:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,review_clean_code,glm-5.2-high,195a403a-1a79-4240-ae86-3d757077d74b,,,,,,,,8 findings 2 high; usage_missing
 2026-07-22T01:15:40Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,review_aggregate,glm-5.2-high,0ac07e8e-acdf-4298-8aa5-aebbfa6e31e7,,,,,,,,22 deduped 0 blockers 7 majors; usage_missing
 2026-07-22T01:23:14Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-03,P12,fix,cursor-grok-4.5-high,9c1365db-1315-45d3-95b9-9ed20156acfa,,,,,,,,M1-M3 fixed smoke 5/5; usage_missing
+2026-07-22T01:28:16Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,,self_review,cursor-grok-4.5-high,3075fa9c-856f-464c-bdfc-8c1503a66edc,,,,,,,,1B 6M 9m; usage_missing
+2026-07-22T01:39:42Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,,self_fix,cursor-grok-4.5-high,98449efb-482f-4882-ae21-2f711bcc963c,,,,,,,,SR-B1 SR-M1-M6 fixed ci 79; usage_missing
+2026-07-22T01:43:56Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,,residual_security,glm-5.2-high,5345c19f-0398-4e10-8b9a-f1dda23c3dab,,,,,,,,8 findings 1 high; usage_missing
+2026-07-22T01:43:56Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,,residual_quality,glm-5.2-high,3ab85e9c-beaf-4cf0-b152-7294bac0ebf6,,,,,,,,8 minor 0 major; usage_missing
+2026-07-22T01:43:56Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,,residual_rules,glm-5.2-high,09b70141-6a19-4136-abb9-9f685528902d,,,,,,,,9 minor residual; usage_missing
+2026-07-22T01:43:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,,residual_clean_code,glm-5.2-high,31bf5604-2011-4e3e-ba80-5dfff6682759,,,,,,,,3 major 5 minor; usage_missing
+2026-07-22T01:49:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,6,arm-03,,detect,cursor-grok-4.5-high,2a87b30a-2e82-41a4-9ca9-e21cd519d794,,,,,,,,4/5 bugs found; usage_missing
+2026-07-22T01:59:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,6,arm-03,,vague_fix,cursor-grok-4.5-high,903d309c-809f-4681-8611-c77814aab9d0,,,,,,,,5/5 symptoms ci 78; usage_missing
+2026-07-22T01:59:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,,residual_aggregate,glm-5.2-high,8007db92-f8d5-4149-a666-0b82333850e7,,,,,,,,Test5 score 11/15; usage_missing

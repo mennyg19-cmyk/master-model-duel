@@ -117,13 +117,7 @@ export function getPaymentGateway(): PaymentGateway {
     if (!env.STRIPE_SECRET_KEY && process.env.NODE_ENV === "production") {
       throw new Error("The mock payment gateway is dev-only — set STRIPE_SECRET_KEY in production");
     }
-    // STRIPE_MODE=mock (and the local placeholder key) keep the harness on the
-    // mock gateway even when a key string is present in .env.
-    const useMock =
-      process.env.STRIPE_MODE === "mock" ||
-      !env.STRIPE_SECRET_KEY ||
-      env.STRIPE_SECRET_KEY === "sk_test_mock";
-    gateway = useMock ? mockGateway() : realGateway(env.STRIPE_SECRET_KEY!);
+    gateway = env.STRIPE_SECRET_KEY ? realGateway(env.STRIPE_SECRET_KEY) : mockGateway();
   }
   return gateway;
 }

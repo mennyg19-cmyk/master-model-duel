@@ -19,7 +19,7 @@ type Summary = { findings: number; newFlags: number; openFlags: number; byKind: 
 
 /** Stripe reconciliation run button + open-flag queue (R-093). */
 export function ReconPanel({ flags }: { flags: Flag[] }) {
-  const { message, busy, act } = useHubAct();
+  const { message, act } = useHubAct();
   const [summary, setSummary] = useState<Summary | null>(null);
 
   return (
@@ -27,7 +27,6 @@ export function ReconPanel({ flags }: { flags: Flag[] }) {
       <div className="flex items-center gap-3 mb-3">
         <Button
           data-testid="recon-run"
-          disabled={busy}
           onClick={() =>
             act(async () => {
               const result = await apiFetch<{ summary: Summary }>("/api/admin/reconciliation", { method: "POST", body: {} });
@@ -36,7 +35,7 @@ export function ReconPanel({ flags }: { flags: Flag[] }) {
             }, "Reconciliation finished.")
           }
         >
-          {busy ? "Running…" : "Run reconciliation now"}
+          Run reconciliation now
         </Button>
         {summary && (
           <span className="text-sm text-muted" data-testid="recon-summary">
@@ -70,7 +69,6 @@ export function ReconPanel({ flags }: { flags: Flag[] }) {
                 {flag.status === "open" && (
                   <Button
                     variant="secondary"
-                    disabled={busy}
                     onClick={() =>
                       act(
                         () => apiFetch("/api/admin/reconciliation", { method: "PATCH", body: { flagId: flag.id } }),
