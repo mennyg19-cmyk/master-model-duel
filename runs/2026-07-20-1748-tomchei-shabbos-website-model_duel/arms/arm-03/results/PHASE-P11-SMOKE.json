@@ -20,11 +20,12 @@
       "id": "S2",
       "check": "Campaign flow + idempotent rerun",
       "pass": true,
-      "campaignId": "cmrv92kne00n2qx3od8w53h7b",
-      "created": 17,
-      "skippedRerun": 17,
+      "campaignId": "cmrvddwkf0008qxfc5g90hu6g",
+      "created": 5,
+      "skippedRerun": 5,
       "rerunCreated": 0,
-      "deliveries": 17
+      "deliveries": 5,
+      "sweeps": 1
     },
     {
       "id": "S3",
@@ -36,18 +37,10 @@
         "PENDING"
       ],
       "failSweep": {
-        "workerId": "smoke-p11-fail",
-        "claimed": 3,
-        "sent": 0,
-        "failed": 3,
-        "captured": 0
+        "retried": 3
       },
       "okSweep": {
-        "workerId": "smoke-p11-ok",
-        "claimed": 3,
-        "sent": 0,
-        "failed": 0,
-        "captured": 3
+        "sent": 3
       },
       "outboxCount": 3,
       "uniqueKeys": 3,
@@ -63,9 +56,11 @@
         401,
         401,
         401,
+        401,
         401
       ],
       "wrong": [
+        401,
         401,
         401,
         401,
@@ -77,28 +72,20 @@
         200,
         200,
         200,
+        200,
         200
       ],
       "overlap": {
         "o1": {
-          "ok": true,
-          "skipped": false,
-          "workerId": "cron_cmrv92mmr00txqx3oln2s0lki_1ccf54",
-          "claimed": 1,
-          "sent": 0,
-          "failed": 0,
-          "captured": 1,
-          "runId": "cmrv92mmr00txqx3oln2s0lki"
+          "held": true
         },
         "o2": {
-          "ok": true,
           "skipped": true,
-          "reason": "overlap",
-          "token": "p11-overlap-1784674423802"
+          "reason": "overlap"
         }
       },
       "raceClaimed": 1,
-      "raceFinal": "CAPTURED"
+      "raceFinal": "SENT"
     },
     {
       "id": "S5",
@@ -107,13 +94,17 @@
       "purgeResult": {
         "scanned": 2,
         "deleted": 1,
-        "skippedActive": 1
+        "skippedActive": 1,
+        "retentionDays": 90
       },
       "keepLog": true,
       "purgedGone": true,
       "outboxKept": true,
       "testCaptured": true,
-      "smsCaptured": true
+      "smsCaptured": true,
+      "emailMode": "mock",
+      "smsMode": "capture",
+      "smsSweep": "captured"
     }
   ]
 }

@@ -1,116 +1,65 @@
-# P11 Rules Review — arm-03
+# P11 Rules Review — arm-03 (blind)
 
-**Phase:** P11 — Email & notification platform
-**Arm:** arm-03
-**Rules graded:** ponytail, clean-code, workflow, vocabulary, codegraph
-**Scope:** Findings only. No fixes.
-**Diff reviewed (P11 changes):** `.env.example`, `package.json`, `vercel.json`, `src/app/api/admin/email/route.ts`, `src/app/api/cron/{payment-reminder,pickup-expiry,season-auto-flip,outbox-sweep,purge-email-log}/route.ts`, `src/app/(admin)/admin/email/page.tsx`, `src/app/(storefront)/newsletter/preferences/page.tsx`, `src/components/admin/{shell,settings-hub,email-hub}.tsx`, `src/lib/{checkout/session,payments/webhook,email/purge,resend/client}.ts`, `scripts/smoke-p11.mjs` — plus the supporting P11 libs touched by the diff (`src/lib/email/{order-emails,campaigns,templates}.ts`, `src/lib/notify/{outbox,sms}.ts`, `src/lib/cron/{auth,runs}.ts`, `src/lib/storefront/newsletter.ts`).
-**Smoke:** `arms/arm-03/results/PHASE-P11-SMOKE.md` — 5/5 PASS. Findings are rule-adherence, not functional defects (smoke is green).
+Reviewer: glm-5.2-high (external)
+Phase: P11 — Email & notification platform
+Workspace: `arms/arm-03/workspace`
+EXPECTED: `shared/phases/PHASE-P11-EXPECTED.md`
+Scope: protocol/rules compliance — ponytail ladder, clean-code discipline, workflow gates, inventory ID coverage (R-082..R-090, R-163, R-171, R-172, R-178, R-181, R-185, R-087, G-021).
 
-## Summary
+Method: read `lib/email/*`, `lib/sms/provider.ts`, `lib/notifications.ts`, `lib/newsletter-token.ts`, `lib/cron.ts`, `lib/settings.ts`, `lib/env.ts`, `lib/orders/finalize.ts`, `lib/payments/post-payment.ts`, `lib/bulk-delivery.ts`, `lib/pickup.ts`, `lib/routes/service.ts`, all `app/api/cron/*`, `app/api/newsletter/*`, `app/api/admin/email/*`, `app/(admin)/admin/email/page.tsx`, `components/admin/email-hub.tsx`, `components/admin/settings/email-tab.tsx`, `components/storefront/preferences-form.tsx`, `prisma/schema.prisma` (Notification/NotificationAttempt/Campaign/EmailList/EmailTemplate/NewsletterSubscriber/CronRunLog), `vercel.json`, `tests/email-platform.test.ts`. Codegraph index re-synced (was stale on `src/` layout). Findings only — no fixes applied.
 
-| Severity | Count |
-|---|---|
-| Major | 4 |
-| Minor | 7 |
-| Advisory | 3 |
-| **Total** | **14** |
+## Inventory ID coverage
+
+| ID | Covered | Evidence |
+|---|---|---|
+| R-082 (email hub UI) | ✓ | `app/(admin)/admin/email/page.tsx`, `components/admin/email/email-hub.tsx` — campaigns/lists/subscribers/templates tabs behind `email.manage` |
+| R-083 (campaign builder + send) | ✓ | `lib/email/campaigns.ts`, `app/api/admin/email/campaigns/*` |
+| R-084 (named lists) | ✓ | `EmailList`/`EmailListMember` models, `app/api/admin/email/lists/*` |
+| R-085 (idempotent rerun) | ✓ | `dedupeKey: campaign|${id}|${email}` in `sendCampaign` |
+| R-086 (per-key template overrides) | ✓ | `lib/email/templates.ts` + `EmailTemplate` table |
+| R-087 (transactional order emails) | ✓ | `lib/email/transactional.ts` — confirmation/payment_link/refund_notice |
+| R-088 (outbox + retry sweeper) | ✓ | `lib/email/dispatch.ts`, `app/api/cron/notification-sweeper` |
+| R-089 (preferences + signed tokens) | ✓ | `lib/newsletter-token.ts`, `app/api/newsletter/preferences`, `app/api/newsletter/unsubscribe` |
+| R-090 (email test sender in settings) | ✓ | `app/api/admin/email/test`, `components/admin/settings/email-tab.tsx` |
+| R-163 (CronRunLog per run) | ✓ | `lib/cron.ts` `runCronJob` |
+| R-171 (Resend isolated in SDK module) | ✓ | `lib/email/provider.ts` — Resend never leaks past the file |
+| R-172 (email-log purge cron) | ✓ | `app/api/cron/email-log-purge` |
+| R-178 (test mode capture) | ✓ | `EMAIL_TEST_MODE` → capture provider in both email + sms |
+| R-181 (conditional-UPDATE claiming) | ✓ | `sweepNotificationOutbox` claim on `(id + claimable state)` |
+| R-185 (Vercel cron GET) | ✓ | every cron route exports `POST as GET` |
+| G-021 (SMS dispatch, channel reuse) | ✓ | `lib/sms/provider.ts`, `notifyCustomer` wired in bulk-delivery/pickup/routes |
+
+All targeted IDs have a concrete implementation. Findings below are quality/security issues found while reading that implementation, not missing IDs.
 
 ## Findings
 
-### Major
+| ID | Severity | Location | Claim | Suggested fix |
+|---|---|---|---|---|
+| F-01 | Medium | `lib/notifications.ts:62-77` `notifyCustomer` | SMS body reuses the email body verbatim. A transactional/campaign email body (multi-paragraph, with URLs and the preferences link) is sent as an SMS — real Twilio would split into many segments or fail length checks; the mock hides this. G-021 says "SMS dispatch module wired for P9 channel reuse" — reuse of the channel, not the email copy. | Give SMS its own short body (or truncate to ≤160 chars with no URL) at each `notifyCustomer` call site, or accept a separate `smsBody` field on the message. |
+| F-02 | Medium | `app/api/admin/email/campaigns/[id]/route.ts:21` (GET preview) | `campaignAudience(campaign.listId)` runs `findMany` and loads every subscriber row (`id, email, name`) into memory just to return `audience.length`. For a list of thousands this is a full table scan + materialization on every preview click. | Use `db.newsletterSubscriber.count({ where: ... })` for the preview's `audienceCount`; keep `campaignAudience` for the send path only. |
+| F-03 | Medium | `app/api/newsletter/preferences/route.ts:22-28` | `db.newsletterSubscriber.update(...).catch(() => null)` swallows every update failure, not just P2025 not-found. A DB connection error, unique-constraint violation, or any Prisma error is reported to the subscriber as "No subscription found for this address" (404) — real failures are hidden and mis-categorized. | Catch only `PrismaClientKnownRequestError` with `code === "P2025"`; rethrow everything else so the 500 path runs. |
+| F-04 | Medium | `app/api/newsletter/unsubscribe/route.ts:18-23` | Same `.catch(() => null)` pattern with a comment claiming idempotency. A real DB failure is silently reported as `ok: true` — the subscriber thinks they're unsubscribed but the row never changed, and they keep receiving mail. This is a data-integrity silent failure on a trust-boundary action (CAN-SPAM). | Catch only P2025; let other errors throw → 500. Idempotency only justifies swallowing "row already gone", not "DB down". |
+| F-05 | Low-Med | `lib/settings.ts:49-50` | `email.from_address` and `email.reply_to` are `z.string()` with no email-format validation. A manager can save "garbage" or an empty string as the from address and every outgoing email will fail at the provider (or be rejected by Resend), with no startup guard. The branding footer is similarly unbounded. | Use `z.string().email()` (or at minimum `.min(1)`) for the two address settings. |
+| F-06 | Low-Med | `lib/email/campaigns.ts:62-73` `sendCampaign` | Per-recipient loop calls `captureNotification` (one DB insert) per subscriber, sequentially. For a large audience this is N round-trips with no batching. STATUS notes scale is P12, but the loop also holds nothing transactional — a crash mid-send leaves a partially queued campaign marked `SENT`. | Batch `db.notification.createMany` in chunks; or at least wrap the audience loop so a crash mid-send doesn't mark the campaign SENT. |
+| F-07 | Low-Med | `app/api/admin/email/campaigns/[id]/test-send/route.ts` and `app/api/admin/email/test/route.ts` | Test-send creates a row with `status: "sending"` and calls `dispatchOne` directly. On provider failure `dispatchOne` flips the row to `pending` with backoff — so a failed test email stays in the outbox and the sweeper retries it for up to 5 attempts / ~80 minutes. A "test" email silently becoming a recurring retry is surprising for staff and pollutes the outbox counts. | Either mark test-send rows with a `kind` the sweeper skips on exhaustion, or set `MAX_ATTEMPTS=1` for test rows, or delete the row on failure. |
+| F-08 | Low | `lib/sms/provider.ts:41-53` `mockSmsProvider` | Only handles `[failonce]`; no `[failalways]` hook. The email mock has both `+failonce` and `+failalways`. The SMS path can't exercise the exhausted-retry (5-attempt → `failed`) flow in mock mode — asymmetry with email means S3-style failure-trail coverage is email-only. | Add a `[failalways]` branch mirroring the email mock. |
+| F-09 | Low | `lib/email/provider.ts:71-82` and `lib/sms/provider.ts:55-66` | Provider is module-memoized (`let provider: EmailProvider | null = null`). Mode is chosen once per process. The smoke has to restart the dev server to toggle `EMAIL_TEST_MODE` (documented in PHASE-P11-SMOKE.md). Any future in-process mode switch (e.g. a runtime "capture now" admin toggle) is impossible without a process restart. | Acceptable for now; record as a known constraint. If a runtime toggle is ever needed, expose a `resetEmailProvider()` test hook. |
+| F-10 | Low | `app/api/admin/email/subscribers/route.ts:13` | `take: 200`, no cursor/offset. Subscribers beyond the newest 200 are invisible in the hub. Search by email helps, but a manager browsing "everyone" sees a truncated list with no indication it's truncated. | Add `count` total to the response and a "showing newest 200" note, or add offset pagination. |
+| F-11 | Low | `lib/email/templates.ts:11-45` `TEMPLATE_DEFAULTS` | Defaults are kept WIN1252-safe (no arrows) per a comment, because the embedded dev Postgres client encoding is WIN1252. But the template override PATCH (`app/api/admin/email/templates/route.ts`) stores manager-supplied text with no charset check — a manager who pastes a Unicode arrow into an override breaks the dev DB write (and the comment doesn't warn them). Production UTF-8 Postgres is fine; dev is fragile. | Either fix the dev client encoding to UTF-8 (root cause), or validate override text is WIN1252-safe in dev mode, or at least note the constraint in the templates tab UI. |
+| F-12 | Low | `lib/payments/post-payment.ts:144-159` `resolveStaffRefund` | `enqueueRefundEmail` is called outside any transaction with the `db.payment.update`. The dedupeKey (`refund|${stripeRefundId}`) makes a retry safe, but if the enqueue throws after the payment row is updated, the refund is recorded with no email queued and no automatic retry path — the customer gets a refund with no notice. | Wrap both writes in one transaction, or enqueue with the sweeper-retry semantics (capture into outbox, let sweeper deliver). |
+| F-13 | Low | `lib/email/dispatch.ts:103` | `backoffMinutes` is computed even when `exhausted` is true (the value is then unused because the `failed` branch doesn't set `nextAttemptAt`). Dead computation — harmless but reads as "we schedule a backoff we never use." | Move the `backoffMinutes` line into the non-exhausted branch only. |
+| F-14 | Low | `components/admin/settings/email-tab.tsx:89` | `Number(retention)` of empty/non-numeric input is `NaN`/`0`, sent to the settings PATCH which rejects it (schema `min(1)`). The user gets a generic error; the UI does no pre-validation and the input has no `type="number"` or `min`. | Use `<Input type="number" min={1}>` and disable Save when the parsed value isn't a positive int. |
+| F-15 | Low | `app/api/admin/email/lists` | No DELETE route for lists and no DELETE for subscribers. Lists and subscribers can be created/added but never removed through the API. A misspelled list name lives forever (only the unique-name 409 stops duplicates). Out of scope for P11 EXPECTED but a gap vs. the "hub" framing in R-082. | Add `DELETE /api/admin/email/lists/[id]` (cascade members) and a subscriber delete, or document that removal is DB-only. |
+| F-16 | Low | `tests/email-platform.test.ts` | Only 3 tests cover template rendering + `formatCents`. No unit test for the dispatch claim/backoff state machine, the dedupe-key collision path, or the token sign/verify tamper/expired branches (those run only in the smoke script `.scratch/p11-smoke.ts`, which isn't part of `npm run ci`). CI regression coverage for P11 core logic is thin. | Add unit tests for `verifyNewsletterToken` (tamper/expired/malformed), `captureNotification` P2002 dedupe, and `dispatchOne` attempt→backoff transitions so `npm run ci` catches regressions without the smoke harness. |
 
-#### M1 — Cron overlap protection is test-only, not real in production
-**Rule:** clean-code (anti-hallucination / verify-before-claim), workflow (security basics / least privilege)
-**Location:** `src/lib/cron/runs.ts:7-23`, all five `src/app/api/cron/*/route.ts`
-`CronJobRun.claimedToken` is `@unique`, and `beginCronRun` auto-generates `${jobKey}:${randomBytes(12).hex}` when the caller passes no `?token=`. Vercel Cron invokes these routes with no query param, so every real cron run gets a fresh random token that will never collide on the unique index. Two overlapping Vercel Cron invocations both insert successfully and both execute — the overlap guard is absent in production. The S4 "overlap" check passes only because the smoke explicitly reuses `overlapToken` twice (`scripts/smoke-p11.mjs:324-326`). The comment "overlapping calls with same token collide on unique" describes the test, not the deployed behavior. Either add `@@unique([jobKey])` with a sentinel/active-row scheme, or document that overlap is delegated to Vercel Cron's own dedupe.
+## Severity counts
 
-#### M2 — Cron runs never finalized on failure
-**Rule:** clean-code (error handling — no swallowed errors; error messages say what went wrong), workflow (gate discipline / observability)
-**Location:** `src/app/api/cron/{outbox-sweep,purge-email-log,pickup-expiry,payment-reminder,season-auto-flip}/route.ts`
-Every cron route calls `finishCronRun(claim.run.id, …)` only on the success path between `beginCronRun` and the return. If the inner work throws, the `catch (error) { return apiErrorResponse(error); }` branch returns without finalizing the `CronJobRun` row, leaving `finishedAt=null, ok=null` and writing no failure audit. Over time failures accumulate dangling rows with no record of why. Finalize in a `finally` (with `ok:false` + error meta) or add an explicit `finishCronRun(..., { ok:false, meta:{error} })` in each catch.
+- Medium: 4 (F-01, F-02, F-03, F-04)
+- Low-Med: 2 (F-05, F-06, F-07 — counted as Low-Med)
+- Low: 10 (F-08..F-16, excluding the Low-Med trio)
 
-#### M3 — Dead code: `writeCronAudit` (0 call sites)
-**Rule:** ponytail (YAGNI / deletion over addition), clean-code (Rule of 2, dead code)
-**Location:** `src/lib/cron/runs.ts:39-49`
-`writeCronAudit` is exported but never imported anywhere in `src/` or `scripts/`. Cron routes and `finishCronRun` call `writeAudit` directly. Unused abstraction shipped "for later." Delete it.
+Using a 3-tier bucket (Medium / Low-Med / Low): **Medium 4 · Low-Med 3 · Low 9 → 16 findings.**
 
-#### M4 — Dead code: `mintUnsubscribeToken` (0 internal call sites)
-**Rule:** ponytail (YAGNI / Rule of 2), clean-code (dead code)
-**Location:** `src/lib/storefront/newsletter.ts:98-100`
-`mintUnsubscribeToken` is exported but has no caller in `src/` or `scripts/`. No send path (`email/campaigns.ts`, `email/order-emails.ts`) mints unsubscribe tokens, so the function is unwired. The EXPECTED S1 unsubscribe flow needs a token source, but the smoke mints tokens itself (`smoke-p11.mjs:27-31`) using the lower-level `signUnsubscribeToken` directly. Either wire `mintUnsubscribeToken` into the real send paths (so real emails carry unsubscribe links) or drop it. Per Rule of 2 it has no real call site right now.
+Using a strict 4-tier (High/Medium/Low-Med/Low): **High 0 · Medium 4 · Low-Med 3 · Low 9.**
 
-### Minor
-
-#### m1 — Banned standalone name `result` (recurring)
-**Rule:** clean-code (naming — `result` is on the banned list)
-**Locations:**
-- `src/lib/notify/outbox.ts:292, 302, 312` — `const result = await resendSend(...)` / `smsSend(...)` / `deliverClaimed(...)`
-- `src/lib/email/order-emails.ts:134` — `const result = await enqueueNotification(...)`
-- `src/lib/email/campaigns.ts:80` — `const result = await resendSend(...)`
-- `src/lib/email/purge.ts:91` — `const result = await resendSend(...)`
-- `src/components/admin/email-hub.tsx` — `const result = await post(...)` (4 occurrences)
-- `src/app/api/newsletter/preferences/route.ts:21` — `let result;`
-
-Rename to what the value represents: `sendResult`, `enqueueResult`, `postResult`, etc.
-
-#### m2 — Magic string `"CAPTURED"` instead of `NotifyStatus.CAPTURED`
-**Rule:** clean-code (one pattern per concern / magic values)
-**Location:** `src/lib/email/campaigns.ts:165` — `status: outbox.row.status === "CAPTURED" ? "captured" : "queued"`
-The rest of the outbox layer compares against the `NotifyStatus.CAPTURED` enum (e.g. `outbox.ts:314, 321, 396`). This one site string-compares the enum value to a literal. Use `NotifyStatus.CAPTURED` for parity.
-
-#### m3 — Inconsistent error handling in newsletter preferences route
-**Rule:** clean-code (one error-handling approach per project), workflow (consistency)
-**Location:** `src/app/api/newsletter/preferences/route.ts:24-27`
-The catch hand-rolls `NextResponse.json({ error: message }, { status: 503 })`. Every other P11 route (`api/admin/email`, `api/cron/outbox-sweep`, `api/cron/purge-email-log`, the newsletter siblings) uses `apiErrorResponse(error)`. This route is the outlier. Use the shared helper.
-
-#### m4 — Unsafe type escape hatch `as never`
-**Rule:** clean-code (anti-AI-tics: redundant/unsafe type assertions)
-**Location:** `src/app/api/admin/email/route.ts:183` — `branding: body.branding as never`
-`as never` casts `unknown` to `never` to satisfy `Prisma.InputJsonValue`, defeating the type check rather than narrowing. Shape `branding` in the zod schema (e.g. `z.record(z.unknown())`) and drop the `as never`.
-
-#### m5 — Duplicate import from the same module
-**Rule:** clean-code (inconsistent patterns)
-**Location:** `src/lib/email/purge.ts:1` and `src/lib/email/purge.ts:10`
-Line 1 imports `{ AuditAction, NotifyStatus }` from `@prisma/client`; line 10 imports `{ NotifyChannel }` from the same module. Merge into one statement.
-
-#### m6 — `unknown[]` state + repeated inline casts in EmailHub
-**Rule:** clean-code (type/schema drift, copy-paste with minor variations)
-**Location:** `src/components/admin/email-hub.tsx:11-15` (state), and inline casts at `:189, :211, :243, :256, :272`
-Five lists are held as `unknown[]` and re-cast to ad-hoc shapes at every render site (`(campaigns as { id: string; name: string; status: string; subject: string }[])`, etc.). Define one type per list (or derive from the API response) and use it in both `useState` and JSX. Repeated casts are a copy-paste smell and lose type safety between fetch and render.
-
-#### m7 — `mock` mode reports `captured: true`
-**Rule:** clean-code (anti-AI-tics — every line must have a reason; consistency)
-**Location:** `src/lib/resend/client.ts:58-64`
-The `mock` branch returns `captured: true` with a `mock_` provider id. `capture` means "stored locally instead of sent"; `mock` means "fake-sent without storing". Conflating them makes audit metadata (`meta.captured`) lie about what happened. The S5 smoke asserts `testSendResult.value.captured === true` in mock mode, so this is load-bearing for the test — but the semantics are wrong. Either drop `captured` from the mock branch (and adjust S5 to accept `providerId` starting with `mock_`), or rename the field to reflect "did not hit a live provider."
-
-### Advisory
-
-#### a1 — Dead default parameter in `load`
-**Rule:** clean-code (dead code)
-**Location:** `src/components/admin/email-hub.tsx:24` — `useCallback(async (nextTab: Tab = tab) => …, [tab])`
-Every caller passes `nextTab` explicitly (`load(tab)` in the effect, `load("campaigns")`, `load("lists")`, etc.), so the `= tab` default is dead. Remove the default or remove the explicit args.
-
-#### a2 — `dangerouslySetInnerHTML` on admin campaign preview
-**Rule:** workflow (security basics)
-**Location:** `src/components/admin/email-hub.tsx:185` — `<div dangerouslySetInnerHTML={{ __html: preview.htmlBody }} />`
-Admin-only and `settings.write`-gated, so low risk, but a `settings.write` user can inject script into their own admin session. Consider sanitizing or rendering the preview in a sandboxed iframe.
-
-#### a3 — Magic default test recipient hardcoded twice
-**Rule:** clean-code (magic values)
-**Location:** `src/components/admin/settings-hub.tsx:19`, `src/components/admin/email-hub.tsx:19` — `useState("manager@tomchei.local")`
-The same default test recipient is hardcoded in two components. Pull to a shared constant or a `EMAIL_TEST_TO` env var with `.env.example` placeholder.
-
-## Not findings (verified clean)
-
-- **Ponytail ladder:** Resend client is fetch-based, no SDK package added (`src/lib/resend/client.ts:43` comment + impl). SMS uses native fetch to Twilio, no Twilio SDK. `node:crypto` for tokens/ids. Correct ladder discipline — no new packages in `package.json` for P11 (only a `smoke:p11` script entry).
-- **God files:** Largest P11 lib is `notify/outbox.ts` at 401 lines, cohesive (outbox lifecycle only). Under the 500-line / mixed-concerns threshold. `email-hub.tsx` is 288 lines, single concern.
-- **Comment quality:** Comments cite rule IDs (R-088, R-171, R-090, R-172, R-087, R-083, R-181, R-182, R-163, R-178, G-021, H3, S5) and state non-obvious intent (e.g. `// capture + mock both avoid live providers (R-090 / S5).`). No narration or change-explanation comments.
-- **Security basics:** `CRON_SECRET` and `NEWSLETTER_HMAC_SECRET` are fail-closed (throw if missing). `timingSafeEqual` used for both bearer and HMAC comparison. `.env*` is gitignored (`.gitignore:34`), `.env.example` tracked with placeholders for every new P11 secret (`EMAIL_MODE`, `EMAIL_FROM`, `RESEND_API_KEY`, `SMS_MODE`, `TWILIO_*`). Subscribe never returns the unsubscribe token to the HTTP caller (H3).
-- **Idempotency:** Outbox + campaign deliveries enforce unique `idempotencyKey` with P2002 handling. Smoke S2 confirms rerun produces 0 duplicates; S3 confirms transactional rerun is a no-op.
-- **Dynamic import pattern:** `await import("@/lib/email/order-emails")` in `webhook.ts`, `checkout/session.ts`, `payments/offline.ts`, `ops/refunds.ts` is an established codebase-wide pattern (4 call sites), not a P11-introduced inconsistency — presumed cycle-break. Not a finding.
-- **Codegraph:** Index healthy (`arms/arm-03/workspace/.codegraph/codegraph.db` exists). Contestant-side tool usage is not assertable from output; the index exists and is current.
-
-## Out of scope
-
-Functional/UX review, plan adherence, and smoke re-runs are separate review tracks. This pass grades catalog-rule adherence only.
+No High-severity findings. No rule ID is missing. The phase's smoke evidence (34/34 in PHASE-P11-SMOKE.md) is consistent with what the code does; the findings above are quality/robustness gaps the smoke doesn't exercise.

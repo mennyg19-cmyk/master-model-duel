@@ -46,15 +46,16 @@ const SETTING_SCHEMAS = {
     }),
   // Days a ready pickup may wait before the expiry cron gives up on it (G-026).
   "pickup.expiry_days": z.number().int().min(1).default(7),
-  "email.from_address": z.string().default("purim@tomcheishabbos.example.org"),
-  "email.reply_to": z.string().default("office@tomcheishabbos.example.org"),
+  "email.from_address": z.string().email().default("purim@tomcheishabbos.example.org"),
+  "email.reply_to": z.string().email().default("office@tomcheishabbos.example.org"),
   // Branding footer appended to every outgoing email at dispatch (P11).
   "email.branding_footer": z
     .string()
     .default("Tomchei Shabbos Mishloach Manos — Send Purim joy. Support families in need."),
   // Days a delivered/captured/failed email log stays before the purge cron
   // removes it (R-172). Pending/sending outbox rows are never purged.
-  "email.log_retention_days": z.number().int().min(1).default(90),
+  // Minimum 7 days — 0/negative would wipe the audit trail (M-02).
+  "email.log_retention_days": z.number().int().min(7).default(90),
 } as const;
 
 export type SettingKey = keyof typeof SETTING_SCHEMAS;

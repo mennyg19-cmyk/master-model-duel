@@ -6,6 +6,8 @@ import { env } from "@/lib/env";
 // around every run. With no CRON_SECRET configured the endpoints are disabled
 // (503) — a scheduler can never run them unauthenticated by accident.
 
+const STALE_RUNNING_MS = 10 * 60 * 1000;
+
 export function requireCronAuth(request: Request): Response | null {
   if (!env.CRON_SECRET) {
     return Response.json({ error: "Cron endpoints are disabled — set CRON_SECRET" }, { status: 503 });
@@ -21,9 +23,41 @@ export function requireCronAuth(request: Request): Response | null {
   return null;
 }
 
-/** Run a job with start/finish/outcome recorded (R-163). */
-export async function runCronJob<T>(jobName: string, job: () => Promise<T>): Promise<T> {
+export type CronSkip = { skipped: true; reason: "overlap" };
+
+/**
+ * Run a job with start/finish/outcome recorded (R-163). Concurrent invocations
+ * of the same jobName: oldest running claim wins; others return skipped overlap
+ * (M-01) so two schedulers never both mutate the same work.
+ */
+export async function runCronJob<T>(
+  jobName: string,
+  job: () => Promise<T>
+): Promise<T | CronSkip> {
+  const staleCutoff = new Date(Date.now() - STALE_RUNNING_MS);
+  await db.cronRunLog.updateMany({
+    where: { jobName, status: "running", startedAt: { lt: staleCutoff } },
+    data: {
+      status: "failed",
+      finishedAt: new Date(),
+      detail: { error: "stale running claim reaped" },
+    },
+  });
+
   const run = await db.cronRunLog.create({ data: { jobName } });
+  const running = await db.cronRunLog.findMany({
+    where: { jobName, status: "running" },
+    orderBy: { startedAt: "asc" },
+    select: { id: true },
+  });
+  if (running[0]?.id !== run.id) {
+    await db.cronRunLog.update({
+      where: { id: run.id },
+      data: { status: "skipped", finishedAt: new Date(), detail: { reason: "overlap" } },
+    });
+    return { skipped: true, reason: "overlap" };
+  }
+
   try {
     const detail = await job();
     await db.cronRunLog.update({
@@ -34,7 +68,11 @@ export async function runCronJob<T>(jobName: string, job: () => Promise<T>): Pro
   } catch (error) {
     await db.cronRunLog.update({
       where: { id: run.id },
-      data: { status: "failed", finishedAt: new Date(), detail: { error: (error as Error).message.slice(0, 500) } },
+      data: {
+        status: "failed",
+        finishedAt: new Date(),
+        detail: { error: (error as Error).message.slice(0, 500) },
+      },
     });
     throw error;
   }

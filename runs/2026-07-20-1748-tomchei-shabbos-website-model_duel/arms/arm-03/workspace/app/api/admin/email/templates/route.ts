@@ -30,9 +30,19 @@ export async function GET() {
 
 const patchSchema = z.object({
   key: z.string(),
-  // null clears the override back to the code default.
-  subject: z.string().max(300).nullable().optional(),
-  body: z.string().max(50_000).nullable().optional(),
+  // null clears the override back to the code default; empty string rejected (M-09).
+  subject: z
+    .string()
+    .max(300)
+    .nullable()
+    .optional()
+    .refine((value) => value !== "", { message: "Subject override cannot be empty — use null to clear" }),
+  body: z
+    .string()
+    .max(50_000)
+    .nullable()
+    .optional()
+    .refine((value) => value !== "", { message: "Body override cannot be empty — use null to clear" }),
   isEnabled: z.boolean().optional(),
 });
 

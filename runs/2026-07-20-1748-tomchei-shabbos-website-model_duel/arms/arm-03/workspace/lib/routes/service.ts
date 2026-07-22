@@ -161,6 +161,7 @@ async function captureDayOfNotifications(routeId: string, routeName: string): Pr
         kind: "day_of_delivery",
         subject: "Your Mishloach Manos is out for delivery today",
         body: `Good news, ${customer.name}: the package for ${stop.package.recipientName} (${stop.package.addressLine1}, ${stop.package.city}) is on today's delivery route (${routeName}).`,
+        smsBody: `${customer.name}: ${stop.package.recipientName}'s package is on route ${routeName} today.`,
         dedupeKey: `day-of|${routeId}|${stop.packageId}|${customer.id}`,
         packageId: stop.packageId,
       });

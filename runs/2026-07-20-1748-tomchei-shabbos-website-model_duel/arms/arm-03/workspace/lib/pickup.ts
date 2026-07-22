@@ -76,6 +76,7 @@ export async function sendPickupReadyNotifications(seasonId: string) {
             kind: "pickup_ready",
             subject: "Your Mishloach Manos order is ready for pickup",
             body: `${customer.name}, the package for ${pkg.recipientName} is packed and waiting at the pickup door.`,
+            smsBody: `${customer.name}: ${pkg.recipientName}'s package is ready for pickup.`,
             dedupeKey: `pickup-ready|${pkg.id}|${customer.id}`,
             packageId: pkg.id,
           },

@@ -43,7 +43,7 @@ const envSchema = z
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().default(DEV_WEBHOOK_SECRET),
     // Absolute base URL for Stripe redirect/webhook URLs.
-    APP_URL: z.string().default("http://127.0.0.1:3102"),
+    APP_URL: z.string().default("http://127.0.0.1:3103"),
     // Shippo (P8). Without a token the shipping wrapper runs in mock mode with
     // deterministic fixture rates, same philosophy as the Stripe mock gateway.
     SHIPPO_API_TOKEN: z.string().optional(),
@@ -61,9 +61,14 @@ const envSchema = z
     // Mapbox geocoding (P9, R-179). Without a token the geocoder falls back to
     // the local deterministic provider — same swap point as Stripe/Shippo mocks.
     MAPBOX_ACCESS_TOKEN: z.string().optional(),
-    // Resend (P11, R-171). Without a key the email provider runs in mock mode
-    // (simulated delivery) — same swap point as the other provider wrappers.
+    // Resend (P11, R-171). Required when EMAIL_MODE=live.
     RESEND_API_KEY: z.string().optional(),
+    // Provider mode switch (wired — do not leave as dead env). capture|mock|live.
+    // EMAIL_TEST_MODE=true still forces capture for both channels (R-178).
+    EMAIL_MODE: z.enum(["capture", "mock", "live"]).default("mock"),
+    SMS_MODE: z.enum(["capture", "mock", "live"]).default("capture"),
+    // Optional default From used when settings row is missing / empty.
+    EMAIL_FROM: z.string().email().optional(),
     // Test mode (R-178): outgoing email/SMS is CAPTURED in the outbox instead
     // of ever contacting a provider — even when live keys are configured.
     EMAIL_TEST_MODE: z
@@ -152,13 +157,32 @@ const envSchema = z
       });
     }
     // Production must never "send" through the mock email provider (customers
-    // would silently get nothing) — require a real key or explicit test mode.
-    if (process.env.NODE_ENV === "production" && !isBuildPhase && !vars.RESEND_API_KEY && !vars.EMAIL_TEST_MODE) {
+    // would silently get nothing) — require live+key, capture, or EMAIL_TEST_MODE.
+    const emailCaptured = vars.EMAIL_TEST_MODE || vars.EMAIL_MODE === "capture";
+    if (process.env.NODE_ENV === "production" && !isBuildPhase && !emailCaptured && !vars.RESEND_API_KEY) {
       ctx.addIssue({
         code: "custom",
         path: ["RESEND_API_KEY"],
-        message: "RESEND_API_KEY is required in production (or set EMAIL_TEST_MODE=true to capture instead of send)",
+        message:
+          "RESEND_API_KEY is required in production when EMAIL_MODE is mock/live (or set EMAIL_MODE=capture / EMAIL_TEST_MODE=true)",
       });
+    }
+    if (vars.EMAIL_MODE === "live" && !vars.RESEND_API_KEY && !vars.EMAIL_TEST_MODE) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["RESEND_API_KEY"],
+        message: "EMAIL_MODE=live requires RESEND_API_KEY (or EMAIL_TEST_MODE=true to capture)",
+      });
+    }
+    if (vars.SMS_MODE === "live") {
+      const twilioVars = [vars.TWILIO_ACCOUNT_SID, vars.TWILIO_AUTH_TOKEN, vars.TWILIO_FROM_NUMBER];
+      if (twilioVars.filter(Boolean).length < 3 && !vars.EMAIL_TEST_MODE) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["SMS_MODE"],
+          message: "SMS_MODE=live requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER",
+        });
+      }
     }
   });
 

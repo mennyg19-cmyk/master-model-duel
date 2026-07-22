@@ -2,7 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
-import { campaignAudience, renderCampaignBody, renderCampaignSubject } from "@/lib/email/campaigns";
+import { campaignAudienceCount, renderCampaignBody, renderCampaignSubject } from "@/lib/email/campaigns";
 
 /**
  * Detail + preview. The preview always renders for a synthetic sample
@@ -18,12 +18,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const campaign = await db.campaign.findUnique({ where: { id }, include: { list: { select: { name: true } } } });
   if (!campaign) return Response.json({ error: "Campaign not found" }, { status: 404 });
 
-  const audience = await campaignAudience(campaign.listId);
+  const audienceCount = await campaignAudienceCount(campaign.listId);
   const sample = { email: "subscriber@example.com", name: "Sample Subscriber" };
   const token = "PREVIEW-TOKEN";
   return Response.json({
     campaign,
-    audienceCount: audience.length,
+    audienceCount,
     preview: {
       to: sample.email,
       subject: renderCampaignSubject(campaign.subject, sample, token),

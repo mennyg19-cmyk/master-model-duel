@@ -2,14 +2,9 @@ import { randomBytes } from "node:crypto";
 import { env } from "@/lib/env";
 
 // Email provider behind one type (R-171 — Resend never leaks past this file).
-// Three modes, same philosophy as the Stripe/Shippo wrappers:
-// - resend: Resend's REST API over fetch when RESEND_API_KEY is set.
-// - capture: EMAIL_TEST_MODE=true — nothing leaves the machine; the dispatcher
-//   marks the outbox row "captured" instead of calling send at all.
-// - mock: no key, no test mode — simulated delivery with deterministic ids so
-//   the sent/failed paths run for real. A recipient containing "+failonce"
-//   fails its first attempt only, which is how the smoke forces a provider
-//   failure and then watches the retry succeed.
+// Modes from EMAIL_MODE (capture|mock|live). EMAIL_TEST_MODE=true forces capture
+// even when live keys are set. Mock failure hooks: "+failonce" / "+failalways"
+// in the recipient address.
 
 export type EmailMessage = {
   to: string;
@@ -68,15 +63,32 @@ function mockEmailProvider(): EmailProvider {
   };
 }
 
+function captureEmailProvider(): EmailProvider {
+  return {
+    mode: "capture",
+    send: async () => ({ messageId: `captured_${randomBytes(10).toString("hex")}` }),
+  };
+}
+
 let provider: EmailProvider | null = null;
 
 export function getEmailProvider(): EmailProvider {
   if (!provider) {
-    provider = env.EMAIL_TEST_MODE
-      ? { mode: "capture", send: async () => ({ messageId: `captured_${randomBytes(10).toString("hex")}` }) }
-      : env.RESEND_API_KEY
-        ? resendProvider(env.RESEND_API_KEY)
-        : mockEmailProvider();
+    if (env.EMAIL_TEST_MODE || env.EMAIL_MODE === "capture") {
+      provider = captureEmailProvider();
+    } else if (env.EMAIL_MODE === "live") {
+      if (!env.RESEND_API_KEY) {
+        throw new Error("EMAIL_MODE=live requires RESEND_API_KEY");
+      }
+      provider = resendProvider(env.RESEND_API_KEY);
+    } else {
+      provider = mockEmailProvider();
+    }
   }
   return provider;
+}
+
+/** Test hook — clears the memoized provider so the next call re-reads env. */
+export function resetEmailProvider(): void {
+  provider = null;
 }

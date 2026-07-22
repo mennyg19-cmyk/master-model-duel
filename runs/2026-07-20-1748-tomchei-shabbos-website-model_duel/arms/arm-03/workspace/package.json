@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3102",
+    "dev": "next dev -p 3103",
     "build": "next build",
-    "start": "next start -p 3102",
+    "start": "next start -p 3103",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:start": "tsx scripts/db-start.ts",
@@ -15,6 +15,7 @@
     "migration:guard": "prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url postgresql://duel:duel@127.0.0.1:4102/shadow --exit-code",
     "test": "tsx --test tests/*.test.ts",
     "smoke:concurrency": "tsx scripts/concurrency-smoke.ts",
+    "smoke:p11": "tsx scripts/smoke-p11.ts",
     "ci": "npm run lint && npm run typecheck && npm run migration:guard && npm run test"
   },
   "dependencies": {

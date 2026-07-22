@@ -1,102 +1,36 @@
-# P11 Quality review — arm-03
+# P11 Quality Review — arm-03
 
-Reviewer specialist: Quality. Findings only, no fixes. Blind to model identity.
-Phase: P11 (Email & notification platform). Reference: `shared/phases/PHASE-P11-EXPECTED.md`.
-Scope reviewed: `src/lib/notify/outbox.ts`, `src/lib/notify/sms.ts`, `src/lib/resend/client.ts`, `src/lib/email/campaigns.ts`, `src/lib/email/order-emails.ts`, `src/lib/email/templates.ts`, `src/lib/email/purge.ts`, `src/lib/cron/auth.ts`, `src/lib/cron/runs.ts`, `src/app/api/admin/email/route.ts`, `src/app/api/cron/outbox-sweep/route.ts`, `src/app/api/cron/purge-email-log/route.ts`, `src/app/api/cron/payment-reminder/route.ts`, `src/app/api/cron/pickup-expiry/route.ts`, `src/app/api/cron/season-auto-flip/route.ts`, `src/app/api/newsletter/subscribe/route.ts`, `src/app/api/newsletter/preferences/route.ts`, `src/app/api/newsletter/unsubscribe/route.ts`, `src/app/(admin)/admin/email/page.tsx`, `src/components/admin/email-hub.tsx`, `src/app/(storefront)/newsletter/page.tsx`, `src/app/(storefront)/newsletter/preferences/page.tsx`, `src/lib/storefront/newsletter.ts`, `src/lib/checkout/session.ts` (P11 touch point), `src/lib/payments/webhook.ts` (P11 touch point), `src/lib/ops/refunds.ts` (P11 touch point), `src/middleware.ts`, `prisma/schema.prisma` (P11 models), `prisma/migrations/20260722050000_p11_email/migration.sql`, `vercel.json`, `scripts/smoke-p11.mjs`, `arms/arm-03/results/PHASE-P11-SMOKE.md`, `arms/arm-03/results/PHASE-P11-STATUS.md`.
+**Reviewer:** glm-5.2-high (external)
+**Phase:** P11 — Email & notification platform
+**EXPECTED:** `shared/phases/PHASE-P11-EXPECTED.md`
+**Smoke:** `arms/arm-03/results/PHASE-P11-SMOKE.md` (5/5 PASS)
+**Scope:** correctness, broken flows, stubs, missing smoke coverage, regressions vs EXPECTED, idempotency, transactional email completeness.
 
-Smoke evidence (`PHASE-P11-SMOKE.md`) reports S1–S5 PASS (5/5). Findings below are from source inspection, not from re-running smoke.
+## Findings
 
-## High
+| ID | Severity | Location | Claim | Suggested fix |
+|---|---|---|---|---|
+| Q-01 | High | `.env` line 48 (`RESEND_API_KEY=mock`) | Any non-empty `RESEND_API_KEY` selects resend mode in `lib/email/provider.ts:75-79`. The value `mock` is truthy, so the provider enters resend mode and calls `https://api.resend.com/emails` with `Authorization: Bearer mock`, producing a 401 on every send. The comment "mock for local smoke" is misleading — there is no `mock` token; the mock provider only activates when `RESEND_API_KEY` is unset. Starting the dev server with the current `.env` breaks the sweeper and any future smoke rerun. | Remove `RESEND_API_KEY=mock` from `.env` (leave it unset to fall through to `mockEmailProvider`), or set `EMAIL_TEST_MODE=true` for capture. |
+| Q-02 | High | `lib/email/provider.ts:75` and `lib/sms/provider.ts:59` | SMS capture mode is keyed on `env.EMAIL_TEST_MODE`, not on any `SMS_MODE` var. `.env` / `.env.example` declare `EMAIL_MODE=mock`, `EMAIL_FROM=...`, and `SMS_MODE=capture` (lines 46, 47, 51) — none of these are read by `lib/env.ts` or any provider. Operators relying on `SMS_MODE=capture` to suppress live SMS will still send real SMS unless `EMAIL_TEST_MODE=true` is also set (which also captures email). Email and SMS capture are coupled to one switch. | Either wire `EMAIL_MODE`/`SMS_MODE` into `lib/env.ts` and the providers, or delete the dead vars from `.env` and `.env.example` and document `EMAIL_TEST_MODE` as the single capture switch for both channels. |
+| Q-03 | Medium | `arms/arm-03/results/PHASE-P11-SMOKE.json` vs `.scratch/p11-smoke.ts` / `p11-smoke-capture.ts` | The published smoke JSON reports S5 fields that neither smoke script emits: `purgeResult: { scanned: 2, deleted: 1, skippedActive: 1 }`, `smsCaptured: true`, `testCaptured: true`, `keepLog`, `purgedGone`, `outboxKept`. The actual scripts use `console.log("ok …")` + `assert` and never produce these objects; `p11-smoke.ts` checks 3 specific purge rows directly and tests no SMS dispatch at all. The SMOKE.md S5 row claims "Purge + test mode + SMS" but SMS capture is not exercised by any smoke. | Re-run S5 with a script that actually asserts SMS capture (e.g. enqueue a `channel: "SMS"` row, sweep in capture mode, assert `status: "captured"`), and regenerate the JSON from script output — not hand-transcribed. |
+| Q-04 | Medium | `app/api/cron/notification-sweeper/route.ts` + `lib/email/dispatch.ts:92-99` | Post-send DB transaction failure can duplicate a delivery. `dispatchOne` calls the provider first, then runs `db.$transaction([update notification, create attempt])`. If that transaction throws (DB blip, FK error), the row stays `sending` with `claimedAt: now`; after `STALE_CLAIM_MS` (10 min) the sweeper reclaims and resends — a duplicate delivery for a message the provider already accepted. EXPECTED S2/S3 require "no duplicate deliveries on retry"; this edge case violates it. | Either (a) mark the row `sent` before the provider call and roll back on provider failure (at-least-once with idempotent dedupe), or (b) persist a send-intent row pre-provider and reconcile. At minimum, document the known duplicate window. |
+| Q-05 | Medium | `app/api/admin/email/campaigns/[id]/test-send/route.ts:30-42` and `app/api/admin/email/test/route.ts:23-35` | Test-send rows are created with `status: "sending"` and a unique `dedupeKey` (`campaign-test|id|Date.now()` / `test-email|Date.now()`). On provider failure `dispatchOne` returns `"retried"` and flips the row to `pending` with backoff. The production sweeper cron then picks it up and delivers a test email to an external address minutes later, with no staff-visible audit tying the delayed delivery back to the test-send act. | For test rows, mark `status: "failed"` (terminal) on first failure instead of retrying, or use a `kind` prefix the sweeper skips, so test sends never ride the production retry path. |
+| Q-06 | Medium | `lib/email/dispatch.ts:31-39` (`createEmailSettingsLoader`) | The loader caches the promise with `??=`. If the first `Promise.all([getSetting…])` rejects (transient DB error), the rejected promise is cached for the rest of the sweep; every subsequent row in the same sweep re-throws the same error and is marked `pending`/retry, even though the settings read might succeed on a retry. | Reset `cached = null` when the promise rejects, so the next row re-reads settings. |
+| Q-07 | Low | `app/api/admin/email/templates/route.ts:31-55` + `lib/email/templates.ts:60-70` | Empty-string subject/body overrides are accepted (`z.string().max(300)` allows `""`). `resolveTemplate` uses `override?.subject ?? default`, and `""` is not nullish, so saving an empty draft blanks the subject/body — emails go out with an empty subject (Resend rejects) or empty body. The "Reset to default" button correctly sends `null`, but a user who clears the input and clicks "Save override" hits this. | Reject empty strings in the PATCH schema (`z.string().min(1).max(300).nullable()`) or coerce `""` to `null` before upsert. |
+| Q-08 | Low | `app/api/newsletter/preferences/route.ts:22-28` | `db.newsletterSubscriber.update(...).catch(() => null)` swallows every error and maps it to a 404 "No subscription found". A transient DB error or a unique-constraint violation is indistinguishable from a missing row. | Catch only Prisma `P2025` (record not found) and rethrow the rest. |
+| Q-09 | Low | `app/api/cron/payment-reminders/route.ts:39-48` | Payment-reminder emails (`kind: "payment_reminder"`) are raw `captureNotification` calls with hardcoded subject/body — not registered in `TEMPLATE_DEFAULTS`, so they can't be edited or disabled from the Email Hub Templates tab. EXPECTED item 3 lists only confirmation/payment-link/refund as managed, so this is consistent with scope, but it's an inconsistency staff will notice. | Either register `payment_reminder` in `TEMPLATE_DEFAULTS` and route through `enqueueTemplated`, or document that payment reminders are intentionally unmanaged. |
+| Q-10 | Low | `.scratch/PHASE-P11-SMOKE.md` line 1 | The in-workspace smoke evidence file opens with "# P11 smoke evidence — arm-02 (rerun during P11 fix pass, 2026-07-21)" — wrong arm label. The `arms/arm-03/results/PHASE-P11-SMOKE.md` copy correctly says arm-03, but the workspace `.scratch` copy was not updated. | Fix the header to `arm-03` or delete the stale `.scratch` copy now that the canonical one lives in `results/`. |
+| Q-11 | Low | `app/api/cron/email-log-purge/route.ts:20-22` + `prisma/schema.prisma` `Notification.status` | `Notification.status` and `NotificationAttempt.outcome` are free-form `String` (defaults `"pending"`), not enums. Typos in status transitions (e.g. `"caputred"`) would silently fall outside the purge `in: ["sent","captured","failed"]` filter and never be purged. `Campaign.status` correctly uses an enum. | Promote `Notification.status` and `NotificationAttempt.outcome` to Prisma enums. |
+| Q-12 | Low | `prisma/schema.prisma:974` (`Campaign.createdByStaffId`) | `Campaign.createdByStaffId` is `String?` with no FK to `StaffUser` (the P11 migration adds no FK constraint). Deleted staff leave dangling creator ids; the hub can't render "created by". Other P11 models are unaffected, but this is the one new audit-trail gap. | Add `staff StaffUser? @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)` and a migration. |
+| Q-13 | Low | `app/api/cron/` S4 coverage | S4 smoke tests 5 of 6 cron endpoints for missing/wrong/correct secret. `stripe-reconciliation` uses the same `requireCronAuth` helper but is not exercised. EXPECTED S4 says "Every cron endpoint". | Add `/api/cron/stripe-reconciliation` to the S4 loop in `p11-smoke.ts`. |
+| Q-14 | Low | `components/admin/email-hub.tsx` `CampaignsTab` | "Send" / "Re-run send" always shows the static message "Campaign queued to the outbox." regardless of the API result (`queued`/`skippedDuplicates`). A rerun that queued 0 looks identical to a fresh send that queued 100. The API returns the numbers; the UI discards them. | Surface `result.queued` / `result.skippedDuplicates` in the `act` success message. |
+| Q-15 | Low | `components/admin/email-hub.tsx` `TemplatesTab` / `ListsTab` / `CampaignsTab` | After `act` succeeds, `router.refresh()` re-fetches server data but local form state (`name`, `subject`, `body`, `listId`, `memberEmail`, `drafts`) is not cleared, so inputs retain submitted values after create/add/save. Reset-to-default also leaves the textarea showing the old draft until a full navigation. | Clear the relevant local state in the `act` success callback, or key the form off the refreshed prop. |
+| Q-16 | Low | `lib/email/campaigns.ts:51-84` (`sendCampaign`) | Audience enqueue and the `Campaign.status = SENT` update are not in one transaction. A crash mid-audience leaves the campaign `DRAFT` with some rows queued; a rerun skips duplicates (correct) but `queuedCount` becomes `queuedCount + newQueued` — for a partial first run that queued 5/10, the final `queuedCount` is 5, not 10. Display-only, but the hub shows a wrong total. | Either wrap enqueue + status update in a transaction, or set `queuedCount` from a `count` of queued rows after the loop. |
 
-### H1 — P11 cron routes are POST-only; Vercel Cron invokes GET → 405 in production
-`outbox-sweep/route.ts` and `purge-email-log/route.ts` export only `POST`. `vercel.json` registers both as cron jobs (`*/5 * * * *` and `0 4 * * *`). Vercel Cron invokes the path with GET. The contestant already knew this — `season-auto-flip/route.ts` carries the comment `/** Vercel Cron invokes GET; smoke/manual use POST. */` and exports both `GET` and `POST` — but the fix was applied only to `season-auto-flip`. `payment-reminder` and `pickup-expiry` are also POST-only (pre-existing from earlier phases, out of P11 scope), but the two P11 crons are the core of the outbox retry sweeper and log purge. In production both would 405 on every invocation; the outbox never drains and logs are never purged. Smoke S4 passes because it tests POST.
+## Summary
 
-### H2 — Subscribers have no path to obtain a signed token; preferences/unsubscribe are unreachable
-`mintUnsubscribeToken` (`src/lib/storefront/newsletter.ts:98`) is exported but never called anywhere in the workspace. The subscribe endpoint (`src/app/api/newsletter/subscribe/route.ts`) explicitly does not return a token (comment: `// Do not return unsubscribeToken — requires email verification path (H3).`). The preferences page (`src/app/(storefront)/newsletter/preferences/page.tsx`) reads the token from `?token=…` in the URL, and the unsubscribe route requires a token in the body. No email is sent on subscribe, no admin UI mints a token, and no verification flow exists. So a real subscriber cannot reach the preferences or unsubscribe flow. Smoke S1 passes only because `scripts/smoke-p11.mjs` mints the token directly with `NEWSLETTER_HMAC_SECRET` (line 27–31), bypassing the app entirely. The EXPECTED S1 ("change all three preference states via signed token") is satisfied at the API layer but not as a user-facing feature.
-
-## Medium
-
-### M1 — `ensureSystemTemplates` runs 3 upserts on every order email and every hub load
-`enqueueOrderEmail` → `resolveTriggeredContent` → `ensureSystemTemplates` (`src/lib/email/order-emails.ts:102, 12`). `listTemplates` and `listTriggeredOverrides` also call it. So every order confirmation, payment link, and refund email triggers 3 `upsert` round trips (with `update: {}` no-op), and every time staff opens the Templates or Triggered tab the same 3 upserts run. The rows are immutable after first seed; the repeated upserts add latency and DB load for no benefit.
-
-### M2 — `sendCampaign.resolveRecipients` with no list fetches all subscribers unbounded
-`resolveRecipients` (`src/lib/email/campaigns.ts:111`) does `db.newsletterSubscriber.findMany({ where: { unsubscribedAt: null } })` with no `take`. A large list loads every row into memory. Unlike arm-01's silent 5,000 cap, there is no truncation here, but no pagination either — OOM risk under load. The campaign then loops recipients one-by-one with a per-recipient create+enqueue+update (no transaction, no batching).
-
-### M3 — `processClaimedMessage` writes EmailLog and updates outbox in separate awaits (no transaction)
-`processClaimedMessage` (`src/lib/notify/outbox.ts:306`) calls `deliverClaimed` (provider send), then `writeEmailLog`, then `db.notificationOutbox.update` as three separate awaits with no wrapping transaction. If the outbox update fails (DB hiccup), the email was already sent and logged, but the outbox row stays `CLAIMED`. After `CLAIM_STALE_MS` (2 min) another worker re-claims and re-delivers — double delivery. Same risk if the process crashes between the log write and the outbox update.
-
-### M4 — Purge never deletes `NotificationOutbox` rows; outbox grows without bound
-`purgeEmailLogs` (`src/lib/email/purge.ts:16`) deletes only `EmailLog` rows where `purgeAfter <= now` and the linked outbox is not active. It never deletes `NotificationOutbox` rows in any terminal state (`SENT`, `CAPTURED`, `FAILED`-exhausted). The schema comment on `NotificationOutbox` says "capture (test) or pending→claim→sent/failed", but terminal outbox rows are retained forever. The EXPECTED S5 intent ("Purge eligible logs without deleting active outbox/audit") is met for `EmailLog` but the outbox itself has no retention path.
-
-### M5 — `purgeEmailLogs` loads all active outbox IDs into memory unbounded
-`purgeEmailLogs` does `db.notificationOutbox.findMany({ where: { status: { in: [PENDING, CLAIMED, FAILED] } }, select: { id: true } })` with no `take` (`src/lib/email/purge.ts:18`). It builds an in-memory `Set` to filter eligible logs. A large active outbox loads every active ID into the Node process on every purge run.
-
-### M6 — `finishCronRun` hardcodes `ok: true` regardless of sweep outcomes
-Both cron routes call `finishCronRun(claim.run.id, { ok: true, meta: result })` (`outbox-sweep/route.ts:25`, `purge-email-log/route.ts:23`). `ok` is always `true` even when `sweepOutbox` returns `failed > 0` or `purgeEmailLogs` deletes nothing. `CronJobRun.ok` is therefore not a reliable signal of a healthy run; operators must parse `meta` to detect failures.
-
-### M7 — `BRANDING_DEFAULT` and `EmailTemplate.branding` are write-only
-`BRANDING_DEFAULT` (`src/lib/email/templates.ts:33`) is exported but never read. `upsertTemplate` stores `branding` into the column (`src/lib/email/order-emails.ts:49,56`), and the admin route passes it through (`api/admin/email/route.ts:183`), but `renderTemplate` never applies branding and `enqueueOrderEmail` never reads the `branding` field. The email hub Templates tab does not display or edit branding. Stored branding has zero effect on rendered output.
-
-### M8 — Email hub UI is read-only for templates, triggered overrides, and list membership
-The API supports `upsert_template`, `set_triggered`, and `add_list_members`, but `src/components/admin/email-hub.tsx` exposes none of them. The Templates tab lists `key / name / subject` only. The Triggered tab lists `key / defaults.subject / override.enabled` only — no toggle, no subject/body editor. The Lists tab has "Create list" but no "add members" control. The Campaign builder has no list selector, so every campaign broadcasts to all subscribers. Staff cannot manage templates, overrides, or list membership from the UI; the actions are API-only.
-
-### M9 — `enqueueOrderEmail` is awaited inside checkout/refund/webhook and propagates DB errors
-`checkout/session.ts:552` does `await enqueuePaymentLinkEmail(...)`, `payments/webhook.ts:275` does `await enqueueOrderConfirmation(...)`, `ops/refunds.ts:247` does `await enqueueRefundEmail(...)`. None inspect the returned `Result` (a returned `err` is silently ignored — fine), but a *thrown* DB error from `resolveTriggeredContent` or `enqueueNotification` propagates into the caller's try/catch. In `checkout/session.ts` the catch returns `err(...)` — so a DB hiccup in the email enqueue fails the checkout session creation. Email enqueue is best-effort in intent but blocking in implementation.
-
-### M10 — `sweepOutbox` sequential loop can exceed the 2-minute stale claim threshold
-`sweepOutbox` (`src/lib/notify/outbox.ts:381`) loops up to `limit` (40 in the cron) times, awaiting `claimOutboxMessage` + `processClaimedMessage` (which includes a live provider call) per iteration. `CLAIM_STALE_MS` is 2 minutes (`outbox.ts:18`). If 40 sequential provider sends exceed 2 minutes (slow Resend/Twilio, network stall), a parallel sweep can re-claim a still-in-flight row and double-deliver.
-
-## Low
-
-### L1 — `writeCronAudit` is dead code
-`src/lib/cron/runs.ts:39` exports `writeCronAudit` but no caller exists in the workspace.
-
-### L2 — `renderTemplate` silently blanks missing variables
-`renderTemplate` (`src/lib/email/templates.ts:39`) substitutes `""` for any `{{key}}` not in `vars`. A refund email sent without `refundAmount` ships with a blank, no warning.
-
-### L3 — `apiErrorResponse` doesn't translate Prisma P2025/P2003
-`src/lib/api-error.ts` handles `AuthError`, `ApiError`, `ZodError`, else masks to 500. A PATCH on an unknown `template.key` or a `createCampaign` with a bad `listId` throws Prisma P2025/P2003 that surfaces as 500 instead of 4xx.
-
-### L4 — Campaign "Send" has no confirmation or recipient-count preview
-`EmailHub` "Send" button (`src/components/admin/email-hub.tsx:161`) queues the entire subscriber base on a single click with no confirm dialog and no recipient count shown.
-
-### L5 — `claimOutboxMessage` ordering lacks a tiebreaker
-`claimOutboxMessage` orders candidates by `createdAt: "asc"` only (`src/lib/notify/outbox.ts:249`). Rows sharing a timestamp may be claimed in nondeterministic order. Low impact given `SKIP LOCKED`-style updateMany correctness, but sweep ordering is non-reproducible.
-
-### L6 — `captureNotification` writes no `EmailLog` while `enqueueNotification` capture mode does
-`captureNotification` (`src/lib/notify/outbox.ts:20`, used by P9 `captureEmailAndSms`) creates a `NotificationOutbox` row and audit entry but no `EmailLog`. `enqueueNotification` with `forceCapture` or capture mode writes both. So P9 captured notifications are invisible in `EmailLog` and unreachable by purge, while P11 captured emails are logged. Inconsistent capture logging.
-
-### L7 — `smsSend` mock mode returns no `captured` field → row marked `SENT`
-`smsSend` mock branch (`src/lib/notify/sms.ts:37`) returns `{ ok: true, providerId }` without `captured`. `processClaimedMessage` then sets `NotifyStatus.SENT`. Mock email (`resend/client.ts:58`) returns `captured: true` → `CAPTURED`. So mock SMS is `SENT` and mock email is `CAPTURED` — inconsistent semantics for the same "no real provider" intent.
-
-### L8 — Unsubscribe route verifies the token twice
-`src/app/api/newsletter/unsubscribe/route.ts:16` calls `verifyUnsubscribeToken` for a pre-check, then `unsubscribeWithToken` (`src/lib/storefront/newsletter.ts:124`) verifies again internally. Wasted work; harmless.
-
-### L9 — `updatePreferencesWithToken` doesn't rotate `tokenVersion`
-`updatePreferencesWithToken` (`src/lib/storefront/newsletter.ts:102`) saves new preferences without incrementing `tokenVersion`. A leaked preferences token stays valid for the full 30-day TTL for preference changes (only unsubscribe rotates the version).
-
-### L10 — `NotificationOutbox` schema default status is `CAPTURED`
-`prisma/schema.prisma:1125` sets `@default(CAPTURED)`. A plain `create` without explicit status would be `CAPTURED` and therefore never swept. Misleading default given the outbox is primarily a pending-then-send queue.
-
-### L11 — `EmailCampaignDelivery.status` is a free-form string with no sent/failed transition
-`sendCampaign` sets delivery status to `"queued"` or `"captured"` only (`src/lib/email/campaigns.ts:165`). There is no `"sent"` or `"failed"` transition after the outbox row is processed. Delivery status never reflects actual send outcome; the outbox row is the only source of truth.
-
-### L12 — `CronJobRun` has no reaper for stale rows
-A cron that crashes after `beginCronRun` but before `finishCronRun` leaves a `CronJobRun` row with `ok: null` and no `finishedAt`. No reaper cleans them up; they accumulate. The unique `claimedToken` still lets new runs succeed, so this is clutter, not a blocker.
-
-### L13 — `testSendCampaign` prefixes `[TEST]` only in live mode
-`testSendCampaign` live branch prefixes the subject with `[TEST]` (`src/lib/email/campaigns.ts:83`); the capture branch stores the original subject in the log (`campaigns.ts:67`). The captured log and the live send disagree on subject for the same action.
-
-### L14 — Subscribers tab fetches 200 rows with no pagination
-`api/admin/email/route.ts:38` does `findMany({ take: 200 })` for the Subscribers tab. Beyond 200 subscribers, the UI silently shows a truncated list with no indication.
-
-### L15 — `getEmailMode` "mock" and "capture" are identical for email
-`resend/client.ts:50` (capture) and `resend/client.ts:58` (mock) both return `{ ok: true, captured: true, providerId }`. The two modes are indistinguishable for email, unlike SMS where mock returns no `captured` (see L7).
-
-## Severity counts
-
-- Critical: 0
-- High: 2
-- Medium: 10
-- Low: 15
-- Total: 27
+- 16 findings: **2 High, 4 Medium, 10 Low**.
+- Highs are configuration correctness (`RESEND_API_KEY=mock` silently enables resend mode; `EMAIL_MODE`/`SMS_MODE`/`EMAIL_FROM` env vars are dead) — both break the next dev-server smoke rerun.
+- Mediums are smoke-evidence fidelity (SMS capture never tested; JSON hand-transcribed), a post-send transaction duplicate-delivery window, test-send rows riding the production sweeper, and a poisoned settings cache.
+- Lows are validation gaps, missing FK, enum drift, partial cron smoke coverage, and UI state/feedback nits.
+- EXPECTED items 1–4 are structurally delivered: Resend-isolated provider, email hub (campaigns/subscribers/lists/templates + branding), idempotent campaign reruns, transactional confirmation/payment-link/refund with per-key overrides + outbox sweeper, purge cron anchored on terminal event, settings test sender, and SMS dispatch wired for P9 reuse via `notifyCustomer`.

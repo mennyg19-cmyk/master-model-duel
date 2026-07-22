@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { verifyNewsletterToken } from "@/lib/newsletter-token";
+import { isRecordNotFound } from "@/lib/prisma-errors";
 
 const updateSchema = z.object({
   token: z.string().min(1),
@@ -19,16 +20,21 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "This link is invalid or has expired." }, { status: 403 });
   }
 
-  const subscriber = await db.newsletterSubscriber.update({
-    where: { email },
-    data: {
-      wantsSeasonOpening: parsed.data.wantsSeasonOpening,
-      wantsPurimReminders: parsed.data.wantsPurimReminders,
-    },
-  }).catch(() => null);
-  if (!subscriber) {
-    return Response.json({ error: "No subscription found for this address." }, { status: 404 });
+  let subscriber;
+  try {
+    subscriber = await db.newsletterSubscriber.update({
+      where: { email },
+      data: {
+        wantsSeasonOpening: parsed.data.wantsSeasonOpening,
+        wantsPurimReminders: parsed.data.wantsPurimReminders,
+      },
+    });
+  } catch (error) {
+    if (isRecordNotFound(error)) {
+      return Response.json({ error: "No subscription found for this address." }, { status: 404 });
+    }
+    throw error;
   }
 
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, id: subscriber.id });
 }

@@ -1,6 +1,9 @@
 import { db } from "@/lib/db";
 import { requireCronAuth, runCronJob } from "@/lib/cron";
 import { getSetting } from "@/lib/settings";
+import { NotificationStatus } from "@/lib/email/notification-lifecycle";
+
+const MIN_RETENTION_DAYS = 7;
 
 /**
  * Email-log purge cron (R-172): deletes notification rows that finished
@@ -15,10 +18,16 @@ export async function POST(request: Request) {
   if (denied) return denied;
 
   const result = await runCronJob("email-log-purge", async () => {
-    const retentionDays = await getSetting("email.log_retention_days");
+    const configured = await getSetting("email.log_retention_days");
+    const retentionDays = Math.max(configured, MIN_RETENTION_DAYS);
     const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
     const purged = await db.notification.deleteMany({
-      where: { status: { in: ["sent", "captured", "failed"] }, updatedAt: { lt: cutoff } },
+      where: {
+        status: {
+          in: [NotificationStatus.SENT, NotificationStatus.CAPTURED, NotificationStatus.FAILED],
+        },
+        updatedAt: { lt: cutoff },
+      },
     });
     return { retentionDays, purged: purged.count };
   });
