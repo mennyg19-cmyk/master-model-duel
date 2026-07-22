@@ -1,14 +1,11 @@
 ﻿import Link from "next/link";
 import { requirePermissionPage } from "@/lib/auth/current-user";
 import { seasonPerformance, seasonDrilldown, marginReport } from "@/lib/reports";
+import { formatCents } from "@/lib/catalog";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 // Multi-season performance reports + shipping-margin reconciliation (R-091, UR-003).
-
-function money(cents: number): string {
-  return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
-}
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ season?: string }> }) {
   await requirePermissionPage("reports.view");
@@ -56,11 +53,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                   <Badge tone={row.seasonStatus === "OPEN" ? "brand" : "neutral"}>{row.seasonStatus}</Badge>
                 </td>
                 <td className="py-1.5 pr-2">{row.finalizedOrders}</td>
-                <td className="py-1.5 pr-2">{money(row.itemsCents)}</td>
-                <td className="py-1.5 pr-2">{money(row.feesCents)}</td>
-                <td className="py-1.5 pr-2">{money(row.donationCents)}</td>
-                <td className="py-1.5 pr-2">{money(row.totalCents)}</td>
-                <td className="py-1.5 pr-2">{money(row.collectedCents)}</td>
+                <td className="py-1.5 pr-2">{formatCents(row.itemsCents)}</td>
+                <td className="py-1.5 pr-2">{formatCents(row.feesCents)}</td>
+                <td className="py-1.5 pr-2">{formatCents(row.donationCents)}</td>
+                <td className="py-1.5 pr-2">{formatCents(row.totalCents)}</td>
+                <td className="py-1.5 pr-2">{formatCents(row.collectedCents)}</td>
                 <td className="py-1.5 pr-2">{row.paidOrders} / {row.unpaidOrders}</td>
                 <td className="py-1.5 pr-2">{row.packages}</td>
                 <td className="py-1.5">
@@ -95,7 +92,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                       <td className="py-1 pr-2">{row.methodName}</td>
                       <td className="py-1 pr-2">{row.packages}</td>
                       <td className="py-1 pr-2">{row.delivered}</td>
-                      <td className="py-1">{money(row.lineRevenueCents)}</td>
+                      <td className="py-1">{formatCents(row.lineRevenueCents)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -116,7 +113,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                     <tr key={row.productName} className="border-b border-border/60">
                       <td className="py-1 pr-2">{row.productName}</td>
                       <td className="py-1 pr-2">{row.quantity}</td>
-                      <td className="py-1">{money(row.revenueCents)}</td>
+                      <td className="py-1">{formatCents(row.revenueCents)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -150,9 +147,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               <tr key={row.seasonName} className="border-b border-border/60" data-testid="margin-season-total">
                 <td className="py-1 pr-2 font-medium">{row.seasonName}</td>
                 <td className="py-1 pr-2">{row.shipments}</td>
-                <td className="py-1 pr-2">{money(row.chargedCents)}</td>
-                <td className="py-1 pr-2">{money(row.costCents)}</td>
-                <td className="py-1 font-medium">{money(row.marginCents)}</td>
+                <td className="py-1 pr-2">{formatCents(row.chargedCents)}</td>
+                <td className="py-1 pr-2">{formatCents(row.costCents)}</td>
+                <td className="py-1 font-medium">{formatCents(row.marginCents)}</td>
               </tr>
             ))}
           </tbody>
@@ -175,9 +172,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                 <td className="py-1 pr-2">{row.orderNumber ? `#${row.orderNumber}` : "—"}</td>
                 <td className="py-1 pr-2">{row.recipientName}</td>
                 <td className="py-1 pr-2">{row.carrier} {row.service}</td>
-                <td className="py-1 pr-2">{money(row.chargedCents)}</td>
-                <td className="py-1 pr-2">{money(row.costCents)}</td>
-                <td className="py-1">{money(row.marginCents)}</td>
+                <td className="py-1 pr-2">{formatCents(row.chargedCents)}</td>
+                <td className="py-1 pr-2">{formatCents(row.costCents)}</td>
+                <td className="py-1">{formatCents(row.marginCents)}</td>
               </tr>
             ))}
           </tbody>

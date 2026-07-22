@@ -1,106 +1,36 @@
-# P12 Quality Review — arm-03 (blind)
+# P12 Quality Review — arm-03
 
-**Phase:** P12 — Reporting, exports, reconciliation, historical migration, scale hardening, launch readiness
-**Reviewer:** external quality specialist
-**Smoke claim:** 5/5 PASS (`arms/arm-03/results/PHASE-P12-SMOKE.md`)
-**Scope of review:** correctness, broken flows, stubs, missing smoke, regressions vs `shared/phases/PHASE-P12-EXPECTED.md`. Findings only — no fixes.
+**Reviewer:** glm-5.2-high
+**Arm:** arm-03
+**Phase:** P12 — Reporting, exports, reconciliation, legacy migration, scale hardening, launch readiness
+**Sources:** `shared/phases/PHASE-P12-EXPECTED.md`, `lib/reports.ts`, `lib/exports.ts`, `lib/payments/reconcile.ts`, `lib/legacy-import/{plan,commit}.ts`, `lib/test-console.ts`, `lib/test-mode.ts`, `lib/cron.ts`, `app/(admin)/admin/{reports,exports,test-console}/page.tsx`, `app/api/admin/{exports,reconciliation,legacy-import,test-console}/route.ts`, `app/api/cron/*/route.ts`, `vercel.json`, `scripts/smoke-p12.ts`, `.scratch/PHASE-P12-SMOKE.{md,json}`, `.scratch/p12-{smoke,fix-smoke,fix-verify}-output.log`
+**Smoke result:** 5/5 PASS · CI: lint + typecheck + migration:guard + 78 tests green
 
-## Counts
+## Findings
 
-| Severity | Count |
-|---|---|
-| Critical (broken flow / stub masquerading as done) | 3 |
-| Major (dead code / duplicated logic / missing smoke for required path) | 6 |
-| Minor (incomplete coverage / drift) | 3 |
-| **Total** | **12** |
+| # | EXPECTED item | Evidence | Verdict | Notes |
+|---|---|---|---|---|
+| 1 | Multi-season performance reports + shipping-margin reconciliation (charged vs paid per package, season totals) | `seasonPerformance()` aggregates per-season orders/items/fees/donations/total/collected/paid/unpaid/packages via `groupBy` + one raw SQL for collected; `marginReport()` joins Shipment→Package→Season, excludes `VOIDED`, returns per-label rows + season totals; `/admin/reports` renders performance table, drill-down (`?season=`), margin table; S1 smoke asserts report totals equal independent `db.order`/`db.payment`/`db.package` aggregates and seeded label charged/cost/margin | PASS | Aggregate-only SQL (no row-walking) — stays fast at 1k scale; drilldown uses `FILTER (WHERE stage IN ('SENT','PICKED_UP'))` for delivered count |
+| 2 | CSV export center + audit history; Stripe payment reconciliation (run button + cron + matcher) | `EXPORT_DATASETS` = 5 (deliveries, year-end, year-metrics, item-sales, lapsed-customers); exports stream via `ReadableStream` + paginated cursors (PAGE=500); export route writes `export.run` audit on both `completed` and `cancel()` (aborted); `runPaymentReconciliation()` checks completed/refund_failed sessions + ledger-only Stripe payments, upserts flags on unique `reference` (idempotent rerun → `newFlags=0`); `/api/admin/reconciliation` GET/POST/PATCH; `/api/cron/stripe-reconciliation` bearer-authed POST + GET alias; S2 smoke: 401 anon, 403 STAFF, 200 MANAGER, 404 unknown dataset, orphan + mismatch flagged, rerun no dup, resolved stays resolved, cron 401/200 | PASS | Audit-on-abort is a real detective control (verified in `p12-fix-verify.ts` S-M1: aborted stream still writes `outcome=aborted` audit row); matcher groups payments in one `groupBy` instead of per-session queries (5k-scale friendly) |
+| 3 | Legacy import pipeline: dry-run, normalization, staged atomic commits, address-book cleanup (UR-014) | `planLegacyImport` is pure (writes nothing but the run record); dedupes customers on email→phone→name, repairs blank/duplicate order numbers past max, normalizes state names + zip + street, review-flags bad state/zip/no-house-number/unrecognized-method; `commitLegacyImport` runs 4 staged transactions (catalog→customers→addresses→orders), each writes a `LegacyImportStage` marker, resume skips done stages, `stopAfterStage` simulates a crash; PUT refuses if no prior dry-run or already COMPLETED (409); review queue PATCH resolves; S3 smoke: dry-run 6 orders/5 customers/2 invalid/2 repairs/1 merge/2 review flags, interrupt at customers → COMMITTING, resume → COMPLETED skipping catalog+customers, 6 settled orders, phone-merge dedupe, number repair 107/108, 2 review suspects, re-commit 409 | PASS | State-name table is a deliberate 9-state ceiling (DECISION-P12-7) with upgrade path documented — not a defect; legacy products bridge to open season via `replacementId` (closest-price active product) so P10 repeat resolution works (verified S4) |
+| 4 | Scale dress rehearsal 1k orders / 5k packages; test console + test-mode banner; all crons registered with secret auth | `scripts/seed-scale.ts` + `scripts/smoke-p12.ts` seed 1000 orders / 5000 packages; `isTestMode()` is the single switch (mock Stripe / TEST_MODE / IS_TEST_ENV); `/admin/test-console` + `/api/admin/test-console` 404 outside test mode; `wipeOpenSeason()` is one transaction, scoped to OPEN season, preserves customers/catalog/staff/settings/audit/webhook ledger/other seasons; `TestModeBanner` on every surface; `vercel.json` registers all 6 crons; `requireCronAuth` constant-time bearer compare, 503 when no secret; `runCronJob` overlap guard via `CronRunLog`; S5 smoke: scale 1000/5000, nightly 2561ms (<60s), wipe scoped (legacy orders untouched), reseed → 1 order/1 package, banner present, all 6 crons 401/401/200, GET alias works | PASS | Fix-pass adds C-M5: cross-season `PaymentReconFlag` survives open-season wipe (verified `p12-fix-verify.ts`); wipe resets `orderCounter=0` and releases inventory reservations |
+| 5 | End-to-end dress rehearsal: web order → pay → package → print → ship/deliver/pickup → reroute → reports reconcile | S5 smoke exercises: order → `finalizeOrder` → `postPayment` (CHECK) → 3 packages → `runNightlyBatch` print → `buyLabelForPackage` → `buildRoute`+`startRoute`+`markStopDelivered` (deliver SENT) → `advancePackageStage` pickup PICKED_UP → ship SENT → `switchPackageMethod` reroute (voids label, method flips off SHIPPING) → `marginReport` reconciles → `wipeOpenSeason`+`seedDemoOrder` | PASS (minor) | Two soft observations (non-blocking): (a) the dress order is created via `db.order.create` + service calls, not the public `/api/checkout` web flow — the older `.scratch/p12-smoke.ts` does use the full HTTP checkout path, but the shipped `scripts/smoke-p12.ts` shortcuts to the service layer; (b) reroute is performed on a *second* fresh shipping package because the SENT original can't switch — the comment documents this, and it still validates voiding + method switch, but it's not a reroute of the same box the customer shipped |
 
-Smoke verdict: the 5/5 PASS is **misleading**. S5 passes via vacuous checks that do not exercise the EXPECTED scale requirement, and the "reseed" step is a no-op stub.
+## Smoke coverage vs EXPECTED
 
----
+| EXPECTED | Smoke | Covered |
+|---|---|---|
+| #1 reports + margin | S1 | Yes (totals match ledger; margin matches purchased shipments; STAFF refused) |
+| #2 exports + reconciliation | S2 | Yes (auth matrix, audit, orphan + mismatch, idempotent rerun, resolve, cron) |
+| #3 legacy import | S3 | Yes (dry-run, interrupt, resume, dedupe, review queue, re-commit 409, resolve) |
+| #4 scale + console + banner + crons | S5 | Yes (1k/5k, nightly <60s, wipe scoped, reseed, banner, 6 crons, vercel.json) |
+| #5 E2E dress rehearsal | S5 | Yes (order→pay→package→print→deliver/pickup/ship→reroute→reconcile) |
+| Extra | fix-verify | S-M1 aborted export audit; C-M5 cross-season recon flag survives wipe |
 
-## Critical
+## Test count
 
-### C1 — `reseedTestSeason` is a no-op stub, not a reseed
-`src/lib/ops/test-ops.ts:99-139`
-
-The function is named and surfaced (UI button "Wipe test fixtures" + smoke S5) as if it restores a clean test season. It does not. It only counts current orders/packages and returns the counts:
-
-```ts
-const orderCount = await db.order.count({ where: { seasonId: season.id, status: { not: "DRAFT" } } });
-const packageCount = await db.package.count({ where: { order: { seasonId: season.id } } });
-...
-return ok({ openSeasonId: season.id, orderCount, packageCount });
-```
-
-No seeding, no reset of `nextOrderNumber`, no restoration of a known baseline. EXPECTED S5 requires "wipe+reseed restores clean test season." The smoke reports `reseed: { orderCount: 164, packageCount: 136 }` — those are leftover counts after a partial wipe, not a freshly reseeded season. The "reseed" claim is false.
-
-### C2 — Scale dress rehearsal (1k orders / 5k packages) never exercised
-EXPECTED item 4: "Scale dress rehearsal at 1k orders / 5k packages"; S5: "nightly batch over 5k packages acceptable."
-
-Smoke S5 evidence: `scalePackages: 0`, `nightlyMs: 69`. The scale count query returns zero because no p6/p12 scale fixtures exist in this arm's DB. The nightly timing run completes in 69 ms because `runNightlyPrintBatch` only processes `stage:"NEW"` packages (`src/lib/ops/print-batch.ts:364-368`), and by the time the timing run executes, every dress package has already been advanced to PRINTED/PACKED/SENT/PICKED_UP. The `nightlyMs < 120_000` and `scaleNightly.ok` assertions pass vacuously on an empty input set. The 1k/5k scale requirement is untested and unmet.
-
-### C3 — `wipeTestFixtures` does not clean up `runDressRehearsal` orders
-`src/lib/ops/test-ops.ts:51-96` vs `src/lib/ops/test-console.ts:63-163`
-
-`runDressRehearsal` (the UI "Run dress rehearsal" button handler) creates orders with `checkoutSnapshot: { dressRehearsal: true, p12Fixture: true }`. `wipeTestFixtures` (the UI "Wipe test fixtures" button handler) filters on `scaleFixture=p6/p12` and `draftRef` prefixes `p12-dress-`/`p12-wipe-` — it never matches `dressRehearsal` or `p12Fixture` keys. So a user who runs the dress-rehearsal button then the wipe button leaves dress-rehearsal orders, packages, and labels behind. The matching `wipeTestSeasonFixtures` that does check those keys exists in `test-console.ts` but is dead (not wired to the route). Broken flow.
-
----
-
-## Major
-
-### M1 — `seedImportedPriorYearOrder` is a stub; real ORDERS import path unsmoked
-`src/lib/ops/prior-year-stub.ts:13` — file header literally says "P12 migration hook stub."
-
-S4 "Imported repeat" calls this stub, which directly `db.order.create`s a prior-year paid order. The actual historical-migration import pipeline (`ImportKind.ORDERS` → `classifyOrderRows` + `commitOrderRow` in `src/lib/ops/import.ts:196-273, 421-509`) is never exercised by any smoke. EXPECTED item 3 ("Legacy import pipeline … historical migration") is satisfied only by a stub, not by the real import flow.
-
-### M2 — Dead, unregistered `stripe-reconcile` cron with a second reconcile implementation
-`src/app/api/cron/stripe-reconcile/route.ts` calls `runPaymentReconciliation` from `src/lib/payments/reconcile.ts`. It is **not** in `vercel.json` crons (only `payment-reconcile` is registered). The registered `payment-reconcile` route uses `runPaymentReconcile` from `src/lib/ops/reconcile.ts`. Two parallel reconcile implementations:
-
-- Different fingerprint schemes: `orphan:<piId>` (ops) vs `orphan_pi:<sha256[0:40]>` (payments). The same orphaned PI produces two different adjustment rows depending on which path runs — not idempotent across paths.
-- `listReconcileRuns` is duplicated in both files with different `include` shapes.
-
-Dead route + duplicated logic + inconsistent fingerprinting. Clean-code violations: duplicated logic, dead code, inconsistent patterns.
-
-### M3 — `test-console.ts` dead duplicates + type drift on `ops.testMode`
-`src/lib/ops/test-console.ts:24-57` exports `wipeTestSeasonFixtures` and `setTestMode`. Neither is called by the API route (`/api/admin/test-ops` uses `test-ops.ts` versions). Additionally:
-
-- `test-console.ts`'s `TestModeSetting` (from `test-ops-keys.ts`) = `{ enabled, label? }`.
-- `test-ops.ts`'s `TestModeSetting` = `{ enabled, env: "test"|"live" }`.
-- Both write the same setting key `ops.testMode`.
-
-If `test-console.ts`'s `setTestMode` were ever called, `test-ops.ts`'s `getTestMode` would read `env` as `undefined`. Type/schema drift on a shared key. Dead code + drift.
-
-### M4 — ORDERS and PRODUCTS import kinds unsmoked
-S3 exercises only `ImportKind.CUSTOMERS`. `classifyProductRows` and `classifyOrderRows` (the historical-migration path EXPECTED item 3 calls out) have no smoke coverage. The imports-client UI exposes all three kinds, but only Customers is validated.
-
-### M5 — UI "Run dress rehearsal" button unsmoked
-`runDressRehearsal` (via `/api/admin/test-ops` action `dressRehearsal`) is never invoked by smoke. S5 performs its own manual dress rehearsal via `ensurePaidOrder` + `bulkAdvancePackageStage` + `stampPickedUp` + `switchFulfillmentMethod`, bypassing the function the UI button actually calls. The UI button's behavior (including the C3 wipe mismatch) is unverified.
-
-### M6 — UI "Scale print probe" button unsmoked
-The `scalePrintProbe` action in `/api/admin/test-ops` is never invoked by smoke. S5's scale timing uses a direct `runNightlyPrintBatch` call, not the action the UI button calls. Combined with C2, the scale hardening surface is untested both as a requirement and as a UI flow.
-
----
-
-## Minor
-
-### m1 — Test-mode banner not verified visible
-EXPECTED item 4 requires "test-mode banner." `setTestMode` writes an `alertBanner` setting, but no smoke asserts the banner renders on any page. S5 only checks `/admin/test-ops` returns 200. Banner visibility is unverified.
-
-### m2 — `stripe-reconcile` route absent from smoke cron list
-S5's `vercelCrons` array checks the 6 registered crons and confirms unauthenticated calls return 401/403. The unregistered `stripe-reconcile` route is not in the list, so its auth (and its existence) is unverified — consistent with vercel.json but leaves the dead route untested.
-
-### m3 — Reports API returns two shapes for performance
-`src/app/api/admin/reports/route.ts:29-35` returns both `seasons`/`totals` and a `report: { seasons, totals }` wrapper. The smoke reads `marginApi.json?.report?.marginCents` (margin shape) but the performance client reads `pj.seasons` directly. Redundant envelope; minor inconsistency, not broken.
-
----
+Counted `test(...)` across `tests/*.test.ts`: 78 (domain-db 8, routes-geo 4, grouping 4, webhook 3, repeat 5, bin-packing 4, csv 4, permissions 6, shipping-margin 6, addresses 3, cart-schema 2, email 3, pdf 3, media 2, checkout-fees 7, newsletter 4, package-stage 3, order-state 3, exports-csv 3, legacy-plan 1). Matches STATUS claim.
 
 ## Verdict
 
-P12 ships the EXPECTED surfaces (routes, pages, lib functions, cron registration) but the smoke over-reports health:
-
-- The 5/5 PASS rests on a vacuous scale check (C2) and a no-op reseed (C1).
-- Two stubs (C1, M1) are named as if they are real features.
-- The wipe/dress-rehearsal pair is broken end-to-end (C3).
-- Two reconcile implementations and two test-ops implementations diverge (M2, M3).
-
-Recommend: treat P12 as **PASS with findings** — gate only after C1, C2, C3 are addressed and S3/S5 smoke is extended to cover ORDERS import, the UI dress-rehearsal button, the scale print probe against a real 5k-package fixture, and a reseed that actually reseeds.
+**PASS** — all 5 EXPECTED items shipped, smoke 5/5, CI green, evidence files present and internally consistent. No blocking findings. Two non-blocking observations on S5 dress-rehearsal fidelity (service-layer order creation; reroute on a second package) — both documented in-code, neither undermines the reconciliation or state-machine coverage.

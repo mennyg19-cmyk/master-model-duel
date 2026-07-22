@@ -161,21 +161,29 @@ export async function runPaymentReconciliation(): Promise<ReconcileSummary> {
 
   // Upsert on the unique reference: reruns refresh, never duplicate. A flag a
   // staff member already resolved stays resolved — the finding is historical.
+  // createMany(skipDuplicates) + updateMany(open) is race-safe under concurrent
+  // runs (unique reference); a mid-loop P2002 can never leave a partial write
+  // without a matching audit on the caller side.
   let newFlags = 0;
-  const existingFlags = findings.length
-    ? await db.paymentReconFlag.findMany({ where: { reference: { in: findings.map((finding) => finding.reference) } } })
-    : [];
-  const existingByReference = new Map(existingFlags.map((flag) => [flag.reference, flag]));
-  for (const finding of findings) {
-    const existing = existingByReference.get(finding.reference);
-    if (!existing) {
-      await db.paymentReconFlag.create({
-        data: { kind: finding.kind, reference: finding.reference, orderId: finding.orderId, detail: finding.detail },
-      });
-      newFlags += 1;
-    } else if (existing.status === "open") {
-      await db.paymentReconFlag.update({ where: { id: existing.id }, data: { detail: finding.detail } });
-    }
+  if (findings.length > 0) {
+    const created = await db.paymentReconFlag.createMany({
+      data: findings.map((finding) => ({
+        kind: finding.kind,
+        reference: finding.reference,
+        orderId: finding.orderId,
+        detail: finding.detail,
+      })),
+      skipDuplicates: true,
+    });
+    newFlags = created.count;
+    await db.$transaction(
+      findings.map((finding) =>
+        db.paymentReconFlag.updateMany({
+          where: { reference: finding.reference, status: "open" },
+          data: { detail: finding.detail, kind: finding.kind, orderId: finding.orderId },
+        })
+      )
+    );
   }
 
   const byKind: Record<string, number> = {};

@@ -21,42 +21,48 @@
     "id": "S1",
     "check": "Reports + margin",
     "pass": true,
-    "seasonOrders": 170,
-    "paidOrders": 117,
+    "seasonOrders": 2,
+    "ledgerOrders": 2,
+    "paidOrders": 1,
     "marginTotals": {
-      "chargedCents": 32400,
-      "purchasedCents": 21600,
-      "marginCents": 10800
+      "seasonName": "Purim 2026",
+      "shipments": 1,
+      "chargedCents": 1800,
+      "costCents": 980,
+      "marginCents": 820
     },
-    "seededLabels": {
-      "charged": 3600,
-      "purchased": 2400,
-      "margin": 1200
+    "seededLabel": {
+      "charged": 1800,
+      "cost": 980,
+      "margin": 820
     },
-    "pages": {
-      "perf": 200,
-      "margin": 200
-    }
+    "drillMethods": 4,
+    "drillItems": 1
   },
   {
     "id": "S2",
     "check": "Exports + reconciliation",
     "pass": true,
-    "exportRows": 18,
-    "unauthorized": 403,
+    "exportRows": 39,
+    "unauthorized": 401,
+    "denied": 403,
     "authorized": 200,
+    "auditCount": 8,
     "orphanFlagged": true,
     "recon1": {
-      "orphaned": 2,
-      "created": 2
+      "findings": 1,
+      "newFlags": 1,
+      "byKind": {
+        "orphaned_payment": 1
+      }
     },
     "recon2": {
-      "created": 0,
-      "skipped": 2
+      "findings": 1,
+      "newFlags": 0
     },
     "cron": {
-      "ok": 200,
-      "noAuth": 401
+      "missing": 401,
+      "ok": 200
     }
   },
   {
@@ -64,63 +70,104 @@
     "check": "Legacy import",
     "pass": true,
     "drySummary": {
-      "total": 5,
-      "valid": 3,
-      "duplicate": 1,
-      "invalid": 1
+      "customers": 5,
+      "orders": 6,
+      "invalid": 2,
+      "repairs": 2,
+      "merges": 1,
+      "reviewFlags": 2,
+      "sourceTotals": {
+        "rows": 9,
+        "orders": 6,
+        "customers": 5,
+        "revenueCents": 34200
+      }
     },
-    "dryCommitted": 3,
-    "interrupted": true,
-    "resumed": "COMMITTED",
+    "interrupted": "COMMITTING",
+    "resumed": "COMPLETED",
+    "stages": [
+      "catalog",
+      "customers",
+      "addresses",
+      "orders"
+    ],
+    "reviewQueue": 2,
     "goodCustomer": true,
-    "cleanup": {
-      "flagged": 1,
-      "queue": 1
-    }
+    "importedOrders": 6
   },
   {
     "id": "S4",
     "check": "Imported repeat",
     "pass": true,
-    "importedOrderId": "cmrv92tik003gqxh41ryae5ji",
-    "draftRef": "D-2026-6B27B5A6",
-    "reviewPage": 200,
-    "accountReview": 200
+    "importedOrderId": "cmrvdrn6e001vqx8sn7kai7bj",
+    "orderNumber": 101,
+    "lines": 2,
+    "mapped": 2,
+    "mappings": [
+      "replacement",
+      "replacement"
+    ],
+    "reviewPage": 307,
+    "customerEmail": "chaim.gold@example.com",
+    "targetSeason": "Purim 2026"
   },
   {
     "id": "S5",
     "check": "Dress rehearsal",
     "pass": true,
     "dress": {
-      "orderId": "cmrv92u7x003wqxh4b63dscek",
-      "printBatchId": "cmrv92u9v004sqxh4oqrx20uv",
-      "marginCents": 300
+      "orderId": "cmrvdrn9g002sqx8soahxx61y",
+      "orderNumber": 4,
+      "printBatchId": "cmrvdrnae003eqx8sdjmaj72p",
+      "marginCents": 1220,
+      "labelId": "cmrvdrnbr004hqx8sr39yvd9e",
+      "rerouteMethod": "local_delivery",
+      "voidedLabels": 1
     },
-    "dressBeforeWipe": 1,
-    "dressAfterWipe": 0,
-    "scaleAfterWipe": 0,
-    "probe": {
-      "scaleOrders": 1000,
-      "scalePackages": 5000,
-      "newPackagesProcessed": 365,
-      "nightlyMs": 139,
+    "stagesBeforeWipe": {
+      "deliver": "SENT",
+      "pickup": "PICKED_UP",
+      "ship": "SENT"
+    },
+    "scale": {
+      "orders": 1000,
+      "packages": 5000,
+      "nightlyMs": 2561,
+      "nightlyPkgCount": 5003,
       "acceptable": true
     },
     "wipe": {
-      "deletedOrders": 1000,
-      "deletedLabels": 1,
-      "deletedCustomers": 3
+      "routeLinks": 0,
+      "routeStops": 2,
+      "routes": 1,
+      "shipments": 3,
+      "quoteOptions": 9,
+      "quotes": 3,
+      "printArtifacts": 1009,
+      "printBatches": 1,
+      "notifications": 10,
+      "lineAddOns": 0,
+      "lineOptions": 0,
+      "lines": 5007,
+      "packageAudits": 17,
+      "packages": 5006,
+      "payments": 503,
+      "checkoutSessions": 1,
+      "paymentIntents": 0,
+      "reconFlags": 1,
+      "orders": 1205,
+      "drafts": 0,
+      "bulkSchedules": 0
     },
+    "dressBeforeWipe": 2,
+    "dressAfterWipe": 0,
+    "scaleAfterWipe": 0,
     "reseed": {
-      "openSeasonId": "cmruro40z0007qx5wepn8bspr",
-      "orderCount": 235,
-      "packageCount": 162
+      "orderNumber": 1,
+      "orderCount": 1,
+      "packageCount": 1
     },
-    "pages": {
-      "testOps": 200,
-      "help": 200,
-      "reports": 200
-    },
+    "testMode": true,
     "cronUnauthorized": [
       401,
       401,
@@ -128,7 +175,8 @@
       401,
       401,
       401
-    ]
+    ],
+    "unused": 0
   }
 ]
 ```

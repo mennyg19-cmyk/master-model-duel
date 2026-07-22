@@ -21,7 +21,11 @@ export type PurchasedLabel = {
 export type AddressCheck = { valid: boolean; messages: string[] };
 
 export function shippoMode(): "live" | "mock" {
-  return env.SHIPPO_API_TOKEN ? "live" : "mock";
+  // SHIPPO_MODE=mock (and the local placeholder token) keep deterministic
+  // fixture rates — a stringy "shippo_mock" token must never hit the live API.
+  if (process.env.SHIPPO_MODE === "mock") return "mock";
+  if (!env.SHIPPO_API_TOKEN || env.SHIPPO_API_TOKEN === "shippo_mock") return "mock";
+  return "live";
 }
 
 export class ShippoError extends Error {}

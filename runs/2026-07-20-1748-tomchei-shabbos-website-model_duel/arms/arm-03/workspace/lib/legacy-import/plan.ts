@@ -182,7 +182,14 @@ export async function planLegacyImport(csv: string): Promise<LegacyPlan | { erro
       if (emailValid && !keyByEmail.has(email)) keyByEmail.set(email, key!);
     }
     if (!key) {
-      key = emailValid ? email : phone ? `phone:${phone}` : `name:${name.toLowerCase()}`;
+      // Name-only keys without a usable name must include the source line —
+      // otherwise every nameless/phoneless row collapses onto `name:` and one
+      // synthetic email, merging unrelated people into a single Customer.
+      key = emailValid
+        ? email
+        : phone
+          ? `phone:${phone}`
+          : `name:${name ? name.toLowerCase() : `line-${line}`}`;
       if (customersByKey.has(key) && !emailValid) {
         // name-keyed rows collapse into the existing name-keyed customer
       } else if (!customersByKey.has(key)) {

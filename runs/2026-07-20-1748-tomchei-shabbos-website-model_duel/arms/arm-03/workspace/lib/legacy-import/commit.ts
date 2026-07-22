@@ -232,9 +232,13 @@ export async function commitLegacyImport(
           });
           orderCount += 1;
         }
-        // Season counter covers the imported numbers so future numbering never collides.
+        // Never rewind a live counter — take the max of current vs imported.
         const maxNumber = Math.max(0, ...plan.orders.map((order) => order.orderNumber));
-        await tx.season.update({ where: { id: seasonId }, data: { orderCounter: maxNumber } });
+        const seasonRow = await tx.season.findUniqueOrThrow({ where: { id: seasonId }, select: { orderCounter: true } });
+        await tx.season.update({
+          where: { id: seasonId },
+          data: { orderCounter: Math.max(seasonRow.orderCounter, maxNumber) },
+        });
         await tx.legacyImportStage.create({ data: { runId, stage, counts: { orders: orderCount } } });
       }, { timeout: 60_000 });
       completed.push({ stage, counts: { orders: plan.orders.length }, skipped: false });

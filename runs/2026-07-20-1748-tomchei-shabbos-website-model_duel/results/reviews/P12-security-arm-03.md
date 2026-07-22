@@ -1,112 +1,31 @@
-# P12 Security Review — arm-03 (blind)
+# P12 Security Review — arm-03
 
-**Reviewer:** external security specialist
-**Phase:** P12 — Reporting, exports, reconciliation, migration, launch readiness
-**Tree:** `runs/2026-07-20-1748-tomchei-shabbos-website-model_duel/arms/arm-03/workspace`
+**Reviewer:** glm-5.2-high
+**Workspace:** `arms/arm-03/workspace`
 **EXPECTED:** `shared/phases/PHASE-P12-EXPECTED.md`
-**Scope:** trust boundaries, auth, secrets, IDOR, injection, export auth, cron bearer, Stripe reconcile. Findings only — no fixes.
+**Smoke:** `arms/arm-03/results/PHASE-P12-SMOKE.md` — 5/5 PASS
+**Scope:** export auth, import pipeline trust boundaries, test console destructive routes, reconciliation cron auth, IDOR on reports/exports.
 
 ## Summary
 
-| Severity | Count |
-|---|---|
-| Critical | 0 |
-| High | 0 |
-| Medium | 2 |
-| Low | 5 |
-| Informational | 4 |
-| **Total** | **11** |
-
-Auth posture is solid for the new admin surface: every `/api/admin/*` route calls `requirePermission` (`admin.access` for reads, `settings.write` for mutations), and both cron reconcile routes gate on `requireCronBearer` with `timingSafeEqual` and fail closed (503) when `CRON_SECRET` is unset. Smoke S2 confirms unauthorized export → 403 and unauthenticated cron → 401. No IDOR was found in admin routes (all data is admin-scoped; `seasonId`/`batchId`/`sourceId`/`targetId` are server-validated and Prisma-parameterized — no raw SQL, no path injection). The findings below are trust-boundary smells, scale/DoS risks, and surface hygiene.
+Core P12 security posture is solid: every admin route gates through `requirePermissionApi`; all six cron endpoints use `requireCronAuth` (constant-time compare, 503 when `CRON_SECRET` unset); the test console fail-closes to 404 outside test mode; exports stream with audit-on-complete-and-abort and CSV formula neutralization (`csvField` tab-prefix on `=+\-@`); legacy import is dry-run-then-commit keyed by SHA-256 file hash with staged atomic transactions; address-book edits verify `address.customerId === customerId` (no IDOR). Findings below are hardening gaps, not gate failures.
 
 ## Findings
 
-### M-01 — Test-ops destructive/polluting actions have no environment guard  (Medium)
+| ID | Severity | Location | Claim | Suggested fix |
+|---|---|---|---|---|
+| P12-S1 | Medium | `app/api/admin/reconciliation/route.ts:20-31` (POST) | The manual "Run reconciliation" button calls `runPaymentReconciliation()` directly, with no overlap guard. The cron half wraps the same call in `runCronJob` (DB-claimed CronRunLog, stale-claim reaping). Two managers clicking Run simultaneously race on the `paymentReconFlag` upsert: both see "no existing flag" in the `findMany` lookup, both call `create`, and the unique `reference` constraint throws P2002 on one run → 500 to the user. Idempotent by design but not concurrency-safe. | Wrap the manual POST body in `runCronJob("stripe-reconciliation", …)` (same jobName as the cron so manual + scheduled runs also serialize against each other), or run the matcher inside a `db.$transaction` with an advisory lock. |
+| P12-S2 | Low | `app/api/dev/stripe-checkout/route.ts:22-61` | Mock-gateway checkout trigger has no auth and no customer-session check. Anyone who knows a `stripeSessionId` can POST `checkout.session.completed` for any session, with an arbitrary `amountCents` override (the "test hook" from the comment). Test-mode only (refused when a live Stripe key is set), so impact is bounded to mock money — but it lets an unauthenticated caller complete any checkout for any amount, bypassing the test customer's own session. | Require `getCustomerContext()` and verify the session's `customerId` matches before accepting the pay request, or at minimum drop the public `amountCents` override and drive it from the session row only. |
+| P12-S3 | Low | `app/api/setup/route.ts:19-62` | First-manager bootstrap has no rate limit. The transaction guards the race (only one manager created, then 423), but on a fresh deploy an attacker can spam POST `/api/setup` with a known email/password trying to win the race before the operator does. No lockout, no IP throttle. | Apply `rateLimit("setup:${clientIp(request)}", …)` from `lib/rate-limit` (same pattern as `addresses/autocomplete`). Cheap, closes the brute-race window. |
+| P12-S4 | Low | `lib/legacy-import/plan.ts:185-197` | Synthetic emails for nameless/phoneless rows use `legacy+${slugify(name \|\| phone \|\| String(line))}@imported.invalid`. When `name` is empty and `phone` is null, the fallback is `String(line)` — unique per line — but when `name` is the literal fallback `"Imported customer"` (line 192) for two distinct people with no usable identity, both collapse onto the same `name:imported customer` key and the same synthetic email, merging two unrelated people into one Customer row. Data-integrity issue, not a privilege boundary. | Either refuse to import a row with no email AND no phone AND no name (already happens at line 172-175 — but `name` falls back to `"Imported customer"` only after that check passes on a non-empty `name` that itself was a fallback). Tighten: when the only identity is the fallback name, review-flag the row instead of merging. |
+| P12-S5 | Info | `app/api/admin/reconciliation/route.ts:35-56` (PATCH) | Resolving a `PaymentReconFlag` (marking a money discrepancy closed) gates on `reports.view` — the same permission that views reports. A staff member who can read the recon list can also silently resolve (hide) a genuine orphaned-payment flag. No separate "resolve" permission exists. | Consider gating PATCH on `payments.refund` (already audited, money-path) or a new `reconciliation.resolve` permission, so viewing the discrepancy and closing it aren't the same trust level. |
+| P12-S6 | Info | `lib/test-console.ts:16-66` | `wipeOpenSeason` is a hard delete of every transactional row for the open season (orders, packages, shipments, payments, intents, recon flags). No soft-delete, no snapshot. Documented test-only and the route 404s in live mode — but a misconfigured staging deploy (NODE_ENV≠production, no STRIPE_SECRET_KEY → `isTestMode()` true) that's publicly reachable exposes a one-click season wipe to anyone with `settings.manage`. | The env guard already refuses mock money in production. Add a parallel guard: refuse to start if `NODE_ENV !== "production"` AND `TEST_MODE` is unset AND the deploy is not localhost — or document that staging must set `TEST_MODE=false` explicitly to hide the console even in mock-money mode. (Currently `isTestMode()` infers test from mock money, which is convenient but also the exposure.) |
 
-**Files:** `src/lib/ops/test-ops.ts`, `src/lib/ops/test-console.ts`, `src/app/api/admin/test-ops/route.ts`
+## What passed (worth recording)
 
-`setTestMode`, `runDressRehearsal`, `wipeTestFixtures`, `reseedTestSeason`, and `scalePrintProbe` are gated only by `settings.write` (MANAGER) plus a `testMode.enabled` flag stored in `AppSetting`. There is no check against `NODE_ENV`, `AUTH_MODE`, or any "is this a production season" guard. In production with `AUTH_MODE=clerk`, a MANAGER can:
-
-- Enable test mode (only effect is a UI banner — no operational lock).
-- `runDressRehearsal` creates a real DRAFT → finalized → PAID order in the **live open season** with a CASH payment of `product.basePriceCents * 3` and a purchased shipping label (`src/lib/ops/test-console.ts:143-259`). This inflates revenue, margin, and audit with fake data in the real season.
-- `scalePrintProbe` runs `runNightlyPrintBatch` against the real open season, creating real print artifacts and audit entries.
-
-The wipe is fixture-scoped (`checkoutSnapshot.scaleFixture` / `draftRef startsWith "p12-"`), so it will not delete real customer orders — but the dress-rehearsal and scale-probe paths write live data with no environment separation. The test-mode banner is a UX signal, not a control. This contradicts the P12 "launch readiness" intent.
-
-### M-02 — Reconcile loads all StripePaymentIntents unbounded (Medium)
-
-**File:** `src/lib/ops/reconcile.ts:45-53`
-
-`runPaymentReconcile` calls `db.stripePaymentIntent.findMany({ include: { order: { include: { payments: ... } } } })` with **no `take` and no pagination**, then iterates in JS memory. P12's stated goal is scale hardening at 1k orders / 5k packages. A cron job that pulls every StripePaymentIntent plus its order and posted payments into a single query can OOM the server or stall Postgres once the table grows. The Stripe-live path (`src/lib/payments/reconcile.ts:198`) caps at `limit: 100` and the mock fallback at `take: 500`, so only the ops path (the one wired to the scheduled `/api/cron/payment-reconcile` and the manual admin button) is unbounded.
-
-## Low
-
-### L-01 — Two divergent reconcile implementations (Low)
-
-**Files:** `src/lib/ops/reconcile.ts` vs `src/lib/payments/reconcile.ts`
-
-Two parallel reconcile code paths exist with incompatible contracts:
-
-- Fingerprint: `orphan:<stripePaymentIntentId>` (ops) vs `sha256("orphan_pi:<id>").slice(0,40)` (payments).
-- Adjustment `kind`: `ORPHANED_PAYMENT_INTENT` (ops) vs `ORPHAN_PAYMENT_INTENT` (payments).
-- Orphan definition: ops flags any PI whose order is unpaid; payments flags any Stripe PI with no posted payment.
-- Local-write side effect: payments path upserts a `stripePaymentIntent` row; ops path does not.
-
-The scheduled cron (`payment-reconcile`) and the manual admin button both use the **ops** path; the **payments** path is only reachable via the unscheduled `stripe-reconcile` route. If both ever run for the same orphan, they create two distinct adjustment rows (different fingerprints, different `kind`) for the same PaymentIntent — reconciliation truth diverges. Trust-boundary inconsistency across two implementations of the same domain rule.
-
-### L-02 — Stripe `metadata.orderId` trusted for local DB writes (Low)
-
-**File:** `src/lib/payments/reconcile.ts:79, 122-133`
-
-`runPaymentReconciliation` computes `orderId = localPi?.orderId ?? intent.metadata?.orderId ?? null` and, when `orderId && !localPi`, upserts a local `stripePaymentIntent` row linking the Stripe PI to that order and creates an `ORPHAN_PAYMENT_INTENT` adjustment. Stripe PaymentIntent `metadata` is treated as authoritative for local row creation. In the current checkout flow PIs are created server-side so metadata is merchant-controlled, keeping exposure low — but the trust boundary is wrong: external Stripe data drives local foreign-key writes without re-validating that the order exists, belongs to the expected season, or matches the PI amount. If a future flow lets a customer influence metadata, this becomes an order-impersonation vector.
-
-### L-03 — CSV export builds full file in memory (Low)
-
-**File:** `src/lib/ops/exports.ts:14-18, 165-223`; `src/lib/exports/center.ts:19-26, 222-279`
-
-`toCsv` concatenates all rows into a single string and the route returns it as one `NextResponse` body. Dataset caps are 50,000 rows (DELIVERIES, ITEM_SALES, SHIPPING_MARGIN) and 20,000 (LAPSED_CUSTOMERS). A 50k-row CSV with several columns can be tens of MB held as one UTF-8 string plus one BOM-prefixed copy. A MANAGER running repeated large exports can drive memory pressure. No streaming, no row cap per request, no rate limit. (Also note: `src/lib/exports/center.ts` is a second, dead `runExport` implementation — duplicate surface, see I-04.)
-
-### L-04 — `performanceReport` loads every order per season in memory (Low)
-
-**File:** `src/lib/ops/reports.ts:37-104`
-
-`performanceReport` does `db.order.findMany({ where: { seasonId, status: { not: DRAFT } }, include: { packages, payments } })` per season with no `take`. For multi-season requests (the default — no `seasonIds` filter) it loops every season and loads all non-draft orders with relations into JS, then aggregates in a `for` loop. At P12 scale this is unbounded and runs on every `/api/admin/reports?kind=performance` call (admin.access — STAFF and MANAGER). DoS-adjacent and contradicts scale-hardening.
-
-### L-05 — `.env.example` ships non-placeholder dev secrets (Low)
-
-**File:** `.env.example:28-57`
-
-`.env.example` is committed (`.gitignore` allows `!.env.example`) and contains real-looking dev secret values rather than placeholders: `NEWSLETTER_HMAC_SECRET=tomchei-arm03-newsletter-hmac-dev-only`, `DRAFT_ACCESS_SECRET=tomchei-arm03-draft-access-hmac-dev-only`, `CRON_SECRET=tomchei-arm03-cron-dev-only`, `STRIPE_SECRET_KEY=sk_test_mock`, `STRIPE_WEBHOOK_SECRET=whsec_mock_dev_only`. These are dev-only, but a committed template should use placeholders (`<set-me>`) so operators don't ship the example value to production by accident. The smoke script also hardcodes a fallback (`process.env.CRON_SECRET || "tomchei-arm03-cron-dev-only"`), reinforcing the default.
-
-## Informational
-
-### I-01 — `/api/cron/stripe-reconcile` is not registered in `vercel.json` (Informational)
-
-**Files:** `src/app/api/cron/stripe-reconcile/route.ts`, `vercel.json`
-
-The route exists, is bearer-protected, and calls the Stripe-live `runPaymentReconciliation`, but `vercel.json` only schedules `payment-reconcile`. `stripe-reconcile` never runs on a schedule — it is only reachable by anyone holding `CRON_SECRET` via manual HTTP. Dead/unscheduled attack surface; also means the Stripe-live reconcile (the one that actually pulls from Stripe) never executes automatically, so the scheduled cron is local-only.
-
-### I-02 — Reconcile cron routes accept both GET and POST (Informational)
-
-**Files:** `src/app/api/cron/payment-reconcile/route.ts:51-65`, `src/app/api/cron/stripe-reconcile/route.ts:51-65`
-
-Both routes export `GET` and `POST` running identical logic. Vercel Cron calls GET. The POST handler adds nothing functional and doubles the verb surface (both are bearer-gated, so not CSRFable, but unnecessary).
-
-### I-03 — Duplicate address-cleanup endpoints (Informational)
-
-**Files:** `src/app/api/admin/address-cleanup/route.ts`, `src/app/api/admin/addresses/cleanup/route.ts`
-
-Two routes expose address cleanup, both `settings.write`-gated. The first only runs `runAddressCleanup`; the second adds a `merge` action via a discriminated-union schema. Same underlying `runAddressCleanup` in both. Redundant surface; the first endpoint is a strict subset and appears to be the older leftover.
-
-### I-04 — Reconcile responses expose full Stripe PaymentIntent IDs (Informational)
-
-**Files:** `src/app/api/admin/reconcile/route.ts:8-23`, `src/lib/ops/reconcile.ts:11-24, 145-153`
-
-The admin reconcile GET returns `adjustments` with `stripePaymentIntentId`, `orderId`, `amountCents`; the POST returns `orphans` with the same plus `status`. Stripe PaymentIntent IDs are payment credentials-adjacent and order IDs are internal. Admin-only (settings.write), so acceptable, but the response should minimize — return only counts and a cursor/preview, not the full PI IDs for every orphan.
-
-## Out of scope notes
-
-- `src/lib/exports/center.ts` (`runExport` / `listExportHistory`) is a second, unreferenced export implementation (dead code). Clean-code issue, not security; mentioned here for awareness.
-- `.env` itself is gitignored (`.gitignore:34` excludes `.env*` except `.env.example`). No committed live secrets were found.
-- `requireCronBearer` correctly uses `timingSafeEqual` with a length pre-check and fails closed when `CRON_SECRET` is unset. No finding.
-- All admin routes reviewed use `requirePermission` with the correct permission tier; no missing-auth routes found in the P12 surface.
+- Export download (`app/api/admin/exports/[dataset]/route.ts`): `reports.view` gate, `isExportDataset` allowlist (no path/header injection on `content-disposition`), audit on both `completed` and `aborted` stream outcomes, seasonId validated via `season.findUnique` → 404 on miss. Smoke S2 confirms 401/403/200.
+- Cron auth (`lib/cron.ts` + all six `app/api/cron/*/route.ts`): `requireCronAuth` uses `timingSafeEqual` with length-equality precheck (secret length is fixed, no leak that matters), 503 when `CRON_SECRET` unset, `runCronJob` reaps stale running claims >10min and serializes overlaps via oldest-claim-wins. `vercel.json` registers all six schedules.
+- Test console (`app/api/admin/test-console/route.ts` + page): `isTestMode()` checked before the permission gate so the route 404s (not 401) outside test mode — endpoint hidden, not just denied. `settings.manage` required. Wipe is one transaction (120s timeout); smoke S5 confirms 5003 packages wiped in 2.5s.
+- Legacy import trust boundary (`app/api/admin/legacy-import/route.ts`): `imports.legacy` gate; PUT requires the exact bytes hash-match a prior dry-run (`findUnique({ where: { fileHash } })`); plan re-derived from posted bytes so a body swap can't sneak past; `parseCsv` enforces `MAX_IMPORT_ROWS=5000`; `bodySchema` caps csv at 5MB. Review queue (`legacy-import/review`) resolves by `itemId` with `status: "open"` guard.
+- IDOR: address-book PATCH (`app/api/admin/customers/[id]/addresses/[addressId]/route.ts`) verifies `address.customerId !== customerId` → 404. Reports drilldown validates `seasonId` against the performance list before calling `seasonDrilldown`. Single-tenant, so cross-org IDOR is moot, but the within-tenant checks are present anyway.
+- CSV formula injection (SR-04): `lib/csv.ts:csvField` tab-prefixes any field starting with `=+\-@` on export — customer-controlled greeting/name/address can't execute when staff open the export in Excel.

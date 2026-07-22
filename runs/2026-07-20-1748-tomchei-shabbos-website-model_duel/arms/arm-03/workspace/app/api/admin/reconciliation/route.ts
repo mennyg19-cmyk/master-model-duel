@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requirePermissionApi } from "@/lib/auth/current-user";
 import { writeAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { runCronJob } from "@/lib/cron";
 import { runPaymentReconciliation } from "@/lib/payments/reconcile";
 
 // Stripe payment reconciliation (R-093): run button + open-flag list + resolve.
@@ -21,7 +22,12 @@ export async function POST() {
   const gate = await requirePermissionApi("reports.view");
   if ("response" in gate) return gate.response;
 
-  const summary = await runPaymentReconciliation();
+  // Same overlap lock as the nightly cron — concurrent manual POSTs (and
+  // manual+cron) skip instead of racing creates on unique `reference`.
+  const summary = await runCronJob("stripe-reconciliation", () => runPaymentReconciliation());
+  if ("skipped" in summary) {
+    return Response.json({ error: "Reconciliation already running — try again in a moment" }, { status: 409 });
+  }
   await writeAudit(gate.staff, {
     action: "reconciliation.run",
     targetType: "PaymentReconFlag",
