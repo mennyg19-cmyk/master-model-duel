@@ -21,3 +21,18 @@
 **What happened:** Added contestant mid-run.
 **Rule:** Shared freezes unchanged; see protocol/LATE-JOIN.md.
 **Status:** DECIDED
+
+## [2026-07-25T19:50:00Z] arm-04 orchestrated from a cloud agent VM — three host limits
+**What happened:** The arm-04 late join was run by an orchestrator on a Cursor cloud VM rather than the local host. Three things that host cannot do:
+
+1. **Test 1a blocked.** `SOURCE.md` points at a local Windows path, and the private source repo `mennyg19-cmyk/tomche-shabbos-website` is not reachable from the VM (only the empty public `Tomchei-Shabbos-Website` scaffold is). No source tree → no inventory pass.
+2. **Test 1b blocked.** The grill is a live interview with the user; it cannot run unattended.
+3. **Test 2 written but ungraded.** The frozen reviewer `glm-5.2-high` is not a spawnable model in the cloud VM's subagent catalog, so no plan review was produced. Substituting another reviewer would break the frozen-panel rule, so the grade is left open instead.
+
+**Rule:** LATE-JOIN.md freezes the reviewer model/family; a swap is not allowed without an explicit user decision. Shared freezes (reconciled inventory, merged plan, phase cuts, arm-01/02/03 scores) untouched.
+**Status:** OPEN — arm-04 Test 2 grade and Tests 1a/1b await a run from the local host (or an equivalent host with source access and `glm-5.2-high`).
+
+## [2026-07-25T19:50:00Z] arm-04 Test 2 cost row has no usage numbers
+**What happened:** Cursor Task does not report token/$ usage to a cloud orchestrator, so the arm-04 Test 2 ledger row was appended with `usage_missing_pending_export`.
+**Rule:** Cost gate needs `verify-cost-ledger.ps1 -RequireUsage`; backfill via `scripts/backfill-cost-ledger.ps1` after a dashboard CSV export.
+**Status:** OPEN — backfill before any arm-04 test gate.

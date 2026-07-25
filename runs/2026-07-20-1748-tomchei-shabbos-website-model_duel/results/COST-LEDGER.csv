@@ -348,3 +348,4 @@
 2026-07-22T01:49:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,6,arm-03,,detect,cursor-grok-4.5-high,2a87b30a-2e82-41a4-9ca9-e21cd519d794,,,,,,,,4/5 bugs found; usage_missing
 2026-07-22T01:59:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,6,arm-03,,vague_fix,cursor-grok-4.5-high,903d309c-809f-4681-8611-c77814aab9d0,,,,,,,,5/5 symptoms ci 78; usage_missing
 2026-07-22T01:59:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,,residual_aggregate,glm-5.2-high,8007db92-f8d5-4149-a666-0b82333850e7,,,,,,,,Test5 score 11/15; usage_missing
+2026-07-25T19:52:22Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-04,,plan,claude-opus-5-thinking-medium,057d6f46-02e5-46c9-812e-e026e4b3ed56,,,,,,,,late_join arm-04; 16 phases; input=USER-RESOLVED-INVENTORY; usage_missing_pending_export

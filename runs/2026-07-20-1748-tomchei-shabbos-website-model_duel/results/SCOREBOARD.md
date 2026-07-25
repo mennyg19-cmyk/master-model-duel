@@ -7,6 +7,9 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 | arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** | — | no |
 | arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** | — | no |
 | arm-03 | **6** | **8** | **15** | | **18.0** | **11.0** | **11.0** | **69.0** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
+| arm-04 | blocked | blocked | pending | | | | | | | **yes** (join after Test 6) |
+
+arm-04 (late join, Opus 5): plan written ([plan](arms/arm-04/results/BUILD-PLAN.md), 16 phases) but **not graded** — the frozen reviewer `glm-5.2-high` cannot be spawned in the cloud orchestrator VM. Tests 1a/1b need the private source codebase + a live grill, neither reachable from that VM. See DEVIATIONS.md.
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
