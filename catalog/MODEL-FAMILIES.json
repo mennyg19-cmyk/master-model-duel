@@ -54,6 +54,14 @@
         "opencode": ["anthropic/claude-opus-4-20250514", "anthropic/claude-opus-4-5"]
       }
     },
+    "claude-opus": {
+      "label": "Claude Opus 5",
+      "slugs": ["claude-opus-5-thinking-medium", "claude-opus-5-thinking-high", "claude-opus-5-thinking-high-fast"],
+      "hosts": {
+        "cursor": ["claude-opus-5-thinking-medium", "claude-opus-5-thinking-high", "claude-opus-5-thinking-high-fast"],
+        "opencode": ["anthropic/claude-opus-5"]
+      }
+    },
     "glm": {
       "label": "GLM",
       "slugs": ["glm-5.2-high", "glm-5.2"],

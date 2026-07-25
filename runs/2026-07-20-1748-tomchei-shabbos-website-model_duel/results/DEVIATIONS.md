@@ -16,3 +16,8 @@
 **What happened:** Added contestant mid-run.
 **Rule:** Shared freezes unchanged; see protocol/LATE-JOIN.md.
 **Status:** DECIDED
+
+## [2026-07-25T19:41:59.8867969Z] Late join arm-04
+**What happened:** Added contestant mid-run.
+**Rule:** Shared freezes unchanged; see protocol/LATE-JOIN.md.
+**Status:** DECIDED
