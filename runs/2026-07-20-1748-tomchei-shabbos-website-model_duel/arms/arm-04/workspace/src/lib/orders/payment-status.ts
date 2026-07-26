@@ -10,8 +10,9 @@ import type { DbClient } from '../core/db-client';
  *
  * The cache exists so the orders list does not sum the payment table once per
  * row. This function is the only writer, and it always recounts from the posted
- * payments rather than adjusting by a delta, so a voided or edited payment
- * cannot leave the cache drifting a few dollars off forever.
+ * payments and the refunds against them rather than adjusting by a delta, so a
+ * voided, refunded or edited payment cannot leave the cache drifting a few
+ * dollars off forever.
  *
  * Callers that are already in a transaction pass their client; everyone else
  * gets one, because the recount is only correct while nothing else is posting
@@ -40,7 +41,14 @@ async function recountPayments(client: DbClient, orderId: string): Promise<Payme
     _sum: { amountCents: true },
   });
 
-  const amountPaidCents = posted._sum.amountCents ?? 0;
+  // Refunds against a voided payment are not counted twice: the void already
+  // took the whole payment out of the total above.
+  const refunded = await client.paymentRefund.aggregate({
+    where: { payment: { orderId, state: 'POSTED' } },
+    _sum: { amountCents: true },
+  });
+
+  const amountPaidCents = (posted._sum.amountCents ?? 0) - (refunded._sum.amountCents ?? 0);
   const paymentStatus = paymentStatusForAmount(amountPaidCents, order.totalCents);
 
   await client.order.update({ where: { id: orderId }, data: { amountPaidCents, paymentStatus } });

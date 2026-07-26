@@ -45,6 +45,9 @@ const SUBSCRIBERS = [
 /** Lakewood, Toms River and Monsey — the towns the demo addresses sit in. */
 const DELIVERY_ZIPS = ['08701', '08753', '10952'];
 
+/** The days drivers are out, written the way the office says them (UR-009, G-015). */
+const DELIVERY_DAYS = ['Sunday 12 Adar', 'Monday 13 Adar', 'Purim day'];
+
 const PHOTO_PIXELS = 600;
 
 export async function seedStorefront(season: Season): Promise<void> {
@@ -58,6 +61,7 @@ async function seedSettings(): Promise<void> {
   await writeSetting('brand.announcement', 'Orders close Sunday night — thank you for giving.');
   await writeSetting('orders.followUpDays', 3);
   await writeSetting('shipping.deliveryZips', DELIVERY_ZIPS);
+  await writeSetting('delivery.dayChoices', DELIVERY_DAYS);
   await writeSetting('shipping.baseRateCents', 1200);
   await writeSetting('shipping.freeShippingThresholdCents', 15000);
   await writeSetting('email.fromName', 'Tomchei Shabbos');

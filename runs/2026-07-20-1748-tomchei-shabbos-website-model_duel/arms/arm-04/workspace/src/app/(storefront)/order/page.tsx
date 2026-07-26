@@ -26,7 +26,7 @@ import { currentSeasonCatalog } from '@/lib/catalog/queries';
 import { getCurrentCustomer } from '@/lib/customers';
 import { DELIVERY_AREA_MESSAGES, checkDeliveryAreaNow } from '@/lib/delivery-area';
 import { db } from '@/lib/db';
-import { BUILDER_PATH, builderHref, type BuilderParams } from '@/lib/orders/builder-href';
+import { BUILDER_PATH, CHECKOUT_PATH, builderHref, type BuilderParams } from '@/lib/orders/builder-href';
 import { addOnsFor, readAddOnOffers, readCart, readProductAvailability } from '@/lib/orders/cart';
 import { readGuestOwner } from '@/lib/orders/draft-access';
 import { requireOpenStore } from '@/lib/store-state';
@@ -180,7 +180,7 @@ export default async function OrderPage({
             cart={cart}
             actions={cartActions}
             assignHref={(lineId) => builderHref(BUILDER_PATH, { assign: lineId })}
-            checkoutHref={null}
+            checkoutHref={CHECKOUT_PATH}
             className="hidden lg:sticky lg:top-4 lg:block"
             testId="cart-sidebar"
           />
@@ -229,7 +229,7 @@ export default async function OrderPage({
           cart={cart}
           actions={cartActions}
           assignHref={(lineId) => builderHref(BUILDER_PATH, { assign: lineId })}
-          checkoutHref={null}
+          checkoutHref={CHECKOUT_PATH}
           testId="cart-sheet"
         />
       </div>

@@ -3,12 +3,17 @@ import 'server-only';
 import type { Order, OrderStatus, Package, Prisma, Reservation } from '@prisma/client';
 
 import { recordAudit, type AuditActor } from '../audit';
+import { feeSubjectsFrom } from '../checkout/fee-subjects';
+import { resolveFulfillmentFees, type RateRules } from '../checkout/fees';
 import { sumCents } from '../core/money';
 import { failure, type Result } from '../core/result';
 import { abort, runInTransaction } from '../transaction';
+import { inventoryDemand, type InventoryDemand } from '../inventory/demand';
 import { releaseUnits, reserveUnits, type InventoryTarget } from '../inventory/reserve';
+import { readSetting } from '../settings';
 import { ownerFilter, type DraftOwner } from './draft-access';
 import { groupLinesIntoPackages } from './grouping';
+import { isLineAssigned, lineTotalWithAddOns, type AssignedLine } from './lines';
 import { checkOrderTransition } from './state-machine';
 
 export const ORDER_NOT_FOUND = 'order_not_found';
@@ -38,6 +43,8 @@ export async function finalizeOrder(
   orderId: string,
   actor: AuditActor,
 ): Promise<Result<FinalizedOrder>> {
+  const rules = await readRateRules();
+
   return runInTransaction(async (tx) => {
     const order = await tx.order.findUnique({
       where: { id: orderId },
@@ -63,7 +70,7 @@ export async function finalizeOrder(
     // Cart-first building means a line can sit in the cart with no recipient yet
     // (UR-006), and a package cannot be built from one. This is the gate that
     // keeps that half-finished state inside the builder.
-    const lines = order.lines.filter(isAssignedLine);
+    const lines = order.lines.filter(isLineAssigned);
     if (lines.length !== order.lines.length) {
       const waiting = order.lines.length - lines.length;
       abort(
@@ -89,7 +96,7 @@ export async function finalizeOrder(
 
     const orderNumber = await claimOrderNumber(tx, order.seasonId);
     const packages = await createPackages(tx, order.id, lines, actor);
-    const totals = await computeOrderTotals(tx, lines, packages);
+    const totals = await chargeFulfillment(tx, lines, packages, rules);
 
     await tx.order.update({ where: { id: order.id }, data: { orderNumber, ...totals } });
 
@@ -178,15 +185,7 @@ const LINE_INVENTORY_INCLUDE = {
 } satisfies Prisma.OrderLineInclude;
 
 type LineWithInventory = Prisma.OrderLineGetPayload<{ include: typeof LINE_INVENTORY_INCLUDE }>;
-
-/** A line that has been through the builder's assignment step, so it has a destination. */
-type AssignedLine = LineWithInventory & { recipientName: string; fulfillmentMethodId: string };
-
-function isAssignedLine(line: LineWithInventory): line is AssignedLine {
-  return line.recipientName !== null && line.fulfillmentMethodId !== null;
-}
-
-type InventoryDemand = { target: InventoryTarget; quantity: number; itemName: string };
+type AssignedInventoryLine = AssignedLine<LineWithInventory>;
 
 /**
  * Moves an order from one status to the next, or reports the race it lost.
@@ -214,33 +213,13 @@ async function claimOrderStatus(
 }
 
 /**
- * Every stock-tracked item the order needs, merged by target and sorted.
- *
- * Merging matters because two lines can carry the same product for different
- * recipients. Sorting matters because two orders that lock the same rows in
- * opposite order deadlock each other.
+ * Sorted, because two orders that lock the same rows in opposite order deadlock
+ * each other.
  */
-function mergeInventoryDemand(lines: LineWithInventory[]): InventoryDemand[] {
-  const demand = new Map<string, InventoryDemand>();
-
-  const want = (key: string, target: InventoryTarget, quantity: number, itemName: string) => {
-    const existing = demand.get(key);
-    if (existing) existing.quantity += quantity;
-    else demand.set(key, { target, quantity, itemName });
-  };
-
-  for (const line of lines) {
-    if (line.product.tracksInventory) {
-      want(`product:${line.productId}`, { productId: line.productId }, line.quantity, line.productNameSnapshot);
-    }
-
-    for (const addOn of line.addOns) {
-      if (!addOn.addOn.tracksInventory) continue;
-      want(`addon:${addOn.addOnId}`, { addOnId: addOn.addOnId }, addOn.quantity, addOn.addOnNameSnapshot);
-    }
-  }
-
-  return [...demand.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, value]) => value);
+function demandInLockOrder(lines: LineWithInventory[]): InventoryDemand[] {
+  return [...inventoryDemand(lines).entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, want]) => want);
 }
 
 /**
@@ -253,7 +232,7 @@ async function reserveInventoryFor(
   orderId: string,
   lines: LineWithInventory[],
 ): Promise<void> {
-  for (const { target, quantity, itemName } of mergeInventoryDemand(lines)) {
+  for (const { target, quantity, itemName } of demandInLockOrder(lines)) {
     const reserved = await reserveUnits(tx, target, quantity);
     if (!reserved.ok) abort({ ...reserved, publicMessage: `${itemName}: ${reserved.publicMessage}` });
 
@@ -309,7 +288,7 @@ async function claimOrderNumber(tx: Prisma.TransactionClient, seasonId: string):
 async function createPackages(
   tx: Prisma.TransactionClient,
   orderId: string,
-  lines: AssignedLine[],
+  lines: AssignedInventoryLine[],
   actor: AuditActor,
 ): Promise<Package[]> {
   const created: Package[] = [];
@@ -341,42 +320,46 @@ async function createPackages(
   return created;
 }
 
-/**
- * The fulfillment charge is the method's base fee once per package, which is
- * the per-recipient rule. Bulk delivery charges one fee per destination
- * instead (UR-009); that split arrives with delivery scheduling in P5 and will
- * replace this line, not sit beside it.
- */
-async function computeOrderTotals(
-  tx: Prisma.TransactionClient,
-  lines: AssignedLine[],
-  packages: Package[],
-) {
-  const subtotalCents = sumCents(
-    lines.map((line) => line.lineTotalCents + sumCents(line.addOns.map((addOn) => addOn.lineTotalCents))),
-  );
+export async function readRateRules(): Promise<RateRules> {
+  const [shippingBaseRateCents, freeShippingThresholdCents] = await Promise.all([
+    readSetting('shipping.baseRateCents'),
+    readSetting('shipping.freeShippingThresholdCents'),
+  ]);
 
-  const methods = await tx.fulfillmentMethod.findMany({
-    where: { id: { in: [...new Set(packages.map((row) => row.fulfillmentMethodId))] } },
-    select: { id: true, baseFeeCents: true },
-  });
-
-  const feeByMethod = new Map(methods.map((method) => [method.id, method.baseFeeCents]));
-  const fulfillmentFeeCents = sumCents(packages.map((row) => baseFee(feeByMethod, row)));
-
-  return { subtotalCents, fulfillmentFeeCents, totalCents: subtotalCents + fulfillmentFeeCents };
+  return { shippingBaseRateCents, freeShippingThresholdCents };
 }
 
-function baseFee(feeByMethod: Map<string, number>, row: Package): number {
-  const fee = feeByMethod.get(row.fulfillmentMethodId);
+/**
+ * Prices the fulfillment of every package the order just produced and freezes
+ * each amount on its package (G-028).
+ *
+ * The snapshot is the point. Staff moving a box from delivery to shipping in
+ * week two is an operations decision; recomputing the fee from the new method
+ * would silently owe the customer money or bill them again for a box already
+ * paid for.
+ */
+async function chargeFulfillment(
+  tx: Prisma.TransactionClient,
+  lines: AssignedInventoryLine[],
+  packages: Package[],
+  rules: RateRules,
+) {
+  const subtotalCents = sumCents(lines.map(lineTotalWithAddOns));
 
-  // The FK is RESTRICT, so a missing row means the method was read outside this
-  // transaction, not that a package may be charged nothing.
-  if (fee === undefined) {
-    throw new Error(
-      `Package ${row.id} points at fulfillment method ${row.fulfillmentMethodId}, which was not read with the others.`,
-    );
+  const subjects = await feeSubjectsFrom(
+    tx,
+    packages.map((row) => ({ key: row.id, destination: row })),
+  );
+
+  const fees = resolveFulfillmentFees(subjects, rules, subtotalCents);
+
+  for (const fee of fees.lines) {
+    await tx.package.update({ where: { id: fee.key }, data: { fulfillmentFeeCents: fee.feeCents } });
   }
 
-  return fee;
+  return {
+    subtotalCents,
+    fulfillmentFeeCents: fees.totalCents,
+    totalCents: subtotalCents + fees.totalCents,
+  };
 }

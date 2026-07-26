@@ -128,16 +128,23 @@ export default async function OrderDetailPage({
         </section>
       ) : null}
 
+      {order.status === 'PLACED' && order.amountPaidCents < order.totalCents ? (
+        <Link href={`/order/confirmation?order=${order.id}`}>
+          <Button data-testid="detail-pay">Finish paying</Button>
+        </Link>
+      ) : null}
+
       {isDraft ? (
         <div className="flex flex-wrap items-center gap-4">
           <Link href="/order">
             <Button data-testid="detail-continue">Continue this order</Button>
           </Link>
 
-          {/* Paying is P5's job; saying so beats a button that cannot do it yet. */}
-          <p className="text-sm text-[var(--color-ink-muted)]" data-testid="detail-pay-pending">
-            Payment opens in the next release.
-          </p>
+          <Link href="/order/checkout">
+            <Button variant="secondary" data-testid="detail-checkout">
+              Check out
+            </Button>
+          </Link>
 
           <form action={cancelDraftAction} className="ml-auto">
             <input type="hidden" name="orderId" value={order.id} />

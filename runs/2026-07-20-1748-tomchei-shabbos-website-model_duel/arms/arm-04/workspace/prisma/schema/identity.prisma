@@ -50,6 +50,7 @@ model StaffUser {
   auditEventsAsSubject AuditEvent[]        @relation("AuditImpersonated")
   loginSessions       StaffLoginSession[]
   paymentsRecorded    Payment[]
+  refundsRecorded     PaymentRefund[]
   assemblyBatches     AssemblyBatch[]
   mediaUploads        MediaAsset[]
 

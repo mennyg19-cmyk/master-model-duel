@@ -130,6 +130,10 @@ model OrderLine {
 
   greetingMessage String?
 
+  /// One of the delivery days the manager opened for Purim week, chosen per
+  /// destination at checkout and copied onto the package it lands in (UR-009).
+  deliveryDay String?
+
   /// Filled at finalize by the grouping engine.
   packageId String?
 
@@ -184,22 +188,50 @@ model Payment {
 
   createdAt DateTime @default(now())
 
-  order    Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  recorded StaffUser? @relation(fields: [recordedByStaffUserId], references: [id], onDelete: SetNull)
+  order    Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  recorded StaffUser?    @relation(fields: [recordedByStaffUserId], references: [id], onDelete: SetNull)
+  refunds  PaymentRefund[]
 
   @@index([orderId, state])
 }
 
-/// Hosted Stripe Checkout only (resolution 8b), so this row is a mirror of what
-/// Stripe reports — never a source of truth for whether money arrived. The
+/// Money going back out (R-168). A refund is its own row rather than a negative
+/// payment so the ledger still answers "what did they pay us" and "what did we
+/// return" separately, and so a partial refund cannot be mistaken for a void.
+model PaymentRefund {
+  id          String @id @default(uuid())
+  paymentId   String
+  amountCents Int
+
+  /// Stripe refund id, or the POS receipt for an offline return.
+  reference String? @unique
+  reason    String
+
+  recordedByStaffUserId String?
+
+  createdAt DateTime @default(now())
+
+  payment  Payment    @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  recorded StaffUser? @relation(fields: [recordedByStaffUserId], references: [id], onDelete: SetNull)
+
+  @@index([paymentId])
+}
+
+/// One hosted Checkout attempt (resolution 8b). The row is a mirror of what the
+/// gateway reports — never a source of truth for whether money arrived. The
 /// matching `Payment` row is what the cached order status counts.
+///
+/// The session id exists from the moment the customer is sent to the hosted
+/// page; the payment intent id only arrives with the event that says the card
+/// was charged, which is why it is nullable.
 model StripePaymentIntent {
-  id             String @id @default(uuid())
-  orderId        String
-  stripeIntentId String @unique
-  status         String
-  amountCents    Int
-  currency       String @default("usd")
+  id              String  @id @default(uuid())
+  orderId         String
+  stripeSessionId String  @unique
+  stripeIntentId  String? @unique
+  status          String
+  amountCents     Int
+  currency        String  @default("usd")
 
   lastEventAt DateTime?
   createdAt   DateTime  @default(now())
@@ -208,4 +240,20 @@ model StripePaymentIntent {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
+}
+
+/// Every webhook the gateway sends, recorded before it is acted on (R-125,
+/// R-167). The unique event id is the idempotency key: a replay — Stripe retries
+/// for days — loses the insert race and is answered 200 without charging,
+/// refunding or committing stock a second time.
+model StripeWebhookEvent {
+  id      String @id @default(uuid())
+  eventId String @unique
+  type    String
+
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  outcome     String?
+
+  @@index([receivedAt])
 }

@@ -8,6 +8,7 @@
  * different route (R-031).
  */
 export const BUILDER_PATH = '/order';
+export const CHECKOUT_PATH = '/order/checkout';
 
 export type BuilderParams = {
   product?: string | null;

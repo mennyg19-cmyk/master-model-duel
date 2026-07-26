@@ -12,6 +12,15 @@ enum PackageStage {
   PICKED_UP
 }
 
+/// How a method turns packages into money (UR-009). Bulk delivery drops a load at
+/// one address, so the drive is billed once however many boxes are on it;
+/// per-package delivery and shipping are billed per box; pickup costs nothing.
+enum FeeBasis {
+  NONE
+  PER_PACKAGE
+  PER_DESTINATION
+}
+
 /// Fulfillment methods are rows, not an enum (R-154). The org adds "volunteer
 /// delivery — Lakewood" for one season without a deploy, and the grouping key
 /// keeps working because it stores the method id.
@@ -21,9 +30,12 @@ model FulfillmentMethod {
   label String
   kind  FulfillmentKind
 
-  /// Base charge the order snapshots. The per-destination and per-recipient fee
-  /// rules (UR-009) land with delivery in P5; this is what they start from.
+  /// Base charge the order snapshots, applied the number of times `feeBasis`
+  /// says. Shipping ignores it while the placeholder rate rules are in force
+  /// (R-032); live carrier quotes replace those in P8.
   baseFeeCents Int @default(0)
+
+  feeBasis FeeBasis @default(PER_PACKAGE)
 
   requiresAddress        Boolean @default(true)
   requiresPickupLocation Boolean @default(false)
@@ -75,6 +87,16 @@ model Package {
   addressCountry    String?
 
   greetingMessage String?
+
+  /// Volunteer delivery runs over several days in Purim week, and the recipient
+  /// picks one of the days the manager opened (UR-009, G-015).
+  deliveryDay String?
+
+  /// What this package was actually charged for its fulfillment, frozen at
+  /// checkout (G-028). Staff moving a box to another method later is an
+  /// operations decision, not a re-price: without this snapshot the recount
+  /// would hand back money the customer already agreed to pay, or bill more.
+  fulfillmentFeeCents Int @default(0)
 
   stage      PackageStage @default(NEW)
   printedAt  DateTime?

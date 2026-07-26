@@ -34,6 +34,7 @@ export const PACKAGE_DESTINATION_FIELDS = [
   'addressPostalCode',
   'addressCountry',
   'greetingMessage',
+  'deliveryDay',
 ] as const;
 
 export type PackageDestination = Pick<
@@ -52,6 +53,27 @@ export type PackageGroup<TLine> = {
  * the key carries a unique index.
  */
 export function packageGroupingKey(destination: PackageDestination): string {
+  const parts = [
+    recipientDestinationKey(destination),
+    normalizeGreeting(destination.greetingMessage),
+    destination.deliveryDay ?? '',
+  ];
+
+  return createHash('sha256').update(parts.join(GROUPING_KEY_SEPARATOR)).digest('hex');
+}
+
+/**
+ * Who and where, without what the card says or which day it goes out.
+ *
+ * Checkout asks its questions per recipient — one greeting, one delivery day —
+ * so it has to be able to name a recipient before those answers exist. The
+ * package key above is this plus those two answers, which is why setting them
+ * cannot move a line into somebody else's box.
+ *
+ * Hashed like the package key, because checkout puts it in a form field and a
+ * street address is not something to hand back to the browser to be posted.
+ */
+export function recipientDestinationKey(destination: PackageDestination): string {
   const line1 = destination.addressLine1 ?? '';
 
   const parts = [
@@ -68,10 +90,29 @@ export function packageGroupingKey(destination: PackageDestination): string {
           postalCode: destination.addressPostalCode ?? '',
           country: destination.addressCountry,
         }),
-    normalizeGreeting(destination.greetingMessage),
   ];
 
   return createHash('sha256').update(parts.join(GROUPING_KEY_SEPARATOR)).digest('hex');
+}
+
+/**
+ * The place a fee is charged for: the address itself, or the pickup counter.
+ * Bulk delivery bills once per one of these however many recipients ride along
+ * (UR-009), so it deliberately ignores the recipient's name.
+ */
+export function deliveryDestinationKey(destination: PackageDestination): string {
+  const line1 = destination.addressLine1 ?? '';
+
+  if (line1 === '') return `pickup:${destination.pickupLocationId ?? 'none'}`;
+
+  return normalizeAddressKey({
+    line1,
+    line2: destination.addressLine2,
+    city: destination.addressCity ?? '',
+    state: destination.addressState ?? '',
+    postalCode: destination.addressPostalCode ?? '',
+    country: destination.addressCountry,
+  });
 }
 
 export function groupLinesIntoPackages<TLine extends PackageDestination>(
@@ -88,7 +129,7 @@ export function groupLinesIntoPackages<TLine extends PackageDestination>(
     } else {
       groups.set(groupingKey, {
         groupingKey,
-        destination: pickPackageDestination(line),
+        destination: toPackageDestination(line),
         lines: [line],
       });
     }
@@ -100,9 +141,10 @@ export function groupLinesIntoPackages<TLine extends PackageDestination>(
 /**
  * A line carries far more than a package does. This narrows it to exactly the
  * columns `package.create` accepts, so nothing else on the line can ride along
- * into the insert.
+ * into the insert. It is the only adapter between the two: a second one that
+ * substituted its own defaults would key packages differently and split a box.
  */
-function pickPackageDestination(line: PackageDestination): PackageDestination {
+function toPackageDestination(line: PackageDestination): PackageDestination {
   return Object.fromEntries(
     PACKAGE_DESTINATION_FIELDS.map((field) => [field, line[field] ?? null]),
   ) as PackageDestination;

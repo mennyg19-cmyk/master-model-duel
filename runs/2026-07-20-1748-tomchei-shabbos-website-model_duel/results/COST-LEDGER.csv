@@ -399,3 +399,11 @@
 2026-07-26T16:50:33Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P4,review_clean_code,glm-5.2-high,0d81fcc3-b5a9-4198-aa8e-60ed60d91237,,,,,,,,P4 clean-code review spawn; usage_missing
 2026-07-26T16:54:27Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P4,review_aggregate,glm-5.2-high,84cc91ca-b28e-43ab-838a-8ff0623dedee,,,,,,,,P4 aggregate spawn; usage_missing
 2026-07-26T16:55:10Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P4,fix,claude-opus-5-thinking-high,cc1652bd-6512-48d3-b9a2-c7e6fa996674,,,,,,,,P4 fix pass M1-M3; usage_missing
+2026-07-26T17:25:22Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P5,build,claude-opus-5-thinking-high,85e2442e-af4e-498a-bf7c-199accb101c4,,,,,,,,P5 build spawn; usage_missing
+2026-07-26T17:47:14Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P5,build,claude-opus-5-thinking-high,85e2442e-af4e-498a-bf7c-199accb101c4,,,,,,,,P5 build resume after internal error; usage_missing
+2026-07-26T18:30:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P5,review_security,glm-5.2-high,975a6298-6be9-4a27-bcb0-4f55a1fa7ff5,,,,,,,,P5 security review spawn; usage_missing
+2026-07-26T18:30:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P5,review_quality,glm-5.2-high,ab232057-7996-4700-b4e0-8e8823d46b29,,,,,,,,P5 quality review spawn; usage_missing
+2026-07-26T18:30:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P5,review_rules,glm-5.2-high,b309ce57-f6e2-45f5-ac82-2d977955c96e,,,,,,,,P5 rules review spawn; usage_missing
+2026-07-26T18:30:37Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P5,review_clean_code,glm-5.2-high,7c4f2b70-41fe-4c59-bff5-b6a5a4050d4c,,,,,,,,P5 clean-code review spawn; usage_missing
+2026-07-26T18:33:12Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P5,review_aggregate,glm-5.2-high,fc2e3a78-ac5b-401e-9d47-ed56a665c305,,,,,,,,P5 aggregate spawn; usage_missing
+2026-07-26T18:34:14Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P5,fix,claude-opus-5-thinking-high,ba42a8d7-6ffb-4e05-9d45-d0a8664df21f,,,,,,,,P5 fix pass B1+M1-M7; usage_missing

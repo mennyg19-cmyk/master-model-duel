@@ -56,10 +56,16 @@ const ADD_ONS = [
   { slug: 'handwritten-card', name: 'Hand-written card', priceCents: 300, onHand: null },
 ];
 
+/**
+ * `feeBasis` is what makes bulk delivery different from per-package delivery
+ * (UR-009): the bulk run drops everything at one address for one fee, while the
+ * per-recipient run is a separate drive each and is billed that way.
+ */
 const FULFILLMENT_METHODS = [
-  { code: 'ship', label: 'Ship to recipient', kind: 'SHIPPING', baseFeeCents: 1200, requiresPickupLocation: false, requiresAddress: true },
-  { code: 'deliver', label: 'Volunteer delivery', kind: 'DELIVERY', baseFeeCents: 500, requiresPickupLocation: false, requiresAddress: true },
-  { code: 'pickup', label: 'Pick up at the office', kind: 'PICKUP', baseFeeCents: 0, requiresPickupLocation: true, requiresAddress: false },
+  { code: 'ship', label: 'Ship to recipient', kind: 'SHIPPING', feeBasis: 'PER_PACKAGE', baseFeeCents: 1200, requiresPickupLocation: false, requiresAddress: true },
+  { code: 'deliver', label: 'Volunteer delivery', kind: 'DELIVERY', feeBasis: 'PER_PACKAGE', baseFeeCents: 500, requiresPickupLocation: false, requiresAddress: true },
+  { code: 'deliver-bulk', label: 'Bulk delivery to one address', kind: 'DELIVERY', feeBasis: 'PER_DESTINATION', baseFeeCents: 800, requiresPickupLocation: false, requiresAddress: true },
+  { code: 'pickup', label: 'Pick up at the office', kind: 'PICKUP', feeBasis: 'NONE', baseFeeCents: 0, requiresPickupLocation: true, requiresAddress: false },
 ] as const;
 
 const PACKAGE_TYPES = [
@@ -134,7 +140,12 @@ async function upsertFulfillmentMethods(): Promise<Map<string, FulfillmentMethod
     const row = await db.fulfillmentMethod.upsert({
       where: { code: method.code },
       create: { ...method, sortOrder: index },
-      update: { label: method.label, baseFeeCents: method.baseFeeCents, sortOrder: index },
+      update: {
+        label: method.label,
+        baseFeeCents: method.baseFeeCents,
+        feeBasis: method.feeBasis,
+        sortOrder: index,
+      },
     });
     rows.set(method.code, row);
   }

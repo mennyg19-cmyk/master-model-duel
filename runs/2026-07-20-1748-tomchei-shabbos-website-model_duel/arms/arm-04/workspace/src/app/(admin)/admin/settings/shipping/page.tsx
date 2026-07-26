@@ -14,11 +14,12 @@ export default async function ShippingSettingsPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   await requirePermission('settings.manage');
-  const [{ error }, baseRateCents, thresholdCents, deliveryZips] = await Promise.all([
+  const [{ error }, baseRateCents, thresholdCents, deliveryZips, deliveryDays] = await Promise.all([
     searchParams,
     readSetting('shipping.baseRateCents'),
     readSetting('shipping.freeShippingThresholdCents'),
     readSetting('shipping.deliveryZips'),
+    readSetting('delivery.dayChoices'),
   ]);
 
   return (
@@ -72,6 +73,23 @@ export default async function ShippingSettingsPage({
             rows={6}
             defaultValue={deliveryZips.join('\n')}
             className="mt-3 w-full max-w-sm rounded-md border border-[var(--color-line)] bg-white px-3 py-2 font-mono text-sm"
+          />
+        </Card>
+
+        <Card data-testid="delivery-days">
+          <CardTitle>Volunteer delivery days ({deliveryDays.length})</CardTitle>
+          <CardDescription>
+            The days drivers are out in Purim week, one per line, written the way you say them to
+            them. Customers pick one of these for each delivery at checkout. An empty list means no
+            day is asked for.
+          </CardDescription>
+
+          <textarea
+            id="deliveryDays"
+            name="deliveryDays"
+            rows={4}
+            defaultValue={deliveryDays.join('\n')}
+            className="mt-3 w-full max-w-sm rounded-md border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
           />
         </Card>
 

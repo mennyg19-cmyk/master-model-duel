@@ -19,6 +19,10 @@ const SETTING_SCHEMAS = {
   'shipping.deliveryZips': z.array(z.string().regex(/^\d{5}$/)),
   'shipping.baseRateCents': z.number().int().min(0),
   'shipping.freeShippingThresholdCents': z.number().int().min(0),
+  // Days the manager opened for volunteer delivery in Purim week (UR-009,
+  // G-015). Free text because the org labels them the way the drivers do
+  // ("Sunday 12 Adar"), and an empty list means no day choice is offered.
+  'delivery.dayChoices': z.array(z.string().min(1).max(60)),
   'email.fromName': z.string(),
   'email.fromAddress': z.string(),
   'email.replyToAddress': z.string(),
@@ -35,6 +39,7 @@ const DEFAULTS: { [K in SettingKey]: SettingValue<K> } = {
   'shipping.deliveryZips': [],
   'shipping.baseRateCents': 0,
   'shipping.freeShippingThresholdCents': 0,
+  'delivery.dayChoices': [],
   'email.fromName': '',
   'email.fromAddress': '',
   'email.replyToAddress': '',

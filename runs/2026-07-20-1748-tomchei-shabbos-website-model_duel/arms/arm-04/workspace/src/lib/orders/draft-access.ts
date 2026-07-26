@@ -117,6 +117,14 @@ export async function findOwnedDraft(
   });
 }
 
+/** The same question by order id, for the screens that already know which one. */
+export async function findOwnedDraftById(
+  owner: DraftOwner,
+  orderId: string,
+): Promise<Order | null> {
+  return db.order.findFirst({ where: { id: orderId, status: 'DRAFT', ...ownerFilter(owner) } });
+}
+
 /**
  * Reads one of this owner's orders whatever its status — the account order
  * pages and the cancel action both need it. A miss is a miss whether the order

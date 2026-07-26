@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { isSameOrigin, withinRateLimit } from '@/lib/http/public-guards';
+
 /**
  * Browser crash reports. The body is bounded and the fields are truncated
  * before logging so a hostile page cannot flood the server log, and nothing
@@ -8,8 +10,13 @@ import { z } from 'zod';
  */
 const MAX_BODY_BYTES = 4_000;
 
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const MAX_REPORTS_PER_WINDOW = 60;
+/**
+ * The endpoint has to stay open — a crashing page has no session to present —
+ * so the cap is one global window rather than one per caller. Anything keyed on
+ * the client address would be keyed on a header the caller writes, which caps
+ * nothing.
+ */
+const RATE_LIMIT = { limit: 60, windowMs: 60_000 };
 
 const reportSchema = z.object({
   message: z.string().max(500),
@@ -17,23 +24,15 @@ const reportSchema = z.object({
   path: z.string().max(300).optional(),
 });
 
-/**
- * The endpoint has to stay open — a crashing page has no session to present —
- * so the cap is global rather than per caller. Anything keyed on the client
- * address would be keyed on a header the caller writes, which caps nothing.
- */
-let rateWindow = { startedAt: 0, count: 0 };
-
-function withinRateLimit(): boolean {
-  const now = Date.now();
-  if (now - rateWindow.startedAt > RATE_LIMIT_WINDOW_MS) rateWindow = { startedAt: now, count: 0 };
-
-  rateWindow.count += 1;
-  return rateWindow.count <= MAX_REPORTS_PER_WINDOW;
-}
-
 export async function POST(request: Request) {
-  if (!withinRateLimit()) {
+  // Our own error boundaries are the only thing that should be posting here.
+  // The Stripe webhook is the one public endpoint that cannot ask this, because
+  // the caller is a payment provider and answers with a signature instead.
+  if (!isSameOrigin(request)) {
+    return NextResponse.json({ accepted: false }, { status: 403 });
+  }
+
+  if (!withinRateLimit('client-error', 'all-callers', RATE_LIMIT)) {
     return NextResponse.json({ accepted: false }, { status: 429 });
   }
 

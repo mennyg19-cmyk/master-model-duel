@@ -15,6 +15,7 @@ export type EnvVariableSpec = {
 const PLACEHOLDER_SESSION_SECRET = 'change-me-to-a-32-character-random-string';
 
 const MIN_DISTINCT_SECRET_CHARACTERS = 12;
+const MIN_WEBHOOK_SECRET_LENGTH = 24;
 const WEAK_SECRET_PATTERN = /change[-_ ]?me|placeholder|example|insecure|^0+$/i;
 
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
@@ -99,6 +100,30 @@ export const ENV_VARIABLES: EnvVariableSpec[] = [
     example: '',
     secret: true,
   },
+  {
+    key: 'PAYMENT_PROVIDER',
+    description:
+      'stripe = hosted Stripe Checkout, the deployment target. local = a loopback stand-in that ' +
+      'hosts the payment page itself and signs its own callbacks with the same webhook secret, so ' +
+      'offline development and CI run the real signature, idempotency and refund code. It is ' +
+      'rejected unless APP_URL points at this machine, because it takes no money.',
+    example: 'local',
+  },
+  {
+    key: 'STRIPE_SECRET_KEY',
+    description: 'Stripe secret key. Required only when PAYMENT_PROVIDER=stripe.',
+    example: '',
+    secret: true,
+  },
+  {
+    key: 'STRIPE_WEBHOOK_SECRET',
+    description:
+      'Signing secret for the /api/webhooks/stripe endpoint. Required in both modes: it is what ' +
+      'makes a webhook authentic, and the loopback provider signs with it too so the verification ' +
+      'path is never skipped in development.',
+    example: '',
+    secret: true,
+  },
 ];
 
 const baseSchema = z.object({
@@ -111,6 +136,11 @@ const baseSchema = z.object({
   BLOB_READ_WRITE_TOKEN: z.string().optional(),
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
   CLERK_SECRET_KEY: z.string().optional(),
+  PAYMENT_PROVIDER: z.enum(['stripe', 'local']),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z
+    .string()
+    .min(MIN_WEBHOOK_SECRET_LENGTH, `STRIPE_WEBHOOK_SECRET must be at least ${MIN_WEBHOOK_SECRET_LENGTH} characters`),
   TRUST_PROXY_HEADERS: z
     .enum(['true', 'false'])
     .default('false')
@@ -146,6 +176,26 @@ export const envSchema = baseSchema.superRefine((env, ctx) => {
       message:
         `MEDIA_STORAGE=local is only allowed when APP_URL is a loopback address, but APP_URL is ` +
         `${env.APP_URL}. Deploy with MEDIA_STORAGE=blob`,
+    });
+  }
+
+  if (env.PAYMENT_PROVIDER === 'stripe' && !env.STRIPE_SECRET_KEY) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['STRIPE_SECRET_KEY'],
+      message: 'STRIPE_SECRET_KEY is required when PAYMENT_PROVIDER=stripe, but it was empty',
+    });
+  }
+
+  // Same loopback rule as the local auth provider: a payment page that takes no
+  // money must never be reachable by a customer who thinks it does.
+  if (env.PAYMENT_PROVIDER === 'local' && !isLoopbackUrl(env.APP_URL)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['PAYMENT_PROVIDER'],
+      message:
+        `PAYMENT_PROVIDER=local is only allowed when APP_URL is a loopback address, but APP_URL is ` +
+        `${env.APP_URL}. Deploy with PAYMENT_PROVIDER=stripe`,
     });
   }
 

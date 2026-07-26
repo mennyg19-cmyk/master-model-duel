@@ -47,6 +47,11 @@ model CustomerAddress {
   longitude  Float?
   geocodedAt DateTime?
 
+  /// What this recipient's card said last time (UR-013, G-020). Checkout offers
+  /// it as the default the next season so a donor who writes the same line to
+  /// the same aunt every year types it once.
+  lastGreeting String?
+
   /// Addresses are archived, never deleted: past orders point at them.
   isArchived Boolean  @default(false)
   createdAt  DateTime @default(now())

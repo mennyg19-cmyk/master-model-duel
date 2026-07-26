@@ -61,7 +61,13 @@ const shippingSchema = z.object({
   baseRate: dollarsFromForm,
   freeShippingThreshold: dollarsFromForm,
   deliveryZips: z.string(),
+  deliveryDays: z.string(),
 });
+
+/** One label per line, in the words the drivers use ("Sunday 12 Adar"). */
+function parseDeliveryDays(raw: string): string[] {
+  return [...new Set(raw.split('\n').map((line) => line.trim()).filter(Boolean))].slice(0, 20);
+}
 
 /** Blank means "not set yet", which is different from a name nobody can read. */
 const senderAddress = z
@@ -144,11 +150,17 @@ export async function saveShippingSettingsAction(formData: FormData) {
   if (!parsed.success) rejectWith(SHIPPING_PATH, firstMessage(parsed.error));
 
   const { zips, rejected } = parseDeliveryZipList(parsed.data.deliveryZips);
+  const days = parseDeliveryDays(parsed.data.deliveryDays);
 
   await writeSetting('shipping.baseRateCents', parsed.data.baseRate);
   await writeSetting('shipping.freeShippingThresholdCents', parsed.data.freeShippingThreshold);
   await writeSetting('shipping.deliveryZips', zips);
-  await audit(context, 'shipping', `${zips.length} delivery ZIPs, base rate ${parsed.data.baseRate}c`);
+  await writeSetting('delivery.dayChoices', days);
+  await audit(
+    context,
+    'shipping',
+    `${zips.length} delivery ZIPs, ${days.length} delivery days, base rate ${parsed.data.baseRate}c`,
+  );
 
   revalidateStorefront(SHIPPING_PATH);
 

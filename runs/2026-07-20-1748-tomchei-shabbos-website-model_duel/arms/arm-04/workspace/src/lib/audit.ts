@@ -1,6 +1,12 @@
 import 'server-only';
 
-import type { OrderStatus, PackageStage, PermissionEffect, StaffRole } from '@prisma/client';
+import type {
+  OrderStatus,
+  PackageStage,
+  PaymentMethod,
+  PermissionEffect,
+  StaffRole,
+} from '@prisma/client';
 
 import { db } from './db';
 import type { DbClient } from './core/db-client';
@@ -25,6 +31,15 @@ type AuditDetails = {
   'customer.address_saved': { customerId: string; created: boolean };
   'customer.address_archived': { customerId: string };
   'customer.profile_updated': { changedPhone: boolean };
+  /// Money rows never carry the instrument that moved it — no check number, no
+  /// Stripe intent id, no card detail. Those live on the payment row, which is
+  /// behind a permission; the audit trail is read far more widely.
+  'payment.posted': { method: PaymentMethod; amountCents: number };
+  'payment.voided': { method: PaymentMethod; amountCents: number; reason: string };
+  'payment.refunded': { amountCents: number; reason: string };
+  /// R-126: the charge did not match what the order says it costs, so it was
+  /// handed straight back rather than kept while somebody worked out why.
+  'payment.auto_refunded': { chargedCents: number; expectedCents: number };
   'package.created': { orderId: string; recipientName: string; lineCount: number };
   'package.stage_changed': { from: PackageStage; to: PackageStage };
   'staff.invited': { email: string; role: StaffRole };

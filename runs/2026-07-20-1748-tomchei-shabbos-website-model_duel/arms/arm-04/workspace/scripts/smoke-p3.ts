@@ -306,10 +306,16 @@ async function main() {
   if (!shippingForm) throw new Error('No shipping settings form to submit');
 
   const existingZips = await currentZips();
+  // The delivery days P5 added to this form are a textarea, which the form
+  // parser does not read, so they have to be carried across by hand or the
+  // schema refuses the whole save.
+  const existingDays = (await currentDeliveryDays()).join('\n');
+
   await manager.submit(shippingForm, {
     baseRate: '12.00',
     freeShippingThreshold: '150.00',
     deliveryZips: [...existingZips, outsideZip].join('\n'),
+    deliveryDays: existingDays,
   });
 
   const after = await visitor.get(`/order?zip=${outsideZip}`);
@@ -321,6 +327,7 @@ async function main() {
     baseRate: '12.00',
     freeShippingThreshold: '150.00',
     deliveryZips: `${existingZips.join('\n')}\nLakewood`,
+    deliveryDays: existingDays,
   });
   expect('S5c', 'A ZIP list entry that is not a ZIP code is reported, not silently dropped',
     (rejectedZips.headers.get('location') ?? '').includes('error='),
@@ -530,6 +537,11 @@ function tokenOf(url: string): string {
 
 async function currentZips(): Promise<string[]> {
   const row = await db.setting.findUnique({ where: { key: 'shipping.deliveryZips' } });
+  return Array.isArray(row?.value) ? (row.value as string[]) : [];
+}
+
+async function currentDeliveryDays(): Promise<string[]> {
+  const row = await db.setting.findUnique({ where: { key: 'delivery.dayChoices' } });
   return Array.isArray(row?.value) ? (row.value as string[]) : [];
 }
 

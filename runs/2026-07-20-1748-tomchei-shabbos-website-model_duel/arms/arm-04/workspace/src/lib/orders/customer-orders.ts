@@ -6,6 +6,7 @@ import { addressSummary } from '../addresses/address-summary';
 import { sumCents } from '../core/money';
 import { db } from '../db';
 import { findOwnedOrder, ownerFilter, type DraftOwner } from './draft-access';
+import { lineTotalWithAddOns } from './lines';
 
 /**
  * What the account area shows about an order. Two sources on purpose: a placed
@@ -123,7 +124,7 @@ export async function readOrderDetail(
       id: line.id,
       name: line.productNameSnapshot,
       quantity: line.quantity,
-      lineTotalCents: line.lineTotalCents + sumCents(line.addOns.map((addOn) => addOn.lineTotalCents)),
+      lineTotalCents: lineTotalWithAddOns(line),
       options: optionsLabel(line.optionsSnapshot),
       addOns: line.addOns.map((addOn) => addOn.addOnNameSnapshot),
       recipientName: line.recipientName,
@@ -141,9 +142,7 @@ export async function readOrderDetail(
 }
 
 function toSummary(order: SummaryRow): OrderSummary {
-  const lineTotals = order.lines.map(
-    (line) => line.lineTotalCents + sumCents(line.addOns.map((addOn) => addOn.lineTotalCents)),
-  );
+  const lineTotals = order.lines.map(lineTotalWithAddOns);
 
   const recipients = new Set(
     order.lines

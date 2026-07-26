@@ -336,6 +336,8 @@ function runEnvCheck(overrides: Record<string, string>): { status: number; outpu
         AUTH_PROVIDER: 'local',
         AUTH_SESSION_SECRET: 'local-development-session-secret-000001',
         MEDIA_STORAGE: 'local',
+        PAYMENT_PROVIDER: 'local',
+        STRIPE_WEBHOOK_SECRET: 'local-development-webhook-signing-key-000001',
         ...overrides,
       },
     },

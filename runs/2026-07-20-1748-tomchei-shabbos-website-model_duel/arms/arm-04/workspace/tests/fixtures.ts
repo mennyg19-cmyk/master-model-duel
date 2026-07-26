@@ -1,6 +1,7 @@
 import type {
   AddOn,
   Customer,
+  FeeBasis,
   FulfillmentKind,
   FulfillmentMethod,
   Order,
@@ -60,9 +61,16 @@ export async function createSeason(status: SeasonStatus = 'OPEN'): Promise<Seaso
 export async function createFulfillmentMethod(
   kind: FulfillmentKind = 'DELIVERY',
   baseFeeCents = 0,
+  feeBasis: FeeBasis = 'PER_PACKAGE',
 ): Promise<FulfillmentMethod> {
   return db.fulfillmentMethod.create({
-    data: { code: `method-${nextKey()}`, label: `Test ${kind.toLowerCase()}`, kind, baseFeeCents },
+    data: {
+      code: `method-${nextKey()}`,
+      label: `Test ${kind.toLowerCase()}`,
+      kind,
+      baseFeeCents,
+      feeBasis,
+    },
   });
 }
 
@@ -170,6 +178,8 @@ export type DraftLineSpec = {
   recipientName?: string;
   greetingMessage?: string | null;
   addressLine1?: string;
+  /** Set when a test needs the line to point back at a saved address book row. */
+  customerAddressId?: string;
 };
 
 export async function createDraftOrder(input: {
@@ -198,6 +208,7 @@ function toLineData(line: DraftLineSpec) {
     lineTotalCents: line.product.priceCents * quantity,
     recipientName: line.recipientName ?? 'Test Recipient',
     fulfillmentMethodId: line.fulfillmentMethodId,
+    customerAddressId: line.customerAddressId ?? null,
     addressLine1: line.addressLine1 ?? '1 Test Street',
     addressCity: 'Lakewood',
     addressState: 'NJ',

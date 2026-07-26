@@ -1,0 +1,296 @@
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+
+import {
+  changeOrderStatusAction,
+  postOfflinePaymentAction,
+  refundPaymentAction,
+  voidPaymentAction,
+} from '../actions';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { Input, Label, Select } from '@/components/ui/field';
+import { requirePermission } from '@/lib/auth/staff';
+import { formatCents } from '@/lib/core/money';
+import { readStaffOrderMoney, type StaffPaymentRow } from '@/lib/orders/staff-orders';
+import { OFFLINE_METHOD_LABELS } from '@/lib/payments/offline-payments';
+
+export const dynamic = 'force-dynamic';
+
+/**
+ * The money desk for one order (UR-011, R-053, R-054).
+ *
+ * Viewing is `orders.view`; every form here is `orders.manage` and re-checked
+ * server-side, so a member of staff who can read an order still cannot take a
+ * payment against it. Cash and checks are entered by staff only — the storefront
+ * has no route that reaches this — which is the whole of R-127.
+ */
+export default async function AdminOrderMoneyPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orderId: string }>;
+  searchParams: Promise<{ notice?: string; problem?: string }>;
+}) {
+  const [{ orderId }, query, staff] = await Promise.all([
+    params,
+    searchParams,
+    requirePermission('orders.view'),
+  ]);
+
+  const order = await readStaffOrderMoney(orderId);
+  if (!order) notFound();
+
+  const canManage = staff.permissions.includes('orders.manage');
+  const outstandingCents = order.totalCents - order.amountPaidCents;
+
+  return (
+    <div className="space-y-6" data-testid="admin-order" data-payment-status={order.paymentStatus}>
+      <header className="space-y-2">
+        <p className="text-sm">
+          <Link href="/admin/orders" className="underline underline-offset-4">
+            Orders
+          </Link>
+        </p>
+        <h1 className="text-2xl font-semibold">
+          {order.orderNumber === null ? order.draftReference : `Order #${order.orderNumber}`}
+        </h1>
+        <p className="text-sm text-[var(--color-ink-muted)]">
+          {order.customerName}
+          {order.customerEmail ? ` · ${order.customerEmail}` : ''} · {order.seasonLabel} ·{' '}
+          <Badge tone={order.status === 'CANCELLED' ? 'danger' : 'neutral'}>{order.status}</Badge>{' '}
+          <Badge tone={order.paymentStatus === 'PAID' ? 'success' : 'warning'}>
+            {order.paymentStatus}
+          </Badge>
+        </p>
+      </header>
+
+      {query.notice ? (
+        <p
+          className="rounded-md bg-[var(--color-success-soft)] px-3 py-2 text-sm text-[var(--color-success)]"
+          data-testid="order-notice"
+        >
+          {query.notice}
+        </p>
+      ) : null}
+
+      {query.problem ? (
+        <p
+          role="alert"
+          className="rounded-md bg-[var(--color-danger-soft)] px-3 py-2 text-sm text-[var(--color-danger)]"
+          data-testid="order-problem"
+        >
+          {query.problem}
+        </p>
+      ) : null}
+
+      <Card>
+        <CardTitle>What it costs</CardTitle>
+        <dl className="mt-3 max-w-sm space-y-1 text-sm">
+          <div className="flex justify-between">
+            <dt>Items</dt>
+            <dd>{formatCents(order.subtotalCents)}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt>Delivery and shipping</dt>
+            <dd>{formatCents(order.fulfillmentFeeCents)}</dd>
+          </div>
+          <div className="flex justify-between font-medium">
+            <dt>Total</dt>
+            <dd data-testid="admin-order-total">{formatCents(order.totalCents)}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt>Paid</dt>
+            <dd data-testid="admin-order-paid">{formatCents(order.amountPaidCents)}</dd>
+          </div>
+          <div className="flex justify-between text-[var(--color-ink-muted)]">
+            <dt>Outstanding</dt>
+            <dd data-testid="admin-order-outstanding">{formatCents(outstandingCents)}</dd>
+          </div>
+        </dl>
+
+        {order.packageFees.length > 0 ? (
+          <>
+            <CardDescription className="mt-4">
+              Fulfillment charged per box, frozen at checkout. Moving a box to another method later
+              does not re-price it.
+            </CardDescription>
+            <ul className="mt-2 space-y-1 text-sm">
+              {order.packageFees.map((row) => (
+                <li key={row.id} className="flex justify-between" data-testid="package-fee">
+                  <span>
+                    {row.recipientName} · {row.methodLabel}
+                  </span>
+                  <span data-cents={row.feeCents}>{formatCents(row.feeCents)}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </Card>
+
+      <Card>
+        <CardTitle>Payments</CardTitle>
+        {order.payments.length === 0 ? (
+          <CardDescription>Nothing has been paid against this order yet.</CardDescription>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {order.payments.map((payment) => (
+              <PaymentRow
+                key={payment.id}
+                payment={payment}
+                orderId={order.id}
+                canManage={canManage}
+              />
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {canManage ? (
+        <Card data-testid="pos-panel">
+          <CardTitle>Take a cash or check payment</CardTitle>
+          <CardDescription>
+            Staff only, and recorded against your name. Card payments arrive from the payment
+            provider and are never entered by hand.
+          </CardDescription>
+
+          <form action={postOfflinePaymentAction} className="mt-4 grid gap-3 sm:grid-cols-4">
+            <input type="hidden" name="orderId" value={order.id} />
+
+            <div>
+              <Label htmlFor="method">Method</Label>
+              <Select id="method" name="method" defaultValue="CASH">
+                <option value="CASH">Cash</option>
+                <option value="CHECK">Check</option>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="amount">Amount (dollars)</Label>
+              <Input
+                id="amount"
+                name="amount"
+                inputMode="decimal"
+                defaultValue={(Math.max(outstandingCents, 0) / 100).toFixed(2)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="reference">Check number or receipt</Label>
+              <Input id="reference" name="reference" />
+            </div>
+
+            <div className="flex items-end">
+              <Button type="submit" data-testid="pos-post">
+                Record payment
+              </Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
+
+      {canManage && order.status !== 'CANCELLED' ? (
+        <Card>
+          <CardTitle>Move this order</CardTitle>
+          <CardDescription>
+            Cancelling releases the stock this order is holding back to the shelf.
+          </CardDescription>
+
+          <form action={changeOrderStatusAction} className="mt-3 flex items-end gap-3">
+            <input type="hidden" name="orderId" value={order.id} />
+            <div>
+              <Label htmlFor="status">New status</Label>
+              <Select id="status" name="status" defaultValue="IN_FULFILLMENT">
+                <option value="IN_FULFILLMENT">In fulfillment</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="CANCELLED">Cancelled</option>
+              </Select>
+            </div>
+            <Button type="submit" variant="secondary" data-testid="order-transition">
+              Move
+            </Button>
+          </form>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function PaymentRow({
+  payment,
+  orderId,
+  canManage,
+}: {
+  payment: StaffPaymentRow;
+  orderId: string;
+  canManage: boolean;
+}) {
+  const refundable = payment.amountCents - payment.refundedCents;
+  const isOpen = payment.state === 'POSTED';
+
+  return (
+    <li
+      className="rounded-md border border-[var(--color-line)] p-3 text-sm"
+      data-testid="payment-row"
+      data-method={payment.method}
+      data-state={payment.state}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="font-medium">
+          {OFFLINE_METHOD_LABELS[payment.method]} · {formatCents(payment.amountCents)}
+          {payment.refundedCents > 0 ? ` · ${formatCents(payment.refundedCents)} refunded` : ''}
+        </span>
+        <span className="text-[var(--color-ink-muted)]">
+          {payment.receivedAt.toLocaleDateString('en-US')}
+          {payment.recordedBy ? ` · ${payment.recordedBy}` : ' · provider'}
+          {payment.reference ? ` · ${payment.reference}` : ''}
+        </span>
+      </div>
+
+      {payment.state === 'VOIDED' ? (
+        <p className="mt-1 text-[var(--color-ink-muted)]">Voided — {payment.voidReason}</p>
+      ) : null}
+
+      {canManage && isOpen ? (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <form action={voidPaymentAction} className="flex items-end gap-2">
+            <input type="hidden" name="orderId" value={orderId} />
+            <input type="hidden" name="paymentId" value={payment.id} />
+            <div className="grow">
+              <Label htmlFor={`void-${payment.id}`}>Void because</Label>
+              <Input id={`void-${payment.id}`} name="reason" placeholder="Keyed twice" />
+            </div>
+            <Button type="submit" variant="secondary" data-testid="payment-void">
+              Void
+            </Button>
+          </form>
+
+          {refundable > 0 ? (
+            <form action={refundPaymentAction} className="flex items-end gap-2">
+              <input type="hidden" name="orderId" value={orderId} />
+              <input type="hidden" name="paymentId" value={payment.id} />
+              <div>
+                <Label htmlFor={`refund-amount-${payment.id}`}>Refund (dollars)</Label>
+                <Input
+                  id={`refund-amount-${payment.id}`}
+                  name="amount"
+                  inputMode="decimal"
+                  defaultValue={(refundable / 100).toFixed(2)}
+                />
+              </div>
+              <div className="grow">
+                <Label htmlFor={`refund-reason-${payment.id}`}>Because</Label>
+                <Input id={`refund-reason-${payment.id}`} name="reason" placeholder="Order cancelled" />
+              </div>
+              <Button type="submit" variant="secondary" data-testid="payment-refund">
+                Refund
+              </Button>
+            </form>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  );
+}
