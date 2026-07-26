@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { DATABASE_URL, TEST_DATABASE_URL } from './db-server';
 import { findForm, parseForms, Session } from './http-form';
 import { createSolidPng } from './png';
-import { runCommand, runTests, SmokeRun } from './smoke-harness';
+import { envWithoutDatabaseUrl, runCommand, runTests, SmokeRun } from './smoke-harness';
 
 /**
  * Phase P3 smoke run. P3 is the first phase with a storefront, so the evidence
@@ -447,7 +447,7 @@ async function main() {
   record('P3-8', 'The P3 test files are green', testRun.failed.length === 0,
     `${testRun.passed.length} tests passed, ${testRun.failed.length} failed`);
 
-  const ci = runCommand('npm', ['run', 'ci']);
+  const ci = runCommand('npm', ['run', 'ci'], envWithoutDatabaseUrl());
   record('P3-9', 'Lint, typecheck, migration guard and the whole suite pass', ci.status === 0,
     ci.status === 0 ? 'npm run ci exited 0' : ci.output.trim().split('\n').slice(-5).join(' / '));
 

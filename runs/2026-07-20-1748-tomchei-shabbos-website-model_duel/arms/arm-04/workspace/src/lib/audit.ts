@@ -18,6 +18,13 @@ import type { StaffContext } from './auth/staff';
 type AuditDetails = {
   'order.finalized': { orderNumber: number; packageCount: number; totalCents: number };
   'order.status_changed': { from: OrderStatus; to: OrderStatus };
+  'order.draft_claimed': { draftReference: string };
+  /// UR-014 and G-019: a staff member editing somebody else's address book is
+  /// the row an auditor comes looking for. The same edit made by the customer is
+  /// logged as "system", which is how the two are told apart.
+  'customer.address_saved': { customerId: string; created: boolean };
+  'customer.address_archived': { customerId: string };
+  'customer.profile_updated': { changedPhone: boolean };
   'package.created': { orderId: string; recipientName: string; lineCount: number };
   'package.stage_changed': { from: PackageStage; to: PackageStage };
   'staff.invited': { email: string; role: StaffRole };

@@ -1,13 +1,16 @@
 import type {
+  AddOn,
   Customer,
   FulfillmentKind,
   FulfillmentMethod,
   Order,
+  PickupLocation,
   Product,
   Season,
   SeasonStatus,
 } from '@prisma/client';
 
+import type { StaffContext } from '../src/lib/auth/staff';
 import { db } from '../src/lib/db';
 import { createDraftReference } from '../src/lib/orders/draft-reference';
 
@@ -85,9 +88,79 @@ export async function createProduct(
   return product;
 }
 
-export async function createCustomer(): Promise<Customer> {
+export async function createCustomer(fullName = 'Test Customer'): Promise<Customer> {
   const email = `customer-${nextKey()}@example.test`;
-  return db.customer.create({ data: { email, normalizedEmail: email, fullName: 'Test Customer' } });
+  return db.customer.create({ data: { email, normalizedEmail: email, fullName } });
+}
+
+export async function createPickupLocation(): Promise<PickupLocation> {
+  return db.pickupLocation.create({
+    data: {
+      name: `Pickup ${nextKey()}`,
+      line1: '5 Depot Road',
+      city: 'Lakewood',
+      state: 'NJ',
+      postalCode: '08701',
+    },
+  });
+}
+
+/** An add-on with no `restrictedToProductIds` is offered on every product (R-021). */
+export async function createAddOn(
+  season: Season,
+  options: { priceCents?: number; onHand?: number | null; restrictedToProductIds?: string[] } = {},
+): Promise<AddOn> {
+  const onHand = options.onHand === undefined ? 100 : options.onHand;
+
+  const addOn = await db.addOn.create({
+    data: {
+      seasonId: season.id,
+      slug: `addon-${nextKey()}`,
+      name: `Test add-on ${nextKey()}`,
+      priceCents: options.priceCents ?? 500,
+      tracksInventory: onHand !== null,
+      restrictions: {
+        create: (options.restrictedToProductIds ?? []).map((productId) => ({ productId })),
+      },
+    },
+  });
+
+  if (onHand !== null) await db.inventoryItem.create({ data: { addOnId: addOn.id, onHand } });
+  return addOn;
+}
+
+export async function addProductOption(
+  product: Product,
+  option: { groupLabel: string; label: string; priceAdjustmentCents?: number },
+): Promise<void> {
+  await db.productOption.create({
+    data: {
+      productId: product.id,
+      groupLabel: option.groupLabel,
+      label: option.label,
+      priceAdjustmentCents: option.priceAdjustmentCents ?? 0,
+    },
+  });
+}
+
+/** A staff actor for audit assertions: the row an auditor comes looking for (G-019). */
+export async function createStaffContext(): Promise<StaffContext> {
+  const staff = await db.staffUser.create({
+    data: {
+      email: `staff-${nextKey()}@tomchei.example`,
+      fullName: 'Test Staff',
+      role: 'MANAGER',
+      status: 'ACTIVE',
+    },
+    include: { permissionOverrides: true },
+  });
+
+  return {
+    actor: staff,
+    acting: staff,
+    isImpersonating: false,
+    permissions: ['customers.view', 'customers.manage'],
+  };
 }
 
 export type DraftLineSpec = {

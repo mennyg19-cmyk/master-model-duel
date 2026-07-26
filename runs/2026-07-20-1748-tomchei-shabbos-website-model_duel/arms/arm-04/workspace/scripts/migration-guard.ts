@@ -22,6 +22,8 @@ const REQUIRED_CHECK_CONSTRAINTS = [
   'InventoryItem.InventoryItem_reserved_within_on_hand',
   'Reservation.Reservation_single_target',
   'Reservation.Reservation_quantity_positive',
+  'Order.Order_has_owner',
+  'OrderLine.OrderLine_assignment_complete',
 ];
 
 /**

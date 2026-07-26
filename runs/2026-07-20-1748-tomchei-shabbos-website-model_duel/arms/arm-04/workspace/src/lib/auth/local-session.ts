@@ -7,7 +7,12 @@ import { isLoopbackUrl } from '../env-spec';
 import { IMPERSONATION_COOKIE, SESSION_COOKIE } from './cookie-names';
 import { signCookieValue } from './signed-cookie';
 
-const COOKIE_OPTIONS = {
+/**
+ * One cookie policy for every credential this app hands a browser — the staff
+ * session, the impersonation stamp and a guest's draft token. They are all
+ * bearer credentials, so none of them may be readable by script.
+ */
+export const BROWSER_COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: 'lax',
   path: '/',
@@ -31,7 +36,7 @@ export async function startLocalSession(identity: { externalId: string; email: s
 
   const store = await cookies();
   store.set(SESSION_COOKIE, signCookieValue(identity), {
-    ...COOKIE_OPTIONS,
+    ...BROWSER_COOKIE_OPTIONS,
     maxAge: SESSION_MAX_AGE_SECONDS,
   });
 }
@@ -45,7 +50,7 @@ export async function endLocalSession() {
 export async function startImpersonation(staffUserId: string) {
   const store = await cookies();
   store.set(IMPERSONATION_COOKIE, signCookieValue({ staffUserId }), {
-    ...COOKIE_OPTIONS,
+    ...BROWSER_COOKIE_OPTIONS,
     maxAge: SESSION_MAX_AGE_SECONDS,
   });
 }

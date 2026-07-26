@@ -123,6 +123,21 @@ export function runTests(
   return { passed, failed };
 }
 
+/**
+ * The environment for a child command that has to choose its own database.
+ *
+ * Importing `@prisma/client` in a smoke script puts the development
+ * `DATABASE_URL` into the environment, and `--env-file` will not override a
+ * variable that is already there. Left in place, `npm run ci` runs the unit
+ * suite — which truncates every table — against the development database the
+ * smoke run has just been checking.
+ */
+export function envWithoutDatabaseUrl(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.DATABASE_URL;
+  return env;
+}
+
 export function lineContaining(output: string, needle: string): string {
   const match = output.split('\n').find((line) => line.includes(needle));
   return (match ?? output.trim().split('\n').at(-1) ?? '').trim();

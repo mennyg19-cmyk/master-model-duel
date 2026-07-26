@@ -55,6 +55,11 @@ export class Session {
     this.cookies.clear();
   }
 
+  /** Lets a check assert on a cookie the app sets or clears, such as a guest token. */
+  cookie(name: string): string | null {
+    return this.cookies.get(name) ?? null;
+  }
+
   private cookieHeader(): string {
     return [...this.cookies].map(([name, value]) => `${name}=${value}`).join('; ');
   }

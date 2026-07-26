@@ -7,12 +7,14 @@ import { sumCents } from '../core/money';
 import { failure, type Result } from '../core/result';
 import { abort, runInTransaction } from '../transaction';
 import { releaseUnits, reserveUnits, type InventoryTarget } from '../inventory/reserve';
+import { ownerFilter, type DraftOwner } from './draft-access';
 import { groupLinesIntoPackages } from './grouping';
 import { checkOrderTransition } from './state-machine';
 
 export const ORDER_NOT_FOUND = 'order_not_found';
 export const SEASON_CLOSED = 'season_closed';
 export const EMPTY_ORDER = 'empty_order';
+export const UNASSIGNED_LINES = 'unassigned_lines';
 export const CONCURRENT_CHANGE = 'concurrent_order_change';
 
 export type FinalizedOrder = {
@@ -58,6 +60,20 @@ export async function finalizeOrder(
       abort(failure(EMPTY_ORDER, 'An order needs at least one item before it can be placed.'));
     }
 
+    // Cart-first building means a line can sit in the cart with no recipient yet
+    // (UR-006), and a package cannot be built from one. This is the gate that
+    // keeps that half-finished state inside the builder.
+    const lines = order.lines.filter(isAssignedLine);
+    if (lines.length !== order.lines.length) {
+      const waiting = order.lines.length - lines.length;
+      abort(
+        failure(
+          UNASSIGNED_LINES,
+          `${waiting} ${waiting === 1 ? 'item is' : 'items are'} still waiting for a recipient.`,
+        ),
+      );
+    }
+
     // Claim the draft before anything else. The row lock this takes is what
     // stops a second finalize of the same order from also reaching the number
     // counter, and the re-checked `status` filter is what makes the loser lose.
@@ -69,11 +85,11 @@ export async function finalizeOrder(
       conflictMessage: 'This order was already placed from another device.',
     });
 
-    await reserveInventoryFor(tx, order.id, order.lines);
+    await reserveInventoryFor(tx, order.id, lines);
 
     const orderNumber = await claimOrderNumber(tx, order.seasonId);
-    const packages = await createPackages(tx, order.id, order.lines, actor);
-    const totals = await computeOrderTotals(tx, order.lines, packages);
+    const packages = await createPackages(tx, order.id, lines, actor);
+    const totals = await computeOrderTotals(tx, lines, packages);
 
     await tx.order.update({ where: { id: order.id }, data: { orderNumber, ...totals } });
 
@@ -95,14 +111,22 @@ export async function finalizeOrder(
 /**
  * The only way an order changes status after it is placed (R-044). Cancelling
  * hands reserved stock back; every other move just records itself.
+ *
+ * `owner` narrows the move to one customer's or one guest's order, so an id that
+ * came off a form cannot reach somebody else's even if the caller forgot to look
+ * first. Staff moves pass null: `requirePermission` is their gate, and the office
+ * is allowed to touch an order that is not theirs.
  */
 export async function transitionOrder(
   orderId: string,
   to: OrderStatus,
   actor: AuditActor,
+  owner: DraftOwner | null = null,
 ): Promise<Result<Order>> {
   return runInTransaction(async (tx) => {
-    const order = await tx.order.findUnique({ where: { id: orderId } });
+    const order = await tx.order.findFirst({
+      where: { id: orderId, ...(owner ? ownerFilter(owner) : {}) },
+    });
 
     if (!order) abort(failure(ORDER_NOT_FOUND, 'That order no longer exists.'));
 
@@ -136,10 +160,16 @@ export async function transitionOrder(
 
 /**
  * R-046. A draft holds no stock — reservations are claimed at finalize — so
- * discarding one is the DRAFT → DISCARDED move and nothing else.
+ * discarding one is the DRAFT → DISCARDED move and nothing else. The owner is
+ * required here because every caller has one: a customer or a guest throwing
+ * away their own cart.
  */
-export function discardDraft(orderId: string, actor: AuditActor): Promise<Result<Order>> {
-  return transitionOrder(orderId, 'DISCARDED', actor);
+export function discardDraft(
+  owner: DraftOwner,
+  orderId: string,
+  actor: AuditActor,
+): Promise<Result<Order>> {
+  return transitionOrder(orderId, 'DISCARDED', actor, owner);
 }
 
 const LINE_INVENTORY_INCLUDE = {
@@ -148,6 +178,13 @@ const LINE_INVENTORY_INCLUDE = {
 } satisfies Prisma.OrderLineInclude;
 
 type LineWithInventory = Prisma.OrderLineGetPayload<{ include: typeof LINE_INVENTORY_INCLUDE }>;
+
+/** A line that has been through the builder's assignment step, so it has a destination. */
+type AssignedLine = LineWithInventory & { recipientName: string; fulfillmentMethodId: string };
+
+function isAssignedLine(line: LineWithInventory): line is AssignedLine {
+  return line.recipientName !== null && line.fulfillmentMethodId !== null;
+}
 
 type InventoryDemand = { target: InventoryTarget; quantity: number; itemName: string };
 
@@ -272,7 +309,7 @@ async function claimOrderNumber(tx: Prisma.TransactionClient, seasonId: string):
 async function createPackages(
   tx: Prisma.TransactionClient,
   orderId: string,
-  lines: LineWithInventory[],
+  lines: AssignedLine[],
   actor: AuditActor,
 ): Promise<Package[]> {
   const created: Package[] = [];
@@ -312,7 +349,7 @@ async function createPackages(
  */
 async function computeOrderTotals(
   tx: Prisma.TransactionClient,
-  lines: LineWithInventory[],
+  lines: AssignedLine[],
   packages: Package[],
 ) {
   const subtotalCents = sumCents(

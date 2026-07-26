@@ -23,7 +23,7 @@ type AddressParts = {
  */
 export function normalizeAddressKey(parts: AddressParts): string {
   return [parts.line1, parts.line2, parts.city, parts.state, parts.postalCode, parts.country ?? 'US']
-    .map((part) => collapseToLetters(part))
+    .map((part) => canonicalizeWords(collapseToLetters(part)))
     .join('|');
 }
 
@@ -37,4 +37,48 @@ function collapseToLetters(value: string | null | undefined): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+
+/**
+ * How people actually write the same street. Without this, "12 Main St." and
+ * "12 Main Street" are two rows in one address book, two geocode lookups and two
+ * packages to one door — the whole reason the key exists.
+ *
+ * Only unambiguous forms are listed. "St" doubles as Saint, which collapses onto
+ * the same token and costs nothing: two spellings of one address is the outcome
+ * this is for.
+ */
+const ADDRESS_WORDS: Record<string, string> = {
+  street: 'st',
+  str: 'st',
+  saint: 'st',
+  avenue: 'ave',
+  av: 'ave',
+  road: 'rd',
+  drive: 'dr',
+  lane: 'ln',
+  boulevard: 'blvd',
+  court: 'ct',
+  place: 'pl',
+  circle: 'cir',
+  terrace: 'ter',
+  parkway: 'pkwy',
+  highway: 'hwy',
+  apartment: 'apt',
+  unit: 'apt',
+  suite: 'apt',
+  ste: 'apt',
+  floor: 'fl',
+  north: 'n',
+  south: 's',
+  east: 'e',
+  west: 'w',
+};
+
+function canonicalizeWords(value: string): string {
+  return value
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => ADDRESS_WORDS[word] ?? word)
+    .join(' ');
 }

@@ -119,7 +119,11 @@ test('discarding a draft leaves no order number behind', async () => {
     lines: [{ product, fulfillmentMethodId: method.id }],
   });
 
-  const discarded = await discardDraft(draft.id, null);
+  const discarded = await discardDraft(
+    { kind: 'customer', customerId: customer.id },
+    draft.id,
+    null,
+  );
   assert.equal(discarded.ok, true);
   assert.equal(discarded.ok && discarded.value.orderNumber, null);
   assert.ok(discarded.ok && discarded.value.discardedAt !== null);

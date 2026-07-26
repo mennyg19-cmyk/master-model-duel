@@ -1,7 +1,7 @@
 # Tomchei Shabbos — Mishloach Manos platform
 
 Greenfield rebuild of the nonprofit Purim mishloach manos platform.
-This repository currently contains **phases P1 to P3**:
+This repository currently contains **phases P1 to P4**:
 
 - **P1** — foundation, identity, roles, permissions, staff tooling.
 - **P2** — the domain core as schema plus engine: seasons, catalog, customers and
@@ -10,10 +10,12 @@ This repository currently contains **phases P1 to P3**:
   catalog with filters and quick view, past-collections archive, newsletter with
   tokenized unsubscribe, admin catalog and add-on editors, the media library, and
   the settings hub.
+- **P4** — the cart-first order builder, the customer address book, the customer
+  account area, and the staff view of a customer's book.
 
-Cart and checkout, fulfillment and reporting land in later phases of
-`shared/MERGED-BUILD-PLAN.md`. `/order` exists in P3 only as the gate that decides
-whether ordering is possible at all — the builder behind it is P4.
+Checkout and payment, fulfillment and reporting land in later phases of
+`shared/MERGED-BUILD-PLAN.md`. A P4 order is built and saved but not yet paid for:
+`/order` says so, and the account area says so on the draft.
 
 ## Ports
 
@@ -62,11 +64,13 @@ entirely and just set `DATABASE_URL`.
 | `npm run smoke` | P1 smoke checks against a running dev server |
 | `npm run smoke:p2` | P2 smoke: migrate, seed, read the domain back, run the engine tests |
 | `npm run smoke:p3` | P3 smoke: storefront, gates, newsletter, media and settings over HTTP |
+| `npm run smoke:p4` | P4 smoke: builder, assignment, guest and account drafts, address book, staff audit |
 
 `npm run smoke` needs `npm run dev` running and starts from an empty database
 (`npm run db:fresh`), because it proves the first-run bootstrap. `npm run smoke:p2`
-needs no dev server — P2 has no screens. `npm run smoke:p3` needs both a dev server
-and the seeded database.
+needs no dev server — P2 has no screens. `npm run smoke:p3` and `npm run smoke:p4`
+need both a dev server and the seeded database; `smoke:p4` clears the drafts an
+earlier run left behind so it starts from an empty cart.
 
 Newsletter mail is a later phase, so `npm run newsletter:link` is how the
 preferences and unsubscribe pages are opened until then.
@@ -80,10 +84,31 @@ preferences and unsubscribe pages are opened until then.
 | `/collection/[slug]` | Detail with every option priced |
 | `/archive`, `/archive/[year]` | Past seasons, browse only, no buy controls anywhere |
 | `/newsletter`, `/newsletter/manage`, `/newsletter/unsubscribe` | Signup, preferences and unsubscribe, all reached with a signed token instead of an account |
-| `/order` | The ordering gate: store-open enforcement and the delivery-ZIP check |
+| `/order` | The cart-first builder behind the store-open gate, plus the delivery-ZIP check |
+| `/account`, `/account/orders`, `/account/profile`, `/account/addresses` | Dashboard, order history and detail, profile, address book |
+| `/account/sign-in` | Customer sign-in, which also claims the cart built as a guest |
 
-Quick view and the mobile menu are a URL and a `<details>` element, not JavaScript
-widgets, so both work with the client bundle blocked and both survive a refresh.
+Quick view, the mobile menu, the recipient picker and the add-recipient dialog are
+URLs and `<details>` elements, not JavaScript widgets, so all of them work with the
+client bundle blocked and all of them survive a refresh.
+
+### The order builder
+
+Items go in first with no recipient at all, and each line is then pointed at the
+person it is for — on the order, someone in the address book, or someone new, who
+joins the book on the way past. A line is one recipient's box, so a quantity above
+one is that many boxes for the same person and a second person is a second line.
+
+The cart is one component rendered twice: pinned beside the catalogue on a desktop,
+and behind the floating button on a phone. Drafts hold no stock — reservations are
+taken at checkout in P5 — so the stock figure on a card is honest about being a
+snapshot, and nothing in the builder promises a unit it cannot hold.
+
+A cart exists before anyone signs in. A guest's draft is held by a random token in
+an httpOnly cookie and stored only as its SHA-256 hash, so the row cannot be found
+from the database side or guessed from the id. Signing in hands that draft to the
+account; the cookie is cleared only if the hand-over succeeds, so an account that
+is already building an order keeps both carts rather than losing one.
 
 Two switches decide whether ordering is possible, and `src/lib/store-state.ts` is
 the only place that reads them: the season's own status and the `store.open`
@@ -121,6 +146,10 @@ The engine that goes with it:
 | Cached payment totals | `src/lib/orders/payment-status.ts` — always recounted, never adjusted by a delta |
 | Whether the store takes orders | `src/lib/store-state.ts` — season status and the `store.open` setting, both required |
 | Where volunteers deliver | `src/lib/delivery-area.ts` — an explicit ZIP list with no override; an empty list means nobody |
+| Who a cart belongs to | `src/lib/orders/draft-access.ts` — a customer id or a hashed guest token. Every cart read and write goes through the same owner filter, so "not yours" and "does not exist" are one answer |
+| What is in the cart, and what it costs | `src/lib/orders/cart.ts` (read) and `cart-service.ts` (add, requantify, remove, claim) |
+| Where a line is going | `src/lib/orders/assignment.ts` — the three-way picker, re-checked server-side: the method must still be offered, a saved address must be in this customer's own book, and delivery still only reaches its ZIPs |
+| One address book per customer | `src/lib/addresses/address-book.ts` — normalized keys dedupe "12 Main St." onto "12 Main Street", edits follow open drafts but never a placed order, and rows are archived rather than deleted |
 | Which unsubscribe links work | `src/lib/newsletter/tokens.ts` — HMAC over a purpose string and the payload, 30-day expiry |
 
 Order numbers are per season and gapless: the counter increments inside the same
@@ -167,6 +196,8 @@ One pattern per concern, picked here and followed from now on:
 | Concurrency | Optimistic `version` columns; conflicts are reported, never overwritten |
 | Transactions | `runInTransaction` / `abort` in `src/lib/transaction.ts`. A domain failure rolls the work back; helpers that may run inside one take `DbClient` |
 | Audit | `recordAudit` only. `AuditDetails` in `src/lib/audit.ts` declares what each action may write, so a new action is a typed decision |
-| Server actions | A `'use server'` module exports async functions and nothing else. Form state is a type there; its initial value is a const in the client component |
-| Client-safe modules | Anything a `'use client'` file imports stays free of `db`, `env` and `server-only` — which is why the newsletter labels live in `src/lib/newsletter/preferences.ts`, apart from the service |
+| Server actions | A `'use server'` module exports async functions and nothing else, so the shared `FormState` and its empty value live in `src/lib/forms/form-state.ts` |
+| Reading a posted form | `trimmedField` in `src/lib/forms/form-data.ts`; the eight address fields come back together from `addressFieldsFromForm` in `src/lib/addresses/address-form.ts`, so a new column is one edit |
+| Reporting an action's outcome | A page with one form uses `useActionState`. A page with a form on every card and every row — the builder, the address list — redirects back with `?notice=` or `?problem=` and reports once at the top, which is one place to look instead of a hook per row |
+| Client-safe modules | Anything a `'use client'` file imports stays free of `db`, `env` and `server-only` — which is why the newsletter labels live in `src/lib/newsletter/preferences.ts` and `addressSummary` in `src/lib/addresses/address-summary.ts`, apart from their services |
 | Tests | `node:test` via tsx. No test framework dependency |

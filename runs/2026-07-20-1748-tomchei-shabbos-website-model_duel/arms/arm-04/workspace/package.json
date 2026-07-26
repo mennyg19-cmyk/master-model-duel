@@ -18,11 +18,12 @@
     "db:fresh": "tsx scripts/db-fresh.ts",
     "seed": "node --import tsx --conditions=react-server --env-file=.env prisma/seed.ts",
     "test:db": "tsx scripts/test-db.ts",
-    "test": "npm run test:db && node --import tsx --conditions=react-server --env-file=.env.test --test-concurrency=1 --test tests/core.test.ts tests/env-spec.test.ts tests/permissions.test.ts tests/bootstrap.test.ts tests/concurrency.test.ts tests/grouping.test.ts tests/draft-reference.test.ts tests/order-state-machine.test.ts tests/order-lifecycle.test.ts tests/order-numbers.test.ts tests/inventory.test.ts tests/scheduled-jobs.test.ts tests/catalog-browse.test.ts tests/catalog-admin.test.ts tests/media.test.ts tests/newsletter.test.ts",
+    "test": "npm run test:db && node --import tsx --conditions=react-server --env-file=.env.test --test-concurrency=1 --test tests/core.test.ts tests/env-spec.test.ts tests/permissions.test.ts tests/bootstrap.test.ts tests/concurrency.test.ts tests/grouping.test.ts tests/draft-reference.test.ts tests/order-state-machine.test.ts tests/order-lifecycle.test.ts tests/order-numbers.test.ts tests/inventory.test.ts tests/scheduled-jobs.test.ts tests/catalog-browse.test.ts tests/catalog-admin.test.ts tests/media.test.ts tests/newsletter.test.ts tests/cart-builder.test.ts tests/address-book.test.ts",
     "newsletter:link": "node --import tsx --conditions=react-server --env-file=.env scripts/newsletter-link.ts",
     "smoke": "tsx scripts/smoke.ts",
     "smoke:p2": "tsx scripts/smoke-p2.ts",
     "smoke:p3": "tsx scripts/smoke-p3.ts",
+    "smoke:p4": "tsx scripts/smoke-p4.ts",
     "ci": "npm run lint && npm run typecheck && npm run db:guard && npm test"
   },
   "dependencies": {
