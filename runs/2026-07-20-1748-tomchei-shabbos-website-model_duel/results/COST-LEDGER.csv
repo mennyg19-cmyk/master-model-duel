@@ -348,3 +348,23 @@
 2026-07-22T01:49:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,6,arm-03,,detect,cursor-grok-4.5-high,2a87b30a-2e82-41a4-9ca9-e21cd519d794,,,,,,,,4/5 bugs found; usage_missing
 2026-07-22T01:59:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,6,arm-03,,vague_fix,cursor-grok-4.5-high,903d309c-809f-4681-8611-c77814aab9d0,,,,,,,,5/5 symptoms ci 78; usage_missing
 2026-07-22T01:59:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-03,,residual_aggregate,glm-5.2-high,8007db92-f8d5-4149-a666-0b82333850e7,,,,,,,,Test5 score 11/15; usage_missing
+2026-07-26T10:17:18Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1a,arm-04,,inventory-data,claude-opus-5-thinking-high,261305b6-8b06-4cd2-989b-aed734a3accd,,,,,,,,60 features; usage_missing
+2026-07-26T10:17:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1a,arm-04,,inventory-product,claude-opus-5-thinking-high,9b2581e1-db6d-442d-a996-63935c94916d,,,,,,,,1a product; usage_missing
+2026-07-26T10:17:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1a,arm-04,,inventory-ui,claude-opus-5-thinking-high,ef2f0887-3566-4b53-a0b0-d833281ba53b,,,,,,,,112 features; usage_missing
+2026-07-26T10:17:48Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1a,arm-04,,inventory-integrations,claude-opus-5-thinking-high,555b3380-4872-418b-bc37-0d51adce736e,,,,,,,,77 features; usage_missing
+2026-07-26T10:17:48Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1a,arm-04,,inventory-security,claude-opus-5-thinking-high,7f9d89ff-c512-40b9-ae7e-3c1825c706a5,,,,,,,,1a security; usage_missing
+2026-07-26T10:30:32Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1a,arm-04,,inventory-merge,claude-opus-5-thinking-high,7761d782-36c4-4fd0-a09b-b07ee12c7e63,,,,,,,,295 merged; 8 CONFLICT; usage_missing
+2026-07-26T10:32:37Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1a,arm-04,,inventory_grade,glm-5.2-high,adb6968d-8436-4786-b475-3891119a32e0,,,,,,,,7/7 recall 192/192; bonus_novel=6; usage_missing
+2026-07-26T10:50:24Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T1,grill_turn,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill turn 1; usage_missing
+2026-07-26T11:17:06Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T2,grill_turn,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill turn 2 after A; usage_missing
+2026-07-26T11:19:04Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T3,grill_turn,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill turn 3; usage_missing
+2026-07-26T11:21:11Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T4,grill_turn,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill turn 4; usage_missing
+2026-07-26T11:23:05Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T5,grill_turn,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill turn 5; usage_missing
+2026-07-26T11:25:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T6,grill_turn,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill turn 6; usage_missing
+2026-07-26T11:30:42Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T7,grill_turn,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill turn 7; T6 locked A aggregator; usage_missing
+2026-07-26T11:32:38Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T8,grill_turn,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill turn 8; usage_missing
+2026-07-26T11:34:32Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T9,grill_turn,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill turn 9; usage_missing
+2026-07-26T11:36:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T10,grill_turn,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill turn 10 final Q; usage_missing
+2026-07-26T11:38:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T10,grill_close,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill closed 10 turns; usage_missing
+2026-07-26T11:41:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,,grill_inventory,claude-opus-5-thinking-high,56776770-ed12-4887-a616-f573d6b43e07,,,,,,,,99 features; 18 OPEN; usage_missing
+2026-07-26T11:42:49Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,,grill_grade,glm-5.2-high,987f344f-20e7-4fb9-a791-275ba1a6eb62,,,,,,,,8/8 tq=2.00 inv=7/7 eff=0.70; usage_missing

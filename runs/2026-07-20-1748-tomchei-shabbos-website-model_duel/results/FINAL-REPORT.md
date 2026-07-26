@@ -27,9 +27,9 @@
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | arm-01 | 5 | 8 | 14 | — | 18.0 | 12.0 | **15.0** | **72.0** |
 | arm-02 | 7 | 8 | 14 | — | 18.0 | 12.5 | **15.0** | **74.5** |
-| arm-03 | 6 | 8 | 15 | — | 18.0 | 7.5 | **15.0** | **69.5** |
+| arm-03 | 6 | 8 | 15 | — | 18.0 | 11.0 | **11.0** | **69.0** |
 
-Late join **arm-03** (`cursor-grok-4.5-high`): Tests 1a–2 + 4–6 complete; Test 3 skipped. Bonuses: `inv_novel=2`, `bonus_plan`. Test 6 rerun on arm-02 clone + same B1–B5 seeds.
+Late join **arm-03** (`cursor-grok-4.5-high`): Tests 1a–2 + 4–6 complete; Test 3 skipped. Bonuses: `inv_novel=2`, `bonus_plan`. Test 6 rerun: detect 4/5 (missed B3) → **11.0/15**; vague fix 5/5.
 
 ## Dual inventory
 
@@ -55,4 +55,4 @@ See [COST-LEDGER.csv](./COST-LEDGER.csv). Usage backfill pending (`usage_missing
 | arm-02 final workspace | [arms/arm-02/workspace/](../arms/arm-02/workspace/) (post Test 6 fix) |
 | arm-03 final workspace | [arms/arm-03/workspace/](../arms/arm-03/workspace/) (late join; post Test 6 rerun) |
 
-**Overall winner (original arms, Test 3 excluded): arm-02** at 74.5/100. Late join arm-03 scored **69.5/100** (below both original arms on base total; Test 5 residual 7.5/15 after security-blocker residual panel).
+**Overall winner (original arms, Test 3 excluded): arm-02** at 74.5/100. Late join arm-03 scored **69.0/100** (below both original arms; Test 6 detect missed B3 public-guard).

@@ -58,3 +58,12 @@ late_joins:
     joined_utc: 2026-07-21T13:33:59.6474314Z
     test6: rerun_same_seeds
     test6_note: arm-03 only; clone arm-02 winner; B1-B5 from .scratch/BUG-LEDGER.md; arm-01/02 scores frozen
+  - arm_id: arm-04
+    model: claude-opus-5-thinking-high
+    family: claude-opus
+    pack_id: default
+    web_port: 3104
+    db_port: 4104
+    joined_utc: 2026-07-26T10:09:25.6481873Z
+    test6: rerun_same_seeds
+    test6_note: arm-04 only; clone arm-02 winner; B1-B5 from .scratch/BUG-LEDGER.md; arm-01/02/03 scores frozen

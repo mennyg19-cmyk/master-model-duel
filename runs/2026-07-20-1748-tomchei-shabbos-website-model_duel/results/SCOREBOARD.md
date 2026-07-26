@@ -7,6 +7,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 | arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** | — | no |
 | arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** | — | no |
 | arm-03 | **6** | **8** | **15** | | **18.0** | **11.0** | **11.0** | **69.0** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
+| arm-04 | **7** | **8** | | | | | | | inv_novel=6 | **yes** (join after Test 6; Opus 5 high; T6 rerun) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -16,6 +17,8 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 |---|---:|---:|---:|---:|
 | arm-01 | 7 | 1.98 | 13 | 0.54 |
 | arm-02 | 7 | 2.00 | 13 | 0.54 |
+| arm-03 | 7 | 1.99 | 13 | 0.54 |
+| arm-04 | 7 | 2.00 | 10 | **0.70** |
 
 ## Cost (from COST-LEDGER.csv)
 
@@ -30,7 +33,7 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 |---|---|---|
 | With external reviewer (1+2+4+6 renorm) | **arm-02** (95.4/100) | Test 3 skipped |
 | Solo commit (1+2+5 renorm) | **arm-02** (92.2/100) | |
-| Best interviewer (1b) | arm-02 (tie 8/8; wins efficiency tie-break on turn quality 2.00 vs 1.98) | |
+| Best interviewer (1b) | **arm-04** (tie 8/8; wins efficiency 0.70 on 10 turns; tq 2.00) | Original duel: arm-02 (tq 2.00 vs 1.98) |
 
 ## Test 4 notes (partial)
 
@@ -87,14 +90,17 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 
 ## Test 1b notes
 
-- Grill complete: 13 turns each arm, interleaved
+- Grill complete: 13 turns each original arm, interleaved; late joins live (own questions)
 - **arm-01:** grill_quality ≈7.9 → **8/8**; 30 grill features; turn_quality 1.98. [grade](results/reviews/grill-turns-arm-01.md)
 - **arm-02:** grill_quality 7.0 → **8/8**; 16 grill features; turn_quality 2.00. [grade](results/reviews/grill-turns-arm-02.md)
-- **Comparison:** [shared/INVENTORY-COMPARISON.md](../shared/INVENTORY-COMPARISON.md) — resolved → [shared/USER-RESOLVED-INVENTORY.md](../shared/USER-RESOLVED-INVENTORY.md)
+- **arm-03 (late join):** **8/8**; 13 features; turn_quality 1.985; efficiency 0.54. [grade](results/reviews/grill-turns-arm-03.md)
+- **arm-04 (late join):** **8/8**; 99 features / 18 OPEN; turn_quality **2.00**; efficiency **0.70** (10 turns). [grade](results/reviews/grill-turns-arm-04.md)
+- **Comparison:** [shared/INVENTORY-COMPARISON.md](../shared/INVENTORY-COMPARISON.md) — resolved → [shared/USER-RESOLVED-INVENTORY.md](../shared/USER-RESOLVED-INVENTORY.md) (**frozen**; late joins do not rewrite)
 
 ## Test 1a notes (corrected grades)
 
 - Reconciled: 192 features (`shared/RECONCILED-INVENTORY.md`)
 - **arm-01:** recall 2 (144/192 = 74.5%), precision 3 → **5/7** — missed 48 rows (mostly arm-02-granular schema/design-system + scattered behaviors). [grade](results/reviews/inventory-grade-arm-01.md)
 - **arm-02:** recall 4 (188/192 = 97.9%), precision 3 → **7/7** — missed R-015, R-016, R-017 (catalog grid UX), R-114 (customer linking). [grade](results/reviews/inventory-grade-arm-02.md)
-- **Test 1a winner: arm-02**
+- **arm-04 (late join):** recall 4 (192/192 = 100%), precision 3 → **7/7**; bonus_inventory_novel=6. [grade](results/reviews/inventory-grade-arm-04.md)
+- **Test 1a winner: arm-02** (tie 7/7 with arm-04 on score; arm-02 gated first)
