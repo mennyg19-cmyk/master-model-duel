@@ -1,23 +1,13 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
 
-import { PrismaClient } from '@prisma/client';
-
-import { bootstrapFirstManager, isSetupLocked, SETUP_LOCK_KEY } from '../src/lib/bootstrap';
+import { bootstrapFirstManager, isSetupLocked } from '../src/lib/bootstrap';
 import { linkCustomerIdentity } from '../src/lib/customers';
-
-const db = new PrismaClient();
+import { db, emptyDatabase } from './fixtures';
 
 after(() => db.$disconnect());
 
-beforeEach(async () => {
-  await db.auditEvent.deleteMany();
-  await db.permissionOverride.deleteMany();
-  await db.staffLoginSession.deleteMany();
-  await db.staffUser.deleteMany();
-  await db.customer.deleteMany();
-  await db.setting.deleteMany({ where: { key: SETUP_LOCK_KEY } });
-});
+beforeEach(emptyDatabase);
 
 test('an empty database allows bootstrap, then locks', async () => {
   assert.equal(await isSetupLocked(), false);

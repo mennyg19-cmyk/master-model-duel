@@ -30,10 +30,12 @@ async function main() {
     env: { ...process.env, DATABASE_URL: target },
   });
 
-  if (migrate.status !== 0) process.exitCode = 1;
+  // `embedded-postgres` installs an async exit hook that ends the process with
+  // 0 whatever `process.exitCode` says, so a failed reset has to exit by hand.
+  if (migrate.status !== 0) process.exit(1);
 }
 
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
+  process.exit(1);
 });

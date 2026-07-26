@@ -15,6 +15,15 @@ export const DB_PASSWORD = 'postgres';
 export const DB_NAME = 'tomchei';
 export const DATABASE_URL = `postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1:${DB_PORT}/${DB_NAME}?schema=public`;
 
+/**
+ * Tests truncate tables, so they get their own database. Anything that spawns
+ * the test runner passes this explicitly: `--env-file` does not override a
+ * DATABASE_URL that is already in the environment, and importing
+ * `@prisma/client` puts the development one there.
+ */
+export const TEST_DB_NAME = 'tomchei_test';
+export const TEST_DATABASE_URL = `postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1:${DB_PORT}/${TEST_DB_NAME}?schema=public`;
+
 const dataDirectory = path.resolve(process.cwd(), '.pgdata');
 
 export function createCluster(): EmbeddedPostgres {

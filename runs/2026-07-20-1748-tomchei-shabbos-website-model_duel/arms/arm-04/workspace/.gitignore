@@ -40,6 +40,9 @@ yarn-error.log*
 # agent scratch notes
 /.scratch/
 
+# codegraph index (rebuilt with `codegraph init`)
+/.codegraph/
+
 # vercel
 .vercel
 

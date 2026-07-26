@@ -4,12 +4,13 @@ import type { Prisma, StaffRole, StaffUser } from '@prisma/client';
 
 import { db } from './db';
 import { recordAudit } from './audit';
+import type { DbClient } from './core/db-client';
 import { normalizeEmail } from './core/normalize';
-import { failure, ok, type Result } from './core/result';
+import { failure, ok, STALE_VERSION, type Result } from './core/result';
 import { isPermission } from './auth/permissions';
 import type { StaffContext } from './auth/staff';
 
-export const STALE_VERSION = 'stale_version';
+export { STALE_VERSION };
 
 /**
  * Optimistic concurrency for staff rows. The caller passes the version it read;
@@ -20,7 +21,7 @@ export async function updateStaffVersioned(
   staffUserId: string,
   expectedVersion: number,
   data: Prisma.StaffUserUpdateInput,
-  client: Prisma.TransactionClient | typeof db = db,
+  client: DbClient = db,
 ): Promise<Result<StaffUser>> {
   const updated = await client.staffUser.updateMany({
     where: { id: staffUserId, version: expectedVersion },

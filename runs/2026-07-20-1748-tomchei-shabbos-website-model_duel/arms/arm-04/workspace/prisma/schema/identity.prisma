@@ -49,6 +49,8 @@ model StaffUser {
   auditEventsAsActor  AuditEvent[]         @relation("AuditActor")
   auditEventsAsSubject AuditEvent[]        @relation("AuditImpersonated")
   loginSessions       StaffLoginSession[]
+  paymentsRecorded    Payment[]
+  assemblyBatches     AssemblyBatch[]
 
   @@index([role, status])
 }
@@ -79,26 +81,14 @@ model StaffLoginSession {
   @@index([staffUserId, startedAt])
 }
 
-/// Customers hold their own identity link. No role column exists here by design.
-model Customer {
-  id             String   @id @default(uuid())
-  externalAuthId String?  @unique
-  email          String   @unique
-  normalizedEmail String  @unique
-  fullName       String
-  phone          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@index([normalizedEmail])
-}
-
 model AuditEvent {
   id                   String   @id @default(uuid())
   action               String
   entityType           String
   entityId             String
-  /// Free-form detail. Never store secrets or full payment data here.
+  /// JSON so the shape can differ per action, but not free-form: the allowed
+  /// shape of every action is declared in `AuditDetails` in src/lib/audit.ts,
+  /// which is where "never store secrets or payment data here" is enforced.
   detail               Json     @default("{}")
 
   actorStaffUserId     String?

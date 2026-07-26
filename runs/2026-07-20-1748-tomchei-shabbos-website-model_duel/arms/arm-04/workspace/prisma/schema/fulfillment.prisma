@@ -1,0 +1,178 @@
+enum FulfillmentKind {
+  SHIPPING
+  DELIVERY
+  PICKUP
+}
+
+enum PackageStage {
+  NEW
+  PRINTED
+  PACKED
+  SENT
+  PICKED_UP
+}
+
+/// Fulfillment methods are rows, not an enum (R-154). The org adds "volunteer
+/// delivery — Lakewood" for one season without a deploy, and the grouping key
+/// keeps working because it stores the method id.
+model FulfillmentMethod {
+  id    String          @id @default(uuid())
+  code  String          @unique
+  label String
+  kind  FulfillmentKind
+
+  /// Base charge the order snapshots. The per-destination and per-recipient fee
+  /// rules (UR-009) land with delivery in P5; this is what they start from.
+  baseFeeCents Int @default(0)
+
+  requiresAddress        Boolean @default(true)
+  requiresPickupLocation Boolean @default(false)
+  isActive               Boolean @default(true)
+  sortOrder              Int     @default(0)
+
+  orderLines OrderLine[]
+  packages   Package[]
+}
+
+model PickupLocation {
+  id           String  @id @default(uuid())
+  name         String  @unique
+  line1        String
+  line2        String?
+  city         String
+  state        String
+  postalCode   String
+  instructions String?
+  isActive     Boolean @default(true)
+
+  orderLines OrderLine[]
+  packages   Package[]
+}
+
+/// A physical box (UR-001). Lines that share a recipient, address, fulfillment
+/// method and greeting travel together; anything else gets its own package,
+/// because the card and the label in the box would otherwise be wrong.
+///
+/// The stages are optional on purpose: an org that only prints never advances
+/// past PRINTED, and printing must never imply shipped (G-001, G-004).
+model Package {
+  id      String @id @default(uuid())
+  orderId String
+
+  /// Hash of the four grouping inputs. Unique per order so the finalize
+  /// transaction cannot create the same package twice under a retry.
+  groupingKey String
+
+  recipientName       String
+  fulfillmentMethodId String
+  pickupLocationId    String?
+
+  addressLine1      String?
+  addressLine2      String?
+  addressCity       String?
+  addressState      String?
+  addressPostalCode String?
+  addressCountry    String?
+
+  greetingMessage String?
+
+  stage      PackageStage @default(NEW)
+  printedAt  DateTime?
+  packedAt   DateTime?
+  sentAt     DateTime?
+  pickedUpAt DateTime?
+
+  packageTypeId String?
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order             Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fulfillmentMethod FulfillmentMethod @relation(fields: [fulfillmentMethodId], references: [id])
+  pickupLocation    PickupLocation?   @relation(fields: [pickupLocationId], references: [id])
+  packageType       PackageType?      @relation(fields: [packageTypeId], references: [id])
+  lines             OrderLine[]
+  shipmentBoxes     ShipmentBox[]
+  shippingQuotes    ShippingQuote[]
+
+  @@unique([orderId, groupingKey])
+  @@index([stage])
+}
+
+/// Box sizes the org stocks. Rate shopping needs real dimensions (R-157).
+model PackageType {
+  id             String  @id @default(uuid())
+  name           String  @unique
+  lengthMm       Int
+  widthMm        Int
+  heightMm       Int
+  maxWeightGrams Int
+  isActive       Boolean @default(true)
+
+  packages      Package[]
+  shipmentBoxes ShipmentBox[]
+}
+
+model ShipmentBox {
+  id            String @id @default(uuid())
+  packageId     String
+  packageTypeId String?
+
+  weightGrams    Int
+  carrier        String?
+  serviceCode    String?
+  trackingNumber String? @unique
+  labelUrl       String?
+
+  /// Set when a printed label is cancelled during a reroute (UR-004). The row
+  /// stays so the carrier charge can be reconciled later.
+  voidedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  package     Package      @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageType PackageType? @relation(fields: [packageTypeId], references: [id])
+
+  @@index([packageId])
+}
+
+/// Carrier rates go stale, so a quote carries its own expiry and checkout must
+/// re-quote rather than charge an old price (R-155).
+model ShippingQuote {
+  id        String  @id @default(uuid())
+  orderId   String
+  packageId String?
+
+  destinationPostalCode String
+  requestedAt           DateTime @default(now())
+  expiresAt             DateTime
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  package Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  options ShippingQuoteOption[]
+
+  @@index([orderId])
+  @@index([expiresAt])
+}
+
+/// Margin capture (UR-003): the customer is charged the higher quoted rate while
+/// the org ships on the cheaper carrier and keeps the spread, so the two amounts
+/// are stored separately and reconciled internally.
+model ShippingQuoteOption {
+  id      String @id @default(uuid())
+  quoteId String
+
+  carrier      String
+  serviceCode  String
+  serviceLabel String
+
+  carrierCostCents   Int
+  customerPriceCents Int
+  transitDays        Int?
+  isSelected         Boolean @default(false)
+
+  quote ShippingQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@unique([quoteId, carrier, serviceCode])
+}

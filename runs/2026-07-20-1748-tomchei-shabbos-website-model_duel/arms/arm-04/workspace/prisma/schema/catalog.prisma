@@ -1,0 +1,134 @@
+enum SeasonStatus {
+  OPEN
+  CLOSED
+}
+
+enum ProductKind {
+  PACKAGE
+  BUNDLE
+  SPONSORSHIP
+}
+
+/// One Purim campaign year. The catalog, order numbers and archive all hang off
+/// a season, which is what makes off-season browsing possible (UR-008).
+model Season {
+  id     String       @id @default(uuid())
+  year   Int          @unique
+  label  String
+  status SeasonStatus @default(CLOSED)
+
+  /// Optional scheduled auto-flip. A cron sweep opens or closes the season when
+  /// the clock passes these, so nobody has to be awake at midnight. Null means
+  /// the manager flips it by hand.
+  opensAt  DateTime?
+  closesAt DateTime?
+
+  /// Next order number to hand out for this season. Finalize claims it with an
+  /// atomic increment inside its transaction, so two checkouts racing for the
+  /// last number cannot both read the same value (R-151).
+  nextOrderNumber Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+  addOns   AddOn[]
+  orders   Order[]
+
+  @@index([status, opensAt])
+  @@index([status, closesAt])
+}
+
+model Product {
+  id          String      @id @default(uuid())
+  seasonId    String
+  slug        String
+  name        String
+  description String?
+  kind        ProductKind @default(PACKAGE)
+  priceCents  Int
+
+  /// Shipping dimensions in millimetres and grams, so every rate calculation
+  /// stays in integers.
+  lengthMm    Int?
+  widthMm     Int?
+  heightMm    Int?
+  weightGrams Int?
+
+  /// Off for things that cannot run out, like a sponsorship line.
+  tracksInventory Boolean @default(true)
+  isActive        Boolean @default(true)
+  sortOrder       Int     @default(0)
+
+  /// The item that takes this one's place next season. Repeat-order (P10) walks
+  /// this link to suggest a swap when last year's product is gone (R-148).
+  replacedByProductId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  season       Season                    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  replacedBy   Product?                  @relation("SeasonReplacement", fields: [replacedByProductId], references: [id], onDelete: SetNull)
+  replaces     Product?                  @relation("SeasonReplacement")
+  options      ProductOption[]
+  addOnLimits  AddOnProductRestriction[]
+  inventory    InventoryItem?
+  reservations Reservation[]
+  orderLines   OrderLine[]
+  billOfMaterial BillOfMaterialLine[]
+  assemblyBatches AssemblyBatch[]
+
+  @@unique([seasonId, slug])
+  @@index([seasonId, isActive])
+}
+
+/// A choice within a group ("Size: large"). The adjustment is added to the
+/// product price when the option is picked, and both are snapshotted onto the
+/// order line at checkout (R-148).
+model ProductOption {
+  id                   String  @id @default(uuid())
+  productId            String
+  groupLabel           String
+  label                String
+  priceAdjustmentCents Int     @default(0)
+  isDefault            Boolean @default(false)
+  sortOrder            Int     @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, groupLabel, label])
+}
+
+model AddOn {
+  id              String  @id @default(uuid())
+  seasonId        String
+  slug            String
+  name            String
+  priceCents      Int
+  tracksInventory Boolean @default(true)
+  isActive        Boolean @default(true)
+  sortOrder       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  season       Season                    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  restrictions AddOnProductRestriction[]
+  inventory    InventoryItem?
+  reservations Reservation[]
+  orderLines   OrderLineAddOn[]
+
+  @@unique([seasonId, slug])
+}
+
+/// An add-on with no restriction rows is offered on every product; one or more
+/// rows narrow it to exactly those products.
+model AddOnProductRestriction {
+  addOnId   String
+  productId String
+
+  addOn   AddOn   @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([addOnId, productId])
+}

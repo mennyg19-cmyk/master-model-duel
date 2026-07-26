@@ -1,0 +1,191 @@
+enum OrderStatus {
+  DRAFT
+  PLACED
+  IN_FULFILLMENT
+  COMPLETED
+  CANCELLED
+  DISCARDED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  OVERPAID
+}
+
+enum PaymentMethod {
+  STRIPE
+  CASH
+  CHECK
+  COMP
+}
+
+enum PaymentState {
+  POSTED
+  VOIDED
+}
+
+model Order {
+  id         String      @id @default(uuid())
+  seasonId   String
+  customerId String
+  status     OrderStatus @default(DRAFT)
+
+  /// Handed out once, at finalize. Drafts quote `draftReference` instead, so a
+  /// customer who abandons a cart never burns a season order number (R-151).
+  orderNumber Int?
+
+  /// Human-quotable id for a cart in progress, in the wire format staff read
+  /// over the phone (R-047).
+  draftReference String @unique
+
+  /// Order-level card message. A line may override it per recipient (UR-013).
+  defaultGreeting String?
+
+  subtotalCents       Int @default(0)
+  fulfillmentFeeCents Int @default(0)
+  totalCents          Int @default(0)
+
+  /// Derived from posted payments and cached here so order lists do not sum the
+  /// payment table for every row (R-152). `recomputeOrderPaymentStatus` is the
+  /// only writer.
+  paymentStatus   PaymentStatus @default(UNPAID)
+  amountPaidCents Int           @default(0)
+
+  placedAt    DateTime?
+  discardedAt DateTime?
+
+  /// Optimistic-concurrency stamp, same contract as StaffUser: a mutation must
+  /// match the version it read.
+  version Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  season         Season                @relation(fields: [seasonId], references: [id])
+  customer       Customer              @relation(fields: [customerId], references: [id])
+  lines          OrderLine[]
+  packages       Package[]
+  reservations   Reservation[]
+  payments       Payment[]
+  paymentIntents StripePaymentIntent[]
+  shippingQuotes ShippingQuote[]
+
+  @@unique([seasonId, orderNumber])
+  @@index([seasonId, status])
+  @@index([customerId, createdAt])
+}
+
+/// One catalog item going to one recipient. The destination lives on the line
+/// because a single order routinely ships to a dozen different people (UR-006);
+/// packages are then derived from these lines, not the other way round.
+model OrderLine {
+  id       String @id @default(uuid())
+  orderId  String
+  quantity Int
+
+  productId String
+
+  /// Snapshots. The catalog can be re-priced or renamed after an order is
+  /// placed, and what the customer agreed to must not move with it (R-150).
+  productNameSnapshot String
+  unitPriceCents      Int
+  optionsSnapshot     Json @default("[]")
+  lineTotalCents      Int
+
+  recipientName       String
+  fulfillmentMethodId String
+  pickupLocationId    String?
+
+  /// Copied from the address book rather than referenced, for the same snapshot
+  /// reason. `customerAddressId` records where it came from.
+  customerAddressId String?
+  addressLine1      String?
+  addressLine2      String?
+  addressCity       String?
+  addressState      String?
+  addressPostalCode String?
+  addressCountry    String?
+
+  greetingMessage String?
+
+  /// Filled at finalize by the grouping engine.
+  packageId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product           Product            @relation(fields: [productId], references: [id])
+  fulfillmentMethod FulfillmentMethod  @relation(fields: [fulfillmentMethodId], references: [id])
+  pickupLocation    PickupLocation?    @relation(fields: [pickupLocationId], references: [id])
+  customerAddress   CustomerAddress?   @relation(fields: [customerAddressId], references: [id])
+  package           Package?           @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  addOns            OrderLineAddOn[]
+
+  @@index([orderId])
+  @@index([packageId])
+}
+
+model OrderLineAddOn {
+  id          String @id @default(uuid())
+  orderLineId String
+  addOnId     String
+  quantity    Int
+
+  addOnNameSnapshot String
+  unitPriceCents    Int
+  lineTotalCents    Int
+
+  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  addOn     AddOn     @relation(fields: [addOnId], references: [id])
+
+  @@unique([orderLineId, addOnId])
+}
+
+/// Cash and checks are entered by staff at the POS, Stripe rows arrive from the
+/// webhook, and comps are manager gifts. Nothing is ever deleted: a mistake is
+/// voided so the paper trail survives (R-160).
+model Payment {
+  id          String        @id @default(uuid())
+  orderId     String
+  method      PaymentMethod
+  state       PaymentState  @default(POSTED)
+  amountCents Int
+
+  /// Stripe intent id, check number, or POS receipt id.
+  reference  String?
+  receivedAt DateTime  @default(now())
+  voidedAt   DateTime?
+  voidReason String?
+
+  recordedByStaffUserId String?
+
+  createdAt DateTime @default(now())
+
+  order    Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  recorded StaffUser? @relation(fields: [recordedByStaffUserId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, state])
+}
+
+/// Hosted Stripe Checkout only (resolution 8b), so this row is a mirror of what
+/// Stripe reports — never a source of truth for whether money arrived. The
+/// matching `Payment` row is what the cached order status counts.
+model StripePaymentIntent {
+  id             String @id @default(uuid())
+  orderId        String
+  stripeIntentId String @unique
+  status         String
+  amountCents    Int
+  currency       String @default("usd")
+
+  lastEventAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
