@@ -16,6 +16,7 @@ const PRODUCTS = [
     slug: 'classic-mishloach-manos',
     name: 'Classic Mishloach Manos',
     description: 'Hamantaschen, nosh and a bottle of grape juice in a keepsake box.',
+    category: 'Boxes',
     priceCents: 3600,
     lengthMm: 300,
     widthMm: 220,
@@ -31,6 +32,7 @@ const PRODUCTS = [
     slug: 'deluxe-wine-basket',
     name: 'Deluxe Wine Basket',
     description: 'Kosher wine, dried fruit and chocolate in a lined basket.',
+    category: 'Baskets',
     priceCents: 7200,
     lengthMm: 360,
     widthMm: 280,
@@ -45,6 +47,7 @@ const SPONSORSHIP = {
   slug: 'sponsor-a-family',
   name: 'Sponsor a Family',
   description: 'Covers a full Shabbos package for a family in need.',
+  category: 'Sponsorships',
   priceCents: 18000,
 };
 
@@ -94,7 +97,7 @@ const GREETING = 'Freilichen Purim from the Donor family';
 const SEASON_OPENS_ON = { month: 0, day: 5 };
 const SEASON_CLOSES_ON = { month: 2, day: 1 };
 
-export async function seedDomain(customerId: string): Promise<void> {
+export async function seedDomain(customerId: string): Promise<{ season: Season }> {
   const season = await upsertSeason(seasonYearFor(new Date()), 'OPEN');
   const previousSeason = await upsertSeason(season.year - 1, 'CLOSED');
 
@@ -106,6 +109,8 @@ export async function seedDomain(customerId: string): Promise<void> {
 
   const addresses = await upsertAddresses(customerId);
   await placeDemoOrder(season, customerId, products, methods, addresses);
+
+  return { season };
 }
 
 async function upsertSeason(year: number, status: 'OPEN' | 'CLOSED'): Promise<Season> {
@@ -169,7 +174,12 @@ async function upsertCatalog(season: Season): Promise<Map<string, Product>> {
     const product = await db.product.upsert({
       where: { seasonId_slug: { seasonId: season.id, slug: definition.slug } },
       create: { ...fields, seasonId: season.id, sortOrder: index },
-      update: { name: fields.name, priceCents: fields.priceCents, sortOrder: index },
+      update: {
+        name: fields.name,
+        priceCents: fields.priceCents,
+        category: fields.category,
+        sortOrder: index,
+      },
     });
 
     for (const [optionIndex, option] of options.entries()) {
@@ -204,7 +214,7 @@ async function upsertCatalog(season: Season): Promise<Map<string, Product>> {
       tracksInventory: false,
       sortOrder: PRODUCTS.length,
     },
-    update: { priceCents: SPONSORSHIP.priceCents },
+    update: { priceCents: SPONSORSHIP.priceCents, category: SPONSORSHIP.category },
   });
   products.set(SPONSORSHIP.slug, sponsorship);
 

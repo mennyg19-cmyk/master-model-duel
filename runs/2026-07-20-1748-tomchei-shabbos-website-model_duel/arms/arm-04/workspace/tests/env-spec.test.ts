@@ -9,6 +9,7 @@ const VALID_LOCAL_ENV = {
   APP_URL: 'http://127.0.0.1:3104',
   AUTH_PROVIDER: 'local',
   AUTH_SESSION_SECRET: 'Kf7pQx2LzR9vB4nT6wY1sJ3hD8mA5cE0',
+  MEDIA_STORAGE: 'local',
 };
 
 function pathsRejectedBy(overrides: Record<string, string>): string[] {
@@ -38,8 +39,30 @@ test('a long but low-variety session secret is rejected', () => {
 });
 
 test('the passwordless local provider is refused off this machine', () => {
-  assert.deepEqual(pathsRejectedBy({ APP_URL: 'https://staging.tomchei.example' }), ['AUTH_PROVIDER']);
-  assert.deepEqual(pathsRejectedBy({ APP_URL: 'http://10.0.0.4:3104' }), ['AUTH_PROVIDER']);
+  // Local media storage follows the same loopback rule, so it is switched to
+  // blob here to leave the auth rule as the only thing under test.
+  const hosted = { MEDIA_STORAGE: 'blob', BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_token' };
+
+  assert.deepEqual(pathsRejectedBy({ ...hosted, APP_URL: 'https://staging.tomchei.example' }), [
+    'AUTH_PROVIDER',
+  ]);
+  assert.deepEqual(pathsRejectedBy({ ...hosted, APP_URL: 'http://10.0.0.4:3104' }), [
+    'AUTH_PROVIDER',
+  ]);
+});
+
+test('local media storage is refused off this machine, and blob storage needs its token', () => {
+  const hostedWithClerk = {
+    APP_URL: 'https://tomchei.example',
+    AUTH_PROVIDER: 'clerk',
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_test',
+    CLERK_SECRET_KEY: 'sk_test',
+  };
+
+  assert.deepEqual(pathsRejectedBy(hostedWithClerk), ['MEDIA_STORAGE']);
+  assert.deepEqual(pathsRejectedBy({ ...hostedWithClerk, MEDIA_STORAGE: 'blob' }), [
+    'BLOB_READ_WRITE_TOKEN',
+  ]);
 });
 
 test('clerk still requires its keys', () => {

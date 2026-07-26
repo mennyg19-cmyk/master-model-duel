@@ -51,6 +51,7 @@ model StaffUser {
   loginSessions       StaffLoginSession[]
   paymentsRecorded    Payment[]
   assemblyBatches     AssemblyBatch[]
+  mediaUploads        MediaAsset[]
 
   @@index([role, status])
 }

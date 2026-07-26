@@ -385,3 +385,10 @@
 2026-07-26T13:44:48Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P2,review_clean_code,glm-5.2-high,242f4ec9-e7d8-4712-93e5-0cfd946df305,,,,,,,,P2 clean-code review spawn; usage_missing
 2026-07-26T13:47:18Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P2,review_aggregate,glm-5.2-high,94e52f83-4411-454f-8536-362e7ad89ac2,,,,,,,,P2 aggregate spawn usage_missing
 2026-07-26T13:48:20Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P2,fix,claude-opus-5-thinking-high,654b35fe-1b8f-4fc6-87e4-1ca801219f31,,,,,,,,P2 fix pass M1-M6; usage_missing
+2026-07-26T14:19:42Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P3,build,claude-opus-5-thinking-high,2022f5ec-bf6e-4396-a342-176ae75af9e9,,,,,,,,P3 build spawn; usage_missing
+2026-07-26T15:19:23Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P3,review_security,glm-5.2-high,61152cb8-3110-4ae7-80c9-08fc91650cd7,,,,,,,,P3 security review spawn; usage_missing
+2026-07-26T15:19:24Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P3,review_quality,glm-5.2-high,20bd8e43-3e56-4aa4-9747-00ee6b49a56a,,,,,,,,P3 quality review spawn; usage_missing
+2026-07-26T15:19:24Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P3,review_rules,glm-5.2-high,c411fc2d-ff6a-4172-bc1d-f57d5f393e5d,,,,,,,,P3 rules review spawn; usage_missing
+2026-07-26T15:19:24Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P3,review_clean_code,glm-5.2-high,dc7d0bff-3aac-48a2-8930-66627ddc2c4a,,,,,,,,P3 clean-code review spawn; usage_missing
+2026-07-26T15:22:32Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P3,review_aggregate,glm-5.2-high,2f7a6b10-5269-4572-9829-5b92353d0e58,,,,,,,,P3 aggregate spawn; usage_missing
+2026-07-26T15:23:31Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P3,fix,claude-opus-5-thinking-high,99eb222a-ea02-419f-9434-f931216fdd96,,,,,,,,P3 fix pass M1-M5; usage_missing

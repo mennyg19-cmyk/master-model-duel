@@ -1,28 +1,34 @@
-import Link from 'next/link';
+import { SiteFooter } from '@/components/storefront/site-footer';
+import { SiteHeader } from '@/components/storefront/site-header';
+import { closedStoreMessage, readStoreState } from '@/lib/store-state';
 
-import { BRAND } from '@/lib/brand';
+export const dynamic = 'force-dynamic';
 
-export default function StorefrontLayout({ children }: { children: React.ReactNode }) {
+export default async function StorefrontLayout({ children }: { children: React.ReactNode }) {
+  const store = await readStoreState();
+
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-[var(--color-line)] bg-[var(--color-brand)] text-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <Link href="/" className="text-lg font-semibold">
-            {BRAND.organization}
-          </Link>
-          <nav className="flex items-center gap-4 text-sm">
-            <Link href="/admin">Staff sign in</Link>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader isStoreOpen={store.isOpen} />
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">{children}</main>
+      {store.isOpen ? null : (
+        <p
+          className="bg-[var(--color-warning-soft)] px-4 py-2 text-center text-sm text-[var(--color-warning)]"
+          data-testid="closed-banner"
+        >
+          {closedStoreMessage(store)} Browsing stays open all year.
+        </p>
+      )}
 
-      <footer className="border-t border-[var(--color-line)] bg-[var(--color-surface-muted)]">
-        <div className="mx-auto max-w-5xl px-4 py-6 text-sm text-[var(--color-ink-muted)]">
-          {BRAND.organization} · {BRAND.supportEmail} · {BRAND.supportPhone}
-        </div>
-      </footer>
+      {store.announcement ? (
+        <p className="bg-[var(--color-brand-soft)] px-4 py-2 text-center text-sm text-[var(--color-brand-strong)]">
+          {store.announcement}
+        </p>
+      ) : null}
+
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10">{children}</main>
+
+      <SiteFooter />
     </div>
   );
 }

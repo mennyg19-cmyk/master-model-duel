@@ -75,6 +75,20 @@ export const ENV_VARIABLES: EnvVariableSpec[] = [
     example: 'false',
   },
   {
+    key: 'MEDIA_STORAGE',
+    description:
+      'blob = Vercel Blob, the deployment target for catalog photos. local = write them under ' +
+      'public/uploads for offline development and CI; it is rejected unless APP_URL points at ' +
+      'this machine, because a hosted filesystem is read-only and per-instance.',
+    example: 'local',
+  },
+  {
+    key: 'BLOB_READ_WRITE_TOKEN',
+    description: 'Vercel Blob read-write token. Required only when MEDIA_STORAGE=blob.',
+    example: '',
+    secret: true,
+  },
+  {
     key: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
     description: 'Clerk publishable key. Required only when AUTH_PROVIDER=clerk.',
     example: '',
@@ -93,6 +107,8 @@ const baseSchema = z.object({
   APP_URL: z.url('APP_URL must be an absolute URL, for example http://127.0.0.1:3104'),
   AUTH_PROVIDER: z.enum(['clerk', 'local']),
   AUTH_SESSION_SECRET: z.string().min(32, 'AUTH_SESSION_SECRET must be at least 32 characters'),
+  MEDIA_STORAGE: z.enum(['blob', 'local']),
+  BLOB_READ_WRITE_TOKEN: z.string().optional(),
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
   CLERK_SECRET_KEY: z.string().optional(),
   TRUST_PROXY_HEADERS: z
@@ -109,6 +125,27 @@ export const envSchema = baseSchema.superRefine((env, ctx) => {
       message:
         'AUTH_SESSION_SECRET is a known placeholder or has too little variety to be a real key. ' +
         'Generate one with `openssl rand -base64 48`',
+    });
+  }
+
+  if (env.MEDIA_STORAGE === 'blob' && !env.BLOB_READ_WRITE_TOKEN) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['BLOB_READ_WRITE_TOKEN'],
+      message: 'BLOB_READ_WRITE_TOKEN is required when MEDIA_STORAGE=blob, but it was empty',
+    });
+  }
+
+  // Same loopback rule as the local auth provider, for the same reason: a
+  // hosted deployment has a read-only, per-instance filesystem, so a photo
+  // written there is lost on the next request.
+  if (env.MEDIA_STORAGE === 'local' && !isLoopbackUrl(env.APP_URL)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MEDIA_STORAGE'],
+      message:
+        `MEDIA_STORAGE=local is only allowed when APP_URL is a loopback address, but APP_URL is ` +
+        `${env.APP_URL}. Deploy with MEDIA_STORAGE=blob`,
     });
   }
 

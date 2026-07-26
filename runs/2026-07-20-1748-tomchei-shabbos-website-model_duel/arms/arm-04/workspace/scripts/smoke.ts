@@ -1,8 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
 
 import { findForm, parseForms, Session, type ParsedForm } from './http-form';
+import { SmokeRun } from './smoke-harness';
 
 const BASE_URL = process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:3104';
 
@@ -10,19 +9,11 @@ const MANAGER = { email: 'manager@tomchei.example', fullName: 'Rivka Manager' };
 const HELPER = { email: 'helper@tomchei.example', fullName: 'Yossi Helper' };
 const DRIVER = { email: 'driver@tomchei.example', fullName: 'Dov Driver' };
 
-type CheckResult = { id: string; description: string; passed: boolean; evidence: string };
+const run = new SmokeRun('P1', [
+  `Run at ${new Date().toISOString()} against ${BASE_URL} (web 3104, db 4104).`,
+]);
 
-const results: CheckResult[] = [];
-
-function record(id: string, description: string, passed: boolean, evidence: string) {
-  results.push({ id, description, passed, evidence });
-  console.log(`${passed ? 'PASS' : 'FAIL'}  ${id}  ${description}\n        ${evidence}`);
-}
-
-function expect(id: string, description: string, condition: boolean, evidence: string) {
-  record(id, description, condition, evidence);
-  if (!condition) throw new Error(`${id} failed: ${evidence}`);
-}
+const expect = run.expect.bind(run);
 
 async function main() {
   const manager = new Session(BASE_URL);
@@ -218,7 +209,7 @@ async function main() {
     publicLocalProvider.status === 1 && publicLocalProvider.output.includes('AUTH_PROVIDER'),
     publicLocalProvider.output.trim().split('\n').slice(0, 2).join(' / '));
 
-  writeReport();
+  run.write();
 }
 
 async function inviteStaff(
@@ -344,6 +335,7 @@ function runEnvCheck(overrides: Record<string, string>): { status: number; outpu
         APP_URL: 'http://127.0.0.1:3104',
         AUTH_PROVIDER: 'local',
         AUTH_SESSION_SECRET: 'local-development-session-secret-000001',
+        MEDIA_STORAGE: 'local',
         ...overrides,
       },
     },
@@ -352,34 +344,8 @@ function runEnvCheck(overrides: Record<string, string>): { status: number; outpu
   return { status: child.status ?? -1, output: `${child.stdout}${child.stderr}` };
 }
 
-function writeReport() {
-  const failed = results.filter((result) => !result.passed);
-  const lines = [
-    '# Phase P1 smoke evidence — arm-04',
-    '',
-    `Run at ${new Date().toISOString()} against ${BASE_URL} (web 3104, db 4104).`,
-    '',
-    '| # | Check | Result | Evidence |',
-    '|---|---|---|---|',
-    ...results.map(
-      (result) =>
-        `| ${result.id} | ${result.description} | ${result.passed ? 'PASS' : 'FAIL'} | ${result.evidence.replace(/\|/g, '\\|')} |`,
-    ),
-    '',
-    `**${results.length - failed.length}/${results.length} checks passed.**`,
-    '',
-  ];
-
-  const target = path.resolve(process.cwd(), '.scratch/PHASE-P1-SMOKE.md');
-  mkdirSync(path.dirname(target), { recursive: true });
-  writeFileSync(target, lines.join('\n'), 'utf8');
-  console.log(`\nWrote ${target}`);
-
-  if (failed.length > 0) process.exitCode = 1;
-}
-
 main().catch((error) => {
   console.error(`\nSmoke run stopped: ${error instanceof Error ? error.message : error}`);
-  writeReport();
+  run.write();
   process.exitCode = 1;
 });

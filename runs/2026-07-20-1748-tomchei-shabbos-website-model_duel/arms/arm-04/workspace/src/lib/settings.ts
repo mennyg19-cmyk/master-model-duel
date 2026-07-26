@@ -13,6 +13,15 @@ const SETTING_SCHEMAS = {
   'setup.completed': z.boolean(),
   'store.open': z.boolean(),
   'brand.announcement': z.string(),
+  'orders.followUpDays': z.number().int().min(0).max(90),
+  // Five-digit ZIPs volunteer delivery covers. An empty list means nobody can
+  // pick delivery, which is the safe reading of "not configured yet" (G-014).
+  'shipping.deliveryZips': z.array(z.string().regex(/^\d{5}$/)),
+  'shipping.baseRateCents': z.number().int().min(0),
+  'shipping.freeShippingThresholdCents': z.number().int().min(0),
+  'email.fromName': z.string(),
+  'email.fromAddress': z.string(),
+  'email.replyToAddress': z.string(),
 } as const;
 
 type SettingKey = keyof typeof SETTING_SCHEMAS;
@@ -22,6 +31,13 @@ const DEFAULTS: { [K in SettingKey]: SettingValue<K> } = {
   'setup.completed': false,
   'store.open': false,
   'brand.announcement': '',
+  'orders.followUpDays': 3,
+  'shipping.deliveryZips': [],
+  'shipping.baseRateCents': 0,
+  'shipping.freeShippingThresholdCents': 0,
+  'email.fromName': '',
+  'email.fromAddress': '',
+  'email.replyToAddress': '',
 };
 
 export async function readSetting<K extends SettingKey>(key: K): Promise<SettingValue<K>> {

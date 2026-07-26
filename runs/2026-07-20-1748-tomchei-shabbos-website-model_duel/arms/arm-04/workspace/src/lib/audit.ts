@@ -28,6 +28,11 @@ type AuditDetails = {
   'staff.impersonation_started': { targetEmail: string };
   'staff.impersonation_stopped': never;
   'settings.store_open_changed': { open: boolean };
+  'settings.changed': { key: string; summary: string };
+  'catalog.product_saved': { slug: string; seasonYear: number; created: boolean };
+  'catalog.replacement_linked': { slug: string; replacedByProductId: string | null };
+  'catalog.addon_saved': { slug: string; seasonYear: number; created: boolean };
+  'media.uploaded': { pathname: string; contentType: string; sizeBytes: number };
 };
 
 export type AuditAction = keyof AuditDetails;

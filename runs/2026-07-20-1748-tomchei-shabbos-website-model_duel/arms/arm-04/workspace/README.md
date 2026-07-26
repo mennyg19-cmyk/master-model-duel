@@ -1,15 +1,19 @@
 # Tomchei Shabbos — Mishloach Manos platform
 
 Greenfield rebuild of the nonprofit Purim mishloach manos platform.
-This repository currently contains **phases P1 and P2**:
+This repository currently contains **phases P1 to P3**:
 
 - **P1** — foundation, identity, roles, permissions, staff tooling.
 - **P2** — the domain core as schema plus engine: seasons, catalog, customers and
-  address book, orders, packages, payments, shipping and inventory. No storefront
-  or admin screens for any of it yet.
+  address book, orders, packages, payments, shipping and inventory. No screens.
+- **P3** — the storefront and the screens that feed it: marketing homepage,
+  catalog with filters and quick view, past-collections archive, newsletter with
+  tokenized unsubscribe, admin catalog and add-on editors, the media library, and
+  the settings hub.
 
-Catalog UI, checkout, fulfillment and reporting land in later phases of
-`shared/MERGED-BUILD-PLAN.md`.
+Cart and checkout, fulfillment and reporting land in later phases of
+`shared/MERGED-BUILD-PLAN.md`. `/order` exists in P3 only as the gate that decides
+whether ordering is possible at all — the builder behind it is P4.
 
 ## Ports
 
@@ -54,17 +58,55 @@ entirely and just set `DATABASE_URL`.
 | `npm run env:example` | Regenerates `.env.example` from `src/lib/env-spec.ts` |
 | `npm run env:check` | Runs startup env validation on its own |
 | `npm run ci` | lint → typecheck → migration guard → tests |
+| `npm run newsletter:link -- you@example.com` | Prints that subscriber's signed preferences link |
 | `npm run smoke` | P1 smoke checks against a running dev server |
 | `npm run smoke:p2` | P2 smoke: migrate, seed, read the domain back, run the engine tests |
+| `npm run smoke:p3` | P3 smoke: storefront, gates, newsletter, media and settings over HTTP |
 
 `npm run smoke` needs `npm run dev` running and starts from an empty database
 (`npm run db:fresh`), because it proves the first-run bootstrap. `npm run smoke:p2`
-needs no dev server — P2 has no screens.
+needs no dev server — P2 has no screens. `npm run smoke:p3` needs both a dev server
+and the seeded database.
+
+Newsletter mail is a later phase, so `npm run newsletter:link` is how the
+preferences and unsubscribe pages are opened until then.
+
+## Storefront
+
+| Page | What it is |
+|---|---|
+| `/` | Mission, impact, how it works, testimonials. The ordering CTA appears only while the store is open |
+| `/collection` | The current season: category filters, price sort, sold-out cards that stay visible, and `?quick=slug` quick view |
+| `/collection/[slug]` | Detail with every option priced |
+| `/archive`, `/archive/[year]` | Past seasons, browse only, no buy controls anywhere |
+| `/newsletter`, `/newsletter/manage`, `/newsletter/unsubscribe` | Signup, preferences and unsubscribe, all reached with a signed token instead of an account |
+| `/order` | The ordering gate: store-open enforcement and the delivery-ZIP check |
+
+Quick view and the mobile menu are a URL and a `<details>` element, not JavaScript
+widgets, so both work with the client bundle blocked and both survive a refresh.
+
+Two switches decide whether ordering is possible, and `src/lib/store-state.ts` is
+the only place that reads them: the season's own status and the `store.open`
+setting a manager can flip. Hiding buy buttons is a courtesy; `requireOpenStore`
+answers 403 on the ordering routes, which is the half that holds when someone types
+the URL.
+
+## Media
+
+Catalog photos go to Vercel Blob in a deployment and to `public/uploads` in
+development, chosen by `MEDIA_STORAGE` (`src/lib/media/storage.ts`). Local storage
+is refused unless `APP_URL` is a loopback address, for the same reason as local
+auth: a hosted filesystem is read-only and per-instance.
+
+Uploads must satisfy three separate checks — extension, declared content type, and
+the file's own magic bytes — plus alt text, which the form requires because no later
+screen would ask for it. SVG is rejected even though it is an image: it is a
+document that can carry script, served from this site's origin.
 
 ## Domain model
 
 The Prisma schema is a folder, one file per concern: `identity`, `customers`,
-`catalog`, `orders`, `fulfillment`, `inventory`, `ops`.
+`catalog`, `orders`, `fulfillment`, `inventory`, `ops`, `media`, `newsletter`.
 
 The engine that goes with it:
 
@@ -77,6 +119,9 @@ The engine that goes with it:
 | What an order took out of stock | `Reservation` rows, written inside the same transaction. A cancel releases what those rows say, never what the lines say today |
 | Package stages | `src/lib/fulfillment/package-stages.ts` — optional and forward-only; printing never means shipped |
 | Cached payment totals | `src/lib/orders/payment-status.ts` — always recounted, never adjusted by a delta |
+| Whether the store takes orders | `src/lib/store-state.ts` — season status and the `store.open` setting, both required |
+| Where volunteers deliver | `src/lib/delivery-area.ts` — an explicit ZIP list with no override; an empty list means nobody |
+| Which unsubscribe links work | `src/lib/newsletter/tokens.ts` — HMAC over a purpose string and the payload, 30-day expiry |
 
 Order numbers are per season and gapless: the counter increments inside the same
 transaction that places the order, so a rollback puts the number back.
@@ -122,4 +167,6 @@ One pattern per concern, picked here and followed from now on:
 | Concurrency | Optimistic `version` columns; conflicts are reported, never overwritten |
 | Transactions | `runInTransaction` / `abort` in `src/lib/transaction.ts`. A domain failure rolls the work back; helpers that may run inside one take `DbClient` |
 | Audit | `recordAudit` only. `AuditDetails` in `src/lib/audit.ts` declares what each action may write, so a new action is a typed decision |
+| Server actions | A `'use server'` module exports async functions and nothing else. Form state is a type there; its initial value is a const in the client component |
+| Client-safe modules | Anything a `'use client'` file imports stays free of `db`, `env` and `server-only` — which is why the newsletter labels live in `src/lib/newsletter/preferences.ts`, apart from the service |
 | Tests | `node:test` via tsx. No test framework dependency |

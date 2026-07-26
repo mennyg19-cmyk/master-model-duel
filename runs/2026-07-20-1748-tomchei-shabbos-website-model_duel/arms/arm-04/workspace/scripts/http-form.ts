@@ -43,7 +43,7 @@ export class Session {
   }
 
   /** Submits a rendered server-action form, adding or overriding named values. */
-  async submit(form: ParsedForm, values: Record<string, string> = {}): Promise<Response> {
+  async submit(form: ParsedForm, values: Record<string, string | File> = {}): Promise<Response> {
     const body = new FormData();
     for (const [name, value] of Object.entries({ ...form.fields, ...values })) {
       body.append(name, value);

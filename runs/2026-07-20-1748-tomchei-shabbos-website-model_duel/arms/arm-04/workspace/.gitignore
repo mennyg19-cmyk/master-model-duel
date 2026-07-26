@@ -37,6 +37,9 @@ yarn-error.log*
 # local embedded postgres cluster
 /.pgdata/
 
+# catalog photos uploaded by the local media driver (Vercel Blob in deployments)
+/public/uploads/
+
 # agent scratch notes
 /.scratch/
 

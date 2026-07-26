@@ -65,6 +65,7 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **P12 arm-03:** **1.5/20** → **18.0/20** ([fix notes](arms/arm-03/results/P12-FIX-NOTES.md); B1–B3 + priority majors; S1–S5 5/5) — **Test 4 complete**
 - **P1 arm-04:** **1.5/20** → **1.5/20** ([fix notes](arms/arm-04/results/P1-FIX-NOTES.md); M1–M7 + priority minors; smoke 28/28)
 - **P2 arm-04:** **1.5/20** → **3.0/20** ([fix notes](arms/arm-04/results/P2-FIX-NOTES.md); M1–M6 + 17 minors; smoke 21/21, tests 68/68)
+- **P3 arm-04:** **1.5/20** → **4.5/20** ([fix notes](arms/arm-04/results/P3-FIX-NOTES.md); M1–M5 + 13 minors; smoke 39/39, tests 97/97)
 - **Test 6 winner:** tie **15.0/15** both arms (detect 8/8 · vague fix 7/7)
 
 ## Test 6 notes

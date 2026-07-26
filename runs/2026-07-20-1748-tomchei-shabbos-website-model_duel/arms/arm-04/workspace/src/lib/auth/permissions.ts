@@ -9,6 +9,8 @@ export const PERMISSIONS = {
   'orders.view': 'View orders',
   'orders.manage': 'Edit orders, refunds and payments',
   'customers.view': 'View the customer directory',
+  'catalog.manage': 'Add and edit products, options and add-ons',
+  'media.manage': 'Upload and assign catalog photos',
   'staff.manage': 'Add staff, change roles and edit permission overrides',
   'staff.impersonate': 'Sign in as another staff member',
   'audit.view': 'Read the security audit trail',

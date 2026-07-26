@@ -1,0 +1,31 @@
+enum NewsletterStatus {
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+/// Newsletter list (R-009, R-018). Separate from `Customer` on purpose: most
+/// subscribers never place an order, and someone who unsubscribes must not lose
+/// their order history to do it.
+///
+/// Unsubscribing never deletes the row. A deleted row would be re-added by the
+/// next import, and there would be nothing left to prove the person asked to be
+/// taken off the list.
+model NewsletterSubscriber {
+  id              String           @id @default(uuid())
+  email           String           @unique
+  normalizedEmail String           @unique
+  status          NewsletterStatus @default(SUBSCRIBED)
+
+  wantsSeasonAnnouncements Boolean @default(true)
+  wantsOrderReminders      Boolean @default(true)
+  wantsImpactStories       Boolean @default(true)
+
+  /// Which form the address came from, so a spike can be traced to a page.
+  source String?
+
+  subscribedAt   DateTime  @default(now())
+  unsubscribedAt DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status])
+}

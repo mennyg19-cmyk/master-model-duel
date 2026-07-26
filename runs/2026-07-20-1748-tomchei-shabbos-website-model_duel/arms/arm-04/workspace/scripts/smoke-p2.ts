@@ -1,10 +1,7 @@
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-
 import { PrismaClient } from '@prisma/client';
 
 import { DATABASE_URL, TEST_DATABASE_URL } from './db-server';
+import { lineContaining, runCommand, runTests, SmokeRun } from './smoke-harness';
 
 /**
  * Phase P2 smoke run. P2 ships schema and engine with no UI, so the evidence is
@@ -21,20 +18,17 @@ const TEST_FILES = [
   'tests/draft-reference.test.ts',
 ];
 
-type CheckResult = { id: string; description: string; passed: boolean; evidence: string };
-
-const results: CheckResult[] = [];
 const db = new PrismaClient({ datasourceUrl: DATABASE_URL });
 
-function record(id: string, description: string, passed: boolean, evidence: string) {
-  results.push({ id, description, passed, evidence });
-  console.log(`${passed ? 'PASS' : 'FAIL'}  ${id}  ${description}\n        ${evidence}`);
-}
+const run = new SmokeRun('P2', [
+  `Run at ${new Date().toISOString()} against the embedded Postgres on 127.0.0.1:4104.`,
+  'P2 delivers schema and engine only, so every check is a migration, a seed, a',
+  'database read or a named unit test — there is no UI to click yet.',
+]);
 
-function expect(id: string, description: string, condition: boolean, evidence: string) {
-  record(id, description, condition, evidence);
-  if (!condition) throw new Error(`${id} failed: ${evidence}`);
-}
+const record = run.record.bind(run);
+const expect = run.expect.bind(run);
+const expectTest = run.expectTest.bind(run);
 
 async function main() {
   // ------------------------------------------------------------------- S1
@@ -104,7 +98,7 @@ async function main() {
   expect('S1d', 'The tests get their own migrated database, not the seeded one', testDatabase.status === 0,
     lineContaining(testDatabase.output, 'migration'));
 
-  const testRun = runTests();
+  const testRun = runTests(TEST_FILES, TEST_DATABASE_URL);
   const passedTests = new Set(testRun.passed);
 
   expectTest('S2', 'Grouping engine: same key merges, different greeting splits', passedTests, [
@@ -167,101 +161,13 @@ async function main() {
   expect('P2-13', 'The seeded order holds its stock through named reservation rows', reservations.length === 3,
     `${reservations.length} HELD reservations for the seeded order: ${reservations.map((row) => `${row.productId ? 'product' : 'add-on'} x${row.quantity}`).join(', ')}`);
 
-  writeReport();
-}
-
-function expectTest(id: string, description: string, passed: Set<string>, names: string[]) {
-  const missing = names.filter((name) => !passed.has(name));
-  expect(id, description, missing.length === 0,
-    missing.length === 0 ? names.map((name) => `"${name}"`).join('; ') : `missing: ${missing.join('; ')}`);
-}
-
-function runCommand(
-  command: string,
-  args: string[],
-  env: NodeJS.ProcessEnv = process.env,
-): { status: number; output: string } {
-  const child = spawnSync(command, args, {
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-    env,
-  });
-
-  return { status: child.status ?? -1, output: `${child.stdout ?? ''}${child.stderr ?? ''}` };
-}
-
-/**
- * The test database is named here rather than left to `--env-file`, which does
- * not override a DATABASE_URL that is already set — and importing
- * `@prisma/client` above set it to the development one. Without this the suite
- * runs against the database this script just seeded and reports on it.
- */
-function runTests(): { passed: string[]; failed: string[] } {
-  const child = runCommand(
-    'node',
-    [
-      '--import', 'tsx',
-      '--conditions=react-server',
-      '--env-file=.env.test',
-      '--test-concurrency=1',
-      '--test-reporter=tap',
-      '--test',
-      ...TEST_FILES,
-    ],
-    { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
-  );
-
-  const passed: string[] = [];
-  const failed: string[] = [];
-
-  for (const line of child.output.split('\n')) {
-    const okMatch = /^ok \d+ - (.+)$/.exec(line.trim());
-    if (okMatch) passed.push(okMatch[1].trim());
-
-    const failMatch = /^not ok \d+ - (.+)$/.exec(line.trim());
-    if (failMatch) failed.push(failMatch[1].trim());
-  }
-
-  return { passed, failed };
-}
-
-function lineContaining(output: string, needle: string): string {
-  const match = output.split('\n').find((line) => line.includes(needle));
-  return (match ?? output.trim().split('\n').at(-1) ?? '').trim();
-}
-
-function writeReport() {
-  const failed = results.filter((result) => !result.passed);
-  const lines = [
-    '# Phase P2 smoke evidence — arm-04',
-    '',
-    `Run at ${new Date().toISOString()} against the embedded Postgres on 127.0.0.1:4104.`,
-    'P2 delivers schema and engine only, so every check is a migration, a seed, a',
-    'database read or a named unit test — there is no UI to click yet.',
-    '',
-    '| # | Check | Result | Evidence |',
-    '|---|---|---|---|',
-    ...results.map(
-      (result) =>
-        `| ${result.id} | ${result.description} | ${result.passed ? 'PASS' : 'FAIL'} | ${result.evidence.replace(/\|/g, '\\|')} |`,
-    ),
-    '',
-    `**${results.length - failed.length}/${results.length} checks passed.**`,
-    '',
-  ];
-
-  const target = path.resolve(process.cwd(), '.scratch/PHASE-P2-SMOKE.md');
-  mkdirSync(path.dirname(target), { recursive: true });
-  writeFileSync(target, lines.join('\n'), 'utf8');
-  console.log(`\nWrote ${target}`);
-
-  if (failed.length > 0) process.exitCode = 1;
+  run.write();
 }
 
 main()
   .catch((error) => {
     console.error(`\nSmoke run stopped: ${error instanceof Error ? error.message : error}`);
-    writeReport();
+    run.write();
     process.exitCode = 1;
   })
   .finally(() => db.$disconnect());

@@ -48,6 +48,15 @@ model Product {
   kind        ProductKind @default(PACKAGE)
   priceCents  Int
 
+  /// Free text rather than a lookup table: the storefront filter offers exactly
+  /// the categories this season's catalog uses, so an empty category disappears
+  /// on its own instead of leaving a dead filter chip behind (R-003).
+  category String?
+
+  /// The one photo the catalog card and the detail page use. Null is what the
+  /// admin "needs photos" panel looks for (R-128).
+  imageAssetId String?
+
   /// Shipping dimensions in millimetres and grams, so every rate calculation
   /// stays in integers.
   lengthMm    Int?
@@ -68,6 +77,7 @@ model Product {
   updatedAt DateTime @updatedAt
 
   season       Season                    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  image        MediaAsset?               @relation(fields: [imageAssetId], references: [id], onDelete: SetNull)
   replacedBy   Product?                  @relation("SeasonReplacement", fields: [replacedByProductId], references: [id], onDelete: SetNull)
   replaces     Product?                  @relation("SeasonReplacement")
   options      ProductOption[]
@@ -80,6 +90,7 @@ model Product {
 
   @@unique([seasonId, slug])
   @@index([seasonId, isActive])
+  @@index([seasonId, category])
 }
 
 /// A choice within a group ("Size: large"). The adjustment is added to the
