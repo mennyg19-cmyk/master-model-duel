@@ -368,3 +368,5 @@
 2026-07-26T11:38:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,T10,grill_close,claude-opus-5-thinking-high,a5d02edc-9725-4554-bd12-514aede6dfd2,,,,,,,,grill closed 10 turns; usage_missing
 2026-07-26T11:41:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,,grill_inventory,claude-opus-5-thinking-high,56776770-ed12-4887-a616-f573d6b43e07,,,,,,,,99 features; 18 OPEN; usage_missing
 2026-07-26T11:42:49Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,,grill_grade,glm-5.2-high,987f344f-20e7-4fb9-a791-275ba1a6eb62,,,,,,,,8/8 tq=2.00 inv=7/7 eff=0.70; usage_missing
+2026-07-26T11:52:58Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-04,,plan,claude-opus-5-thinking-high,932dc137-b8d6-4c96-8182-aa94c8563521,,,,,,,,16 phases P0-P15; 16UR/30G/192R; usage_missing
+2026-07-26T11:53:47Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-04,,plan_review,glm-5.2-high,d166c8b8-d65c-47df-ac61-d73faa6bdb99,,,,,,,,15/15 bonus_plan; usage_missing

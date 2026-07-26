@@ -7,7 +7,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 | arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** | — | no |
 | arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** | — | no |
 | arm-03 | **6** | **8** | **15** | | **18.0** | **11.0** | **11.0** | **69.0** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
-| arm-04 | **7** | **8** | | | | | | | inv_novel=6 | **yes** (join after Test 6; Opus 5 high; T6 rerun) |
+| arm-04 | **7** | **8** | **15** | | | | | | inv_novel=6; bonus_plan | **yes** (join after Test 6; Opus 5 high; T6 rerun) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -84,9 +84,11 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 
 - **arm-01:** 14/15 — [plan](arms/arm-01/results/BUILD-PLAN.md), [review](results/reviews/plan-arm-01.md) (10 phases)
 - **arm-02:** 14/15 — [plan](arms/arm-02/results/BUILD-PLAN.md), [review](results/reviews/plan-arm-02.md) (17 phases)
-- **Merged plan:** [shared/MERGED-BUILD-PLAN.md](../shared/MERGED-BUILD-PLAN.md) — **12 phases** P1..P12
+- **arm-03 (late join):** **15/15** + bonus_plan — [plan](arms/arm-03/results/BUILD-PLAN.md), [review](results/reviews/plan-arm-03.md) (12 phases)
+- **arm-04 (late join):** **15/15** + bonus_plan — [plan](arms/arm-04/results/BUILD-PLAN.md), [review](results/reviews/plan-arm-04.md) (16 phases P0–P15; not merged into shared freeze)
+- **Merged plan:** [shared/MERGED-BUILD-PLAN.md](../shared/MERGED-BUILD-PLAN.md) — **12 phases** P1..P12 (**frozen** for Tests 3–4)
 - **Phase map:** [shared/smoke/phase-map.md](../shared/smoke/phase-map.md)
-- **Test 2 tie** on score; arm-01 wins phase count efficiency (10 vs 17 source phases)
+- **Test 2 tie** on score among originals; late joins both 15/15
 
 ## Test 1b notes
 
