@@ -11,6 +11,7 @@ import type {
   SeasonStatus,
 } from '@prisma/client';
 
+import type { Permission } from '../src/lib/auth/permissions';
 import type { StaffContext } from '../src/lib/auth/staff';
 import { db } from '../src/lib/db';
 import { createDraftReference } from '../src/lib/orders/draft-reference';
@@ -151,8 +152,14 @@ export async function addProductOption(
   });
 }
 
-/** A staff actor for audit assertions: the row an auditor comes looking for (G-019). */
-export async function createStaffContext(): Promise<StaffContext> {
+/**
+ * A staff actor for audit assertions: the row an auditor comes looking for
+ * (G-019). The permissions are narrow by default so a test has to say when it
+ * is acting as somebody who may move money.
+ */
+export async function createStaffContext(
+  permissions: Permission[] = ['customers.view', 'customers.manage'],
+): Promise<StaffContext> {
   const staff = await db.staffUser.create({
     data: {
       email: `staff-${nextKey()}@tomchei.example`,
@@ -163,12 +170,7 @@ export async function createStaffContext(): Promise<StaffContext> {
     include: { permissionOverrides: true },
   });
 
-  return {
-    actor: staff,
-    acting: staff,
-    isImpersonating: false,
-    permissions: ['customers.view', 'customers.manage'],
-  };
+  return { actor: staff, acting: staff, isImpersonating: false, permissions };
 }
 
 export type DraftLineSpec = {

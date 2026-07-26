@@ -1,19 +1,27 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import {
   changeOrderStatusAction,
   postOfflinePaymentAction,
   refundPaymentAction,
+  repeatOrderAction,
   voidPaymentAction,
 } from '../actions';
+import { BackLink } from '@/components/admin/list-controls';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input, Label, Select } from '@/components/ui/field';
+import { FlashMessages } from '@/components/ui/flash';
 import { requirePermission } from '@/lib/auth/staff';
 import { formatCents } from '@/lib/core/money';
-import { readStaffOrderMoney, type StaffPaymentRow } from '@/lib/orders/staff-orders';
+import { humanizeStatus, orderStatusTone, paymentStatusTone } from '@/lib/orders/order-labels';
+import {
+  readStaffOrderBoxes,
+  readStaffOrderMoney,
+  type StaffOrderBox,
+  type StaffPaymentRow,
+} from '@/lib/orders/staff-orders';
 import { OFFLINE_METHOD_LABELS } from '@/lib/payments/offline-payments';
 
 export const dynamic = 'force-dynamic';
@@ -42,48 +50,40 @@ export default async function AdminOrderMoneyPage({
   const order = await readStaffOrderMoney(orderId);
   if (!order) notFound();
 
+  const boxes = await readStaffOrderBoxes(order.id);
   const canManage = staff.permissions.includes('orders.manage');
   const outstandingCents = order.totalCents - order.amountPaidCents;
 
   return (
     <div className="space-y-6" data-testid="admin-order" data-payment-status={order.paymentStatus}>
-      <header className="space-y-2">
-        <p className="text-sm">
-          <Link href="/admin/orders" className="underline underline-offset-4">
-            Orders
-          </Link>
-        </p>
-        <h1 className="text-2xl font-semibold">
-          {order.orderNumber === null ? order.draftReference : `Order #${order.orderNumber}`}
-        </h1>
-        <p className="text-sm text-[var(--color-ink-muted)]">
-          {order.customerName}
-          {order.customerEmail ? ` · ${order.customerEmail}` : ''} · {order.seasonLabel} ·{' '}
-          <Badge tone={order.status === 'CANCELLED' ? 'danger' : 'neutral'}>{order.status}</Badge>{' '}
-          <Badge tone={order.paymentStatus === 'PAID' ? 'success' : 'warning'}>
-            {order.paymentStatus}
-          </Badge>
-        </p>
+      <BackLink href="/admin/orders">Orders</BackLink>
+
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold">
+            {order.orderNumber === null ? order.draftReference : `Order #${order.orderNumber}`}
+          </h1>
+          <p className="text-sm text-[var(--color-ink-muted)]">
+            {order.customerName}
+            {order.customerEmail ? ` · ${order.customerEmail}` : ''} · {order.seasonLabel} ·{' '}
+            <Badge tone={orderStatusTone(order.status)}>{order.status}</Badge>{' '}
+            <Badge tone={paymentStatusTone(order.paymentStatus)}>
+              {humanizeStatus(order.paymentStatus)}
+            </Badge>
+          </p>
+        </div>
+
+        {canManage && order.customerEmail ? (
+          <form action={repeatOrderAction}>
+            <input type="hidden" name="orderId" value={order.id} />
+            <Button type="submit" variant="secondary" data-testid="order-repeat">
+              Order this again
+            </Button>
+          </form>
+        ) : null}
       </header>
 
-      {query.notice ? (
-        <p
-          className="rounded-md bg-[var(--color-success-soft)] px-3 py-2 text-sm text-[var(--color-success)]"
-          data-testid="order-notice"
-        >
-          {query.notice}
-        </p>
-      ) : null}
-
-      {query.problem ? (
-        <p
-          role="alert"
-          className="rounded-md bg-[var(--color-danger-soft)] px-3 py-2 text-sm text-[var(--color-danger)]"
-          data-testid="order-problem"
-        >
-          {query.problem}
-        </p>
-      ) : null}
+      <FlashMessages notice={query.notice} problem={query.problem} testIdPrefix="order" />
 
       <Card>
         <CardTitle>What it costs</CardTitle>
@@ -129,6 +129,17 @@ export default async function AdminOrderMoneyPage({
           </>
         ) : null}
       </Card>
+
+      <section className="space-y-3" data-testid="order-boxes" data-box-count={boxes.length}>
+        <h2 className="text-lg font-semibold">What is in it</h2>
+        {boxes.length === 0 ? (
+          <p className="text-sm text-[var(--color-ink-muted)]">
+            This order has not been packed into boxes yet.
+          </p>
+        ) : (
+          boxes.map((box) => <OrderBox key={box.id} box={box} />)
+        )}
+      </section>
 
       <Card>
         <CardTitle>Payments</CardTitle>
@@ -215,6 +226,41 @@ export default async function AdminOrderMoneyPage({
         </Card>
       ) : null}
     </div>
+  );
+}
+
+function OrderBox({ box }: { box: StaffOrderBox }) {
+  return (
+    <Card data-testid="order-box" data-stage={box.stage}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <CardTitle>{box.recipientName}</CardTitle>
+        <Badge tone="neutral">{box.stage}</Badge>
+      </div>
+
+      <CardDescription>
+        {box.methodLabel} · {box.destination}
+        {box.deliveryDay ? ` · ${box.deliveryDay}` : ''}
+      </CardDescription>
+
+      <ul className="mt-3 space-y-1 text-sm">
+        {box.lines.map((line) => (
+          <li key={line.id} className="flex justify-between gap-4">
+            <span>
+              {line.quantity} × {line.name}
+              {line.options ? ` (${line.options})` : ''}
+              {line.addOns.length > 0 ? ` + ${line.addOns.join(', ')}` : ''}
+            </span>
+            <span>{formatCents(line.totalCents)}</span>
+          </li>
+        ))}
+      </ul>
+
+      {box.greetingMessage ? (
+        <p className="mt-3 border-l-2 border-[var(--color-line)] pl-3 text-sm italic">
+          {box.greetingMessage}
+        </p>
+      ) : null}
+    </Card>
   );
 }
 

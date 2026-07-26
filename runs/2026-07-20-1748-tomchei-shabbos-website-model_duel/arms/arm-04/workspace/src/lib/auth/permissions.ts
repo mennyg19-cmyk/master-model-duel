@@ -10,6 +10,7 @@ export const PERMISSIONS = {
   'orders.manage': 'Edit orders, refunds and payments',
   'customers.view': 'View the customer directory',
   'customers.manage': 'Edit customer details and their address book',
+  'imports.manage': 'Stage and commit customer and product imports',
   'catalog.manage': 'Add and edit products, options and add-ons',
   'media.manage': 'Upload and assign catalog photos',
   'staff.manage': 'Add staff, change roles and edit permission overrides',

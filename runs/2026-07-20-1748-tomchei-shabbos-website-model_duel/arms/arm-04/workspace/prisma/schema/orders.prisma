@@ -41,6 +41,12 @@ model Order {
   /// and therefore guessable, so it never grants access on its own.
   guestTokenHash String? @unique
 
+  /// Set while a cart is being built at the counter (R-059). The customer is
+  /// already named on `customerId`, so this is not who the order is for — it is
+  /// which till it is open on, which keeps a POS cart out of that customer's own
+  /// web session and gives each staff member one open till at a time.
+  posStaffUserId String?
+
   status OrderStatus @default(DRAFT)
 
   /// Handed out once, at finalize. Drafts quote `draftReference` instead, so a
@@ -80,6 +86,7 @@ model Order {
   /// owned by an account or a guest token, and past orders are the customer's
   /// receipt history.
   customer       Customer?             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  posStaffUser   StaffUser?            @relation("PosTill", fields: [posStaffUserId], references: [id], onDelete: SetNull)
   lines          OrderLine[]
   packages       Package[]
   reservations   Reservation[]
@@ -90,6 +97,10 @@ model Order {
   @@unique([seasonId, orderNumber])
   @@index([seasonId, status])
   @@index([customerId, createdAt])
+  /// The order desk pages placed orders newest-first inside one season, and the
+  /// dashboard counts them by status. Both read this index instead of the table.
+  @@index([seasonId, status, placedAt])
+  @@index([posStaffUserId, status])
 }
 
 /// One catalog item going to one recipient. The destination lives on the line

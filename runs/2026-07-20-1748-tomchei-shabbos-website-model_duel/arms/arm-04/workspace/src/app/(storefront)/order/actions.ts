@@ -1,14 +1,13 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-
 import { saveCustomerAddress } from '@/lib/addresses/address-book';
 import { addressFieldsFromForm } from '@/lib/addresses/address-form';
 import { getCurrentCustomer } from '@/lib/customers';
+import { redirectWithFlash } from '@/lib/forms/flash-redirect';
 import { trimmedField } from '@/lib/forms/form-data';
 import { assignCartLine, unassignCartLine } from '@/lib/orders/assignment';
 import { addProductToCart, removeCartLine, setLineQuantity } from '@/lib/orders/cart-service';
-import { BUILDER_PATH, builderHref, type BuilderParams } from '@/lib/orders/builder-href';
+import { BUILDER_PATH, type BuilderParams } from '@/lib/orders/builder-href';
 import { resolveDraftOwner, resolveDraftOwnerForWrite } from '@/lib/orders/draft-access';
 import { requireOpenStore } from '@/lib/store-state';
 
@@ -144,7 +143,7 @@ async function requireOwner() {
 }
 
 function back(params: BuilderParams): never {
-  redirect(builderHref(BUILDER_PATH, params));
+  redirectWithFlash(BUILDER_PATH, params);
 }
 
 /** Option groups arrive as `option:Size=Large`, one field per group the product has. */

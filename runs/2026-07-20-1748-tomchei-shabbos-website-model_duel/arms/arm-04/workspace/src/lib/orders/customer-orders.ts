@@ -6,7 +6,7 @@ import { addressSummary } from '../addresses/address-summary';
 import { sumCents } from '../core/money';
 import { db } from '../db';
 import { findOwnedOrder, ownerFilter, type DraftOwner } from './draft-access';
-import { lineTotalWithAddOns } from './lines';
+import { lineTotalWithAddOns, optionsLabel } from './lines';
 
 /**
  * What the account area shows about an order. Two sources on purpose: a placed
@@ -63,12 +63,24 @@ const SUMMARY_INCLUDE = {
 
 type SummaryRow = Prisma.OrderGetPayload<{ include: typeof SUMMARY_INCLUDE }>;
 
-/** R-038. Newest first, with the draft in progress at the top where it is useful. */
-export async function listCustomerOrders(customerId: string): Promise<OrderSummary[]> {
+/**
+ * R-038. Newest first, with the draft in progress at the top where it is useful.
+ *
+ * Bounded, because a customer who has ordered every season for a decade should
+ * not decide how big this query is (G-024). Callers that need the rest send the
+ * reader to the order desk, which pages properly.
+ */
+export const CUSTOMER_ORDER_LIMIT = 50;
+
+export async function listCustomerOrders(
+  customerId: string,
+  limit: number = CUSTOMER_ORDER_LIMIT,
+): Promise<OrderSummary[]> {
   const rows = await db.order.findMany({
     where: { customerId, status: { not: 'DISCARDED' } },
     include: SUMMARY_INCLUDE,
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+    take: limit,
   });
 
   return rows.map(toSummary);
@@ -164,17 +176,6 @@ function toSummary(order: SummaryRow): OrderSummary {
     placedAt: order.placedAt,
     createdAt: order.createdAt,
   };
-}
-
-function optionsLabel(snapshot: Prisma.JsonValue): string {
-  if (!Array.isArray(snapshot)) return '';
-
-  return snapshot
-    .map((entry) =>
-      entry && typeof entry === 'object' && 'label' in entry ? String(entry.label) : '',
-    )
-    .filter(Boolean)
-    .join(', ');
 }
 
 function destinationOf(line: {

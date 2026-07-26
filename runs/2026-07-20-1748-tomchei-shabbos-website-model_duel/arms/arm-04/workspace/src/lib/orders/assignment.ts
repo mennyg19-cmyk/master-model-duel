@@ -13,7 +13,7 @@ import {
 import { failure, ok, type Result } from '../core/result';
 import { db } from '../db';
 import { checkDeliveryAreaNow, DELIVERY_AREA_MESSAGES } from '../delivery-area';
-import { ownerFilter, type DraftOwner } from './draft-access';
+import { addressBookCustomerId, ownerFilter, type DraftOwner } from './draft-access';
 
 export const ASSIGNMENT_TARGETS = ['self', 'saved', 'new'] as const;
 
@@ -234,12 +234,13 @@ async function fromAddressBook(
   owner: DraftOwner,
   customerAddressId: string | null | undefined,
 ): Promise<Result<ResolvedRecipient>> {
-  if (owner.kind !== 'customer') {
+  const customerId = addressBookCustomerId(owner);
+  if (customerId === null) {
     return failure(ASSIGNMENT_NOT_ALLOWED, 'Sign in to use a saved address.');
   }
   if (!customerAddressId) return failure(INVALID_ASSIGNMENT, 'Pick a saved recipient, or add a new one.');
 
-  const saved = await findCustomerAddress(owner.customerId, customerAddressId);
+  const saved = await findCustomerAddress(customerId, customerAddressId);
   if (!saved) return failure(ASSIGNMENT_NOT_ALLOWED, 'That address is not in your address book.');
 
   return ok({ name: saved.recipientName, address: fieldsOf(saved), savedAddressId: saved.id });
@@ -256,9 +257,10 @@ async function fromAccountHolder(
   input: AssignLineInput,
 ): Promise<Result<ResolvedRecipient>> {
   let name = (input.recipientName ?? '').trim();
+  const customerId = addressBookCustomerId(owner);
 
-  if (owner.kind === 'customer') {
-    const customer = await db.customer.findUnique({ where: { id: owner.customerId } });
+  if (customerId !== null) {
+    const customer = await db.customer.findUnique({ where: { id: customerId } });
     if (!customer) return failure(ASSIGNMENT_NOT_ALLOWED, 'Sign in again to keep building this order.');
     name = customer.fullName;
   }
@@ -298,7 +300,9 @@ async function storeAddress(
   newAddress: AddressInput,
   recipientName: string,
 ): Promise<Result<ResolvedRecipient>> {
-  if (owner.kind !== 'customer') {
+  const customerId = addressBookCustomerId(owner);
+
+  if (customerId === null) {
     const parsed = addressSchema.safeParse({ ...newAddress, recipientName });
     if (!parsed.success) return failure(INVALID_ASSIGNMENT, parsed.error.issues[0].message);
     return ok({ name: recipientName, address: fieldsOf(parsed.data), savedAddressId: null });
@@ -307,7 +311,7 @@ async function storeAddress(
   const saved = await saveCustomerAddress({
     ...newAddress,
     recipientName,
-    customerId: owner.customerId,
+    customerId,
   });
   if (!saved.ok) return saved;
 

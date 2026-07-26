@@ -3,6 +3,7 @@ import 'server-only';
 import { Prisma, type Customer } from '@prisma/client';
 import { z } from 'zod';
 
+import { pageInfo, type PageInfo, type PageRequest } from './admin/list-query';
 import { recordAudit, type AuditActor } from './audit';
 import { getExternalIdentity, type ExternalIdentity } from './auth/identity';
 import { normalizeEmail } from './core/normalize';
@@ -107,32 +108,168 @@ export type CustomerDirectoryRow = Customer & {
 };
 
 /**
- * The staff directory (R-041). Staff look people up by whatever the caller on the
- * phone gives them, so one box searches name, email and phone — the phone in its
- * normalized form, because nobody reads out the punctuation they typed.
+ * The staff directory (R-041, R-062). Staff look people up by whatever the
+ * caller on the phone gives them, so one box searches name, email and phone —
+ * the phone in its normalized form, because nobody reads out the punctuation
+ * they typed.
  */
-export async function searchCustomers(query: string): Promise<CustomerDirectoryRow[]> {
+export function customerSearchWhere(query: string): Prisma.CustomerWhereInput | undefined {
   const term = query.trim();
-  const digits = normalizePhone(term);
+  if (term === '') return undefined;
 
-  return db.customer.findMany({
-    where: term
-      ? {
-          OR: [
-            { fullName: { contains: term, mode: 'insensitive' } },
-            { normalizedEmail: { contains: normalizeEmail(term) } },
-            ...(digits ? [{ normalizedPhone: digits }] : []),
-          ],
-        }
-      : undefined,
-    include: { _count: { select: { orders: true, addresses: true } } },
-    orderBy: { fullName: 'asc' },
-    take: 50,
+  const digits = normalizePhone(term);
+  return {
+    OR: [
+      { fullName: { contains: term, mode: 'insensitive' } },
+      { normalizedEmail: { contains: normalizeEmail(term) } },
+      ...(digits ? [{ normalizedPhone: digits }] : []),
+    ],
+  };
+}
+
+/** A page of the directory. Bounded like every other admin list (G-024). */
+export async function listCustomerDirectory(
+  query: string,
+  request: PageRequest,
+): Promise<{ rows: CustomerDirectoryRow[]; page: PageInfo }> {
+  const where = customerSearchWhere(query);
+
+  const [totalCount, rows] = await Promise.all([
+    db.customer.count({ where }),
+    db.customer.findMany({
+      where,
+      include: {
+        _count: {
+          select: {
+            // A cart somebody abandoned is not an order they placed.
+            orders: { where: { status: { notIn: ['DRAFT', 'DISCARDED'] } } },
+            addresses: { where: { isArchived: false } },
+          },
+        },
+      },
+      orderBy: [{ fullName: 'asc' }, { id: 'asc' }],
+      skip: request.skip,
+      take: request.take,
+    }),
+  ]);
+
+  return { rows, page: pageInfo(request, totalCount) };
+}
+
+/**
+ * The shortlist the counter picks from while somebody is standing there (R-060).
+ *
+ * A single letter runs three unindexed substring scans over the whole customer
+ * table and returns ten arbitrary people, which is neither useful at the counter
+ * nor cheap on Purim morning. Two characters is the shortest search anyone
+ * actually means.
+ */
+export async function lookupCustomersForCounter(query: string): Promise<Customer[]> {
+  const where = query.trim().length < COUNTER_MIN_QUERY ? undefined : customerSearchWhere(query);
+  if (!where) return [];
+
+  return db.customer.findMany({ where, orderBy: { fullName: 'asc' }, take: COUNTER_MATCH_LIMIT });
+}
+
+const COUNTER_MIN_QUERY = 2;
+const COUNTER_MATCH_LIMIT = 10;
+
+const counterCustomerSchema = z.object({
+  fullName: z.string().trim().min(1, 'Enter the customer’s name.').max(120),
+  email: z.email('Enter an email address the receipt can go to.'),
+  phone: z
+    .string()
+    .trim()
+    .transform((value) => (value === '' ? null : value))
+    .refine((value) => value === null || normalizePhone(value) !== null, {
+      message: 'Enter a 10-digit US phone number, or leave it blank.',
+    }),
+});
+
+export type CounterCustomerInput = z.input<typeof counterCustomerSchema>;
+
+/**
+ * The counter's "who is this?" (R-060).
+ *
+ * An email or a phone number that has ordered before is the same household, not
+ * a new one — a duplicate customer is how a family loses last season's address
+ * book and greetings. A returning customer's blank fields are filled in, but
+ * nothing already on the record is overwritten from a queue: the person at the
+ * counter is reading a name off a cheque, not doing data entry.
+ */
+export async function findOrCreateCustomerAtCounter(
+  actor: AuditActor,
+  input: CounterCustomerInput,
+): Promise<Result<{ customer: Customer; created: boolean }>> {
+  const parsed = counterCustomerSchema.safeParse(input);
+  if (!parsed.success) return failure(INVALID_CUSTOMER_INPUT, parsed.error.issues[0].message);
+
+  const normalizedEmail = normalizeEmail(parsed.data.email);
+  const normalizedPhone = parsed.data.phone === null ? null : normalizePhone(parsed.data.phone);
+
+  const existing =
+    (await db.customer.findUnique({ where: { normalizedEmail } })) ??
+    (normalizedPhone ? await db.customer.findUnique({ where: { normalizedPhone } }) : null);
+
+  if (existing) return ok({ customer: await fillBlanks(existing, parsed.data), created: false });
+
+  try {
+    const customer = await db.customer.create({
+      data: {
+        email: parsed.data.email.trim(),
+        normalizedEmail,
+        fullName: parsed.data.fullName,
+        ...(normalizedPhone ? { phone: parsed.data.phone, normalizedPhone } : {}),
+      },
+    });
+
+    await recordAudit(actor, {
+      action: 'customer.created_at_counter',
+      entityType: 'Customer',
+      entityId: customer.id,
+      detail: { email: customer.email },
+    });
+
+    return ok({ customer, created: true });
+  } catch (error) {
+    const isDuplicate =
+      error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+    if (!isDuplicate) throw error;
+
+    // Two tills ringing up the same walk-in at once: the loser reads the row the
+    // winner just wrote rather than telling staff to try again.
+    const winner = await db.customer.findUnique({ where: { normalizedEmail } });
+    if (!winner) return failure(DUPLICATE_CUSTOMER_PHONE, DUPLICATE_PHONE_MESSAGE);
+    return ok({ customer: winner, created: false });
+  }
+}
+
+async function fillBlanks(
+  customer: Customer,
+  input: { fullName: string; phone: string | null },
+): Promise<Customer> {
+  const normalizedPhone = input.phone === null ? null : normalizePhone(input.phone);
+  const addPhone = customer.normalizedPhone === null && normalizedPhone !== null;
+  if (!addPhone) return customer;
+
+  const taken = await db.customer.findUnique({ where: { normalizedPhone } });
+  if (taken) return customer;
+
+  return db.customer.update({
+    where: { id: customer.id },
+    data: { phone: input.phone, normalizedPhone },
   });
 }
 
 export const INVALID_CUSTOMER_INPUT = 'invalid_customer_input';
 export const DUPLICATE_CUSTOMER_PHONE = 'duplicate_customer_phone';
+
+/**
+ * The phone number is unique so a POS entry cannot split one household into two
+ * customers (R-144). Saying which record holds it would leak it.
+ */
+const DUPLICATE_PHONE_MESSAGE =
+  'That phone number is already on another account. Call the office and we will merge them.';
 
 const localSignInSchema = z.object({
   email: z.string().trim().email('Enter the email address you order with.'),
@@ -188,12 +325,6 @@ export async function updateCustomerProfile(
     const isDuplicate =
       error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
     if (!isDuplicate) throw error;
-
-    // The phone number is unique so a POS entry cannot split one household into
-    // two customers (R-144). Saying which record holds it would leak it.
-    return failure(
-      DUPLICATE_CUSTOMER_PHONE,
-      'That phone number is already on another account. Call the office and we will merge them.',
-    );
+    return failure(DUPLICATE_CUSTOMER_PHONE, DUPLICATE_PHONE_MESSAGE);
   }
 }

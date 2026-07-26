@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 
 import { resumePayment } from '@/lib/checkout/checkout-service';
+import { flashHref } from '@/lib/forms/flash-redirect';
 import { trimmedField } from '@/lib/forms/form-data';
 import { resolveDraftOwner } from '@/lib/orders/draft-access';
 
@@ -24,6 +25,5 @@ export async function resumePaymentAction(formData: FormData): Promise<void> {
 }
 
 function confirmationHref(orderId: string, problem: string): string {
-  const search = new URLSearchParams({ order: orderId, problem });
-  return `/order/confirmation?${search.toString()}`;
+  return flashHref('/order/confirmation', { order: orderId, problem });
 }

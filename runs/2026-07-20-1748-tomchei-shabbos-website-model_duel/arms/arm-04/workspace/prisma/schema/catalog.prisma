@@ -31,9 +31,10 @@ model Season {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products Product[]
-  addOns   AddOn[]
-  orders   Order[]
+  products      Product[]
+  addOns        AddOn[]
+  orders        Order[]
+  importBatches ImportBatch[]
 
   @@index([status, opensAt])
   @@index([status, closesAt])

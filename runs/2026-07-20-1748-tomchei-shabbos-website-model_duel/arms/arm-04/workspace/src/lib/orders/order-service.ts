@@ -5,8 +5,8 @@ import type { Order, OrderStatus, Package, Prisma, Reservation } from '@prisma/c
 import { recordAudit, type AuditActor } from '../audit';
 import { feeSubjectsFrom } from '../checkout/fee-subjects';
 import { resolveFulfillmentFees, type RateRules } from '../checkout/fees';
-import { sumCents } from '../core/money';
-import { failure, type Result } from '../core/result';
+import { formatCents, sumCents } from '../core/money';
+import { failure, type Failure, type Result } from '../core/result';
 import { abort, runInTransaction } from '../transaction';
 import { inventoryDemand, type InventoryDemand } from '../inventory/demand';
 import { releaseUnits, reserveUnits, type InventoryTarget } from '../inventory/reserve';
@@ -21,6 +21,7 @@ export const SEASON_CLOSED = 'season_closed';
 export const EMPTY_ORDER = 'empty_order';
 export const UNASSIGNED_LINES = 'unassigned_lines';
 export const CONCURRENT_CHANGE = 'concurrent_order_change';
+export const ORDER_HOLDS_MONEY = 'order_holds_money';
 
 export type FinalizedOrder = {
   orderNumber: number;
@@ -124,18 +125,33 @@ export async function finalizeOrder(
  * first. Staff moves pass null: `requirePermission` is their gate, and the office
  * is allowed to touch an order that is not theirs.
  */
+export type TransitionOptions = {
+  owner?: DraftOwner | null;
+  /**
+   * A last condition on the order as it stands inside the transaction. Anything
+   * a caller checked before calling was read off a screen or a batch list; this
+   * runs against the row that is about to move.
+   */
+  guard?: (order: Order) => Failure | null;
+  /** Set when this move is one order out of a bulk sweep (G-024). */
+  batchId?: string;
+};
+
 export async function transitionOrder(
   orderId: string,
   to: OrderStatus,
   actor: AuditActor,
-  owner: DraftOwner | null = null,
+  options: TransitionOptions = {},
 ): Promise<Result<Order>> {
   return runInTransaction(async (tx) => {
     const order = await tx.order.findFirst({
-      where: { id: orderId, ...(owner ? ownerFilter(owner) : {}) },
+      where: { id: orderId, ...(options.owner ? ownerFilter(options.owner) : {}) },
     });
 
     if (!order) abort(failure(ORDER_NOT_FOUND, 'That order no longer exists.'));
+
+    const blocked = options.guard?.(order);
+    if (blocked) abort(blocked);
 
     const transition = checkOrderTransition(order.status, to);
     if (!transition.ok) abort(transition);
@@ -156,12 +172,37 @@ export async function transitionOrder(
         action: 'order.status_changed',
         entityType: 'Order',
         entityId: order.id,
-        detail: { from: order.status, to },
+        detail: { from: order.status, to, batchId: options.batchId },
       },
       tx,
     );
 
     return tx.order.findUniqueOrThrow({ where: { id: order.id } });
+  });
+}
+
+/**
+ * Cancelling releases the boxes but leaves the money exactly where it is, so an
+ * order that has been paid for is refused until somebody refunds or voids it.
+ *
+ * The balance is read inside the transaction that moves the status rather than
+ * before it: a payment taken between the screen being drawn and the button being
+ * pressed would otherwise be cancelled out from under the person who took it.
+ */
+export function cancelUnpaidOrder(
+  orderId: string,
+  actor: AuditActor,
+  batchId?: string,
+): Promise<Result<Order>> {
+  return transitionOrder(orderId, 'CANCELLED', actor, {
+    batchId,
+    guard: (order) =>
+      order.amountPaidCents > 0
+        ? failure(
+            ORDER_HOLDS_MONEY,
+            `This order still holds ${formatCents(order.amountPaidCents)}. Refund or void it before cancelling.`,
+          )
+        : null,
   });
 }
 
@@ -176,7 +217,7 @@ export function discardDraft(
   orderId: string,
   actor: AuditActor,
 ): Promise<Result<Order>> {
-  return transitionOrder(orderId, 'DISCARDED', actor, owner);
+  return transitionOrder(orderId, 'DISCARDED', actor, { owner });
 }
 
 const LINE_INVENTORY_INCLUDE = {

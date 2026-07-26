@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 import { sumCents } from '../core/money';
 
 /**
@@ -32,4 +34,20 @@ export function isLineAssigned<TLine extends BuildableLine>(
   line: TLine,
 ): line is AssignedLine<TLine> {
   return line.recipientName !== null && line.fulfillmentMethodId !== null;
+}
+
+/**
+ * The chosen options as one readable phrase — "Large, Dairy". The snapshot is
+ * JSON because what a product asks changes between seasons, so anything reading
+ * it has to survive a shape it does not recognise.
+ */
+export function optionsLabel(snapshot: Prisma.JsonValue): string {
+  if (!Array.isArray(snapshot)) return '';
+
+  return snapshot
+    .map((entry) =>
+      entry && typeof entry === 'object' && 'label' in entry ? String(entry.label) : '',
+    )
+    .filter(Boolean)
+    .join(', ');
 }

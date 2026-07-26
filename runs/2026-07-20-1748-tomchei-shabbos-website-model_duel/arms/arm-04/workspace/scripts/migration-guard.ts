@@ -23,6 +23,7 @@ const REQUIRED_CHECK_CONSTRAINTS = [
   'Reservation.Reservation_single_target',
   'Reservation.Reservation_quantity_positive',
   'Order.Order_has_owner',
+  'Order.Order_pos_has_customer',
   'OrderLine.OrderLine_assignment_complete',
   'PaymentRefund.PaymentRefund_amount_positive',
 ];

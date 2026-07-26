@@ -42,11 +42,19 @@ export class Session {
     return { status: response.status, body: await response.text() };
   }
 
-  /** Submits a rendered server-action form, adding or overriding named values. */
-  async submit(form: ParsedForm, values: Record<string, string | File> = {}): Promise<Response> {
+  /**
+   * Submits a rendered server-action form, adding or overriding named values.
+   * An array is appended once per element, which is how a set of checkboxes
+   * sharing one name arrives from a browser.
+   */
+  async submit(
+    form: ParsedForm,
+    values: Record<string, string | File | string[]> = {},
+  ): Promise<Response> {
     const body = new FormData();
     for (const [name, value] of Object.entries({ ...form.fields, ...values })) {
-      body.append(name, value);
+      if (Array.isArray(value)) for (const entry of value) body.append(name, entry);
+      else body.append(name, value);
     }
     return this.request(form.action, { method: 'POST', body });
   }

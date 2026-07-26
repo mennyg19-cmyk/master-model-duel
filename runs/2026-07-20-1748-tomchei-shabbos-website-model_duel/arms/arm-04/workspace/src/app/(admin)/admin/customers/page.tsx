@@ -1,21 +1,35 @@
 import Link from 'next/link';
 
-import { Button } from '@/components/ui/button';
-import { Input, Label } from '@/components/ui/field';
+import { ListSearch, Pagination } from '@/components/admin/list-controls';
+import { readPageRequest } from '@/lib/admin/list-query';
 import { requirePermission } from '@/lib/auth/staff';
 import { formatPhone } from '@/lib/core/phone';
-import { searchCustomers } from '@/lib/customers';
+import { listCustomerDirectory } from '@/lib/customers';
+import { posBuilderPath } from '@/lib/pos/paths';
 
 export const dynamic = 'force-dynamic';
 
-/** R-041. The directory staff reach for when the phone rings. */
+const BASE_PATH = '/admin/customers';
+
+/**
+ * The directory staff reach for when the phone rings (R-041, R-062).
+ *
+ * Paged rather than capped: by the week before Purim the org has more customers
+ * than any one screen wants, and a search that silently stops at the fiftieth
+ * match is worse than one that says which page you are on.
+ */
 export default async function AdminCustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; size?: string }>;
 }) {
-  const [{ q }] = await Promise.all([searchParams, requirePermission('customers.view')]);
-  const customers = await searchCustomers(q ?? '');
+  const [params, staff] = await Promise.all([searchParams, requirePermission('customers.view')]);
+
+  const query = (params.q ?? '').trim();
+  const request = readPageRequest(params);
+  const { rows, page } = await listCustomerDirectory(query, request);
+
+  const canSell = staff.permissions.includes('orders.manage');
 
   return (
     <div className="space-y-6">
@@ -26,18 +40,17 @@ export default async function AdminCustomersPage({
         </p>
       </header>
 
-      <form method="get" className="flex items-end gap-2">
-        <div className="w-72">
-          <Label htmlFor="q">Search</Label>
-          <Input id="q" name="q" defaultValue={q ?? ''} placeholder="Name, email or phone" />
-        </div>
-        <Button type="submit" variant="secondary">
-          Search
-        </Button>
-      </form>
+      <ListSearch
+        action={BASE_PATH}
+        query={query}
+        placeholder="Name, email or phone"
+        pageSize={request.pageSize}
+      />
 
-      {customers.length === 0 ? (
-        <p className="text-sm text-[var(--color-ink-muted)]">No customer matches that.</p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-[var(--color-ink-muted)]" data-testid="customer-empty">
+          No customer matches that.
+        </p>
       ) : (
         <table className="w-full text-sm" data-testid="customer-table">
           <thead className="text-left text-[var(--color-ink-muted)]">
@@ -47,14 +60,19 @@ export default async function AdminCustomersPage({
               <th>Phone</th>
               <th>Orders</th>
               <th>Recipients</th>
+              {canSell ? <th /> : null}
             </tr>
           </thead>
           <tbody>
-            {customers.map((customer) => (
-              <tr key={customer.id} className="border-t border-[var(--color-line)]">
+            {rows.map((customer) => (
+              <tr
+                key={customer.id}
+                className="border-t border-[var(--color-line)]"
+                data-testid="customer-row"
+              >
                 <td className="py-2">
                   <Link
-                    href={`/admin/customers/${customer.id}`}
+                    href={`${BASE_PATH}/${customer.id}`}
                     className="text-[var(--color-brand)] underline underline-offset-4"
                   >
                     {customer.fullName}
@@ -64,11 +82,28 @@ export default async function AdminCustomersPage({
                 <td>{customer.phone ? formatPhone(customer.phone) : '—'}</td>
                 <td>{customer._count.orders}</td>
                 <td>{customer._count.addresses}</td>
+                {canSell ? (
+                  <td className="text-right">
+                    <Link
+                      href={posBuilderPath(customer.id)}
+                      className="underline underline-offset-4"
+                      data-testid="customer-sell"
+                    >
+                      Ring up
+                    </Link>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
         </table>
       )}
+
+      <Pagination
+        page={page}
+        basePath={BASE_PATH}
+        query={{ q: query, size: String(request.pageSize) }}
+      />
     </div>
   );
 }

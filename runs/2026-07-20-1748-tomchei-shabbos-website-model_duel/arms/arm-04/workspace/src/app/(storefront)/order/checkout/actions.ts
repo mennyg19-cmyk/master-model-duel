@@ -10,8 +10,9 @@ import {
   setRecipientGreeting,
 } from '@/lib/checkout/greetings';
 import { startCheckout } from '@/lib/checkout/checkout-service';
+import { redirectWithFlash } from '@/lib/forms/flash-redirect';
 import { trimmedField } from '@/lib/forms/form-data';
-import { CHECKOUT_PATH, builderHref, type BuilderParams } from '@/lib/orders/builder-href';
+import { CHECKOUT_PATH, type BuilderParams } from '@/lib/orders/builder-href';
 import { resolveDraftOwner, type DraftOwner } from '@/lib/orders/draft-access';
 import { readSetting } from '@/lib/settings';
 import { requireOpenStore } from '@/lib/store-state';
@@ -109,5 +110,5 @@ async function checkoutContext(): Promise<{ owner: DraftOwner; seasonId: string 
 }
 
 function back(params: BuilderParams): never {
-  redirect(builderHref(CHECKOUT_PATH, params));
+  redirectWithFlash(CHECKOUT_PATH, params);
 }

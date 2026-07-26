@@ -1,16 +1,18 @@
 import 'server-only';
 
-import type { OrderStatus, PaymentMethod, PaymentStatus } from '@prisma/client';
+import type { OrderStatus, PackageStage, PaymentMethod, PaymentStatus } from '@prisma/client';
 
+import { addressSummary } from '../addresses/address-summary';
 import { db } from '../db';
+import { lineTotalWithAddOns, optionsLabel } from './lines';
 
 /**
- * What the office needs to take money against an order (UR-011, R-053).
+ * What the office needs to take money against one order (UR-011, R-053).
  *
- * This is the money view only — the full order desk, search and bulk actions are
- * the operations hub in the next phase. It stays separate from the customer's
- * own order reader because the two answer different questions: a customer sees
- * what they bought, staff see what has been paid, by whom, and what went back.
+ * This is the money view of a single order; searching and paging the desk lives
+ * in `order-desk.ts`. It stays separate from the customer's own order reader
+ * because the two answer different questions: a customer sees what they bought,
+ * staff see what has been paid, by whom, and what went back.
  */
 export type StaffOrderRow = {
   id: string;
@@ -45,29 +47,6 @@ export type StaffOrderMoney = StaffOrderRow & {
   /** Frozen at checkout, shown because a later method change must not move it (G-028). */
   packageFees: { id: string; recipientName: string; methodLabel: string; feeCents: number }[];
 };
-
-const RECENT_ORDER_LIMIT = 50;
-
-export async function listStaffOrders(): Promise<StaffOrderRow[]> {
-  const rows = await db.order.findMany({
-    where: { status: { notIn: ['DRAFT', 'DISCARDED'] } },
-    include: { customer: { select: { fullName: true } } },
-    orderBy: [{ placedAt: 'desc' }],
-    take: RECENT_ORDER_LIMIT,
-  });
-
-  return rows.map((row) => ({
-    id: row.id,
-    orderNumber: row.orderNumber,
-    draftReference: row.draftReference,
-    customerName: row.customer?.fullName ?? 'Guest',
-    status: row.status,
-    paymentStatus: row.paymentStatus,
-    totalCents: row.totalCents,
-    amountPaidCents: row.amountPaidCents,
-    placedAt: row.placedAt,
-  }));
-}
 
 export async function readStaffOrderMoney(orderId: string): Promise<StaffOrderMoney | null> {
   const order = await db.order.findUnique({
@@ -120,4 +99,73 @@ export async function readStaffOrderMoney(orderId: string): Promise<StaffOrderMo
       feeCents: row.fulfillmentFeeCents,
     })),
   };
+}
+
+/**
+ * What is actually in the order, box by box (R-063).
+ *
+ * Staff answering "did her box get the honey" need the contents next to the
+ * money, and they need it grouped the way the order will be packed rather than
+ * the way it was typed. A placed order already carries that grouping — finalize
+ * wrote it — so this reads the packages rather than re-deriving them, which is
+ * how the screen and the packing list stay the same answer.
+ */
+export type StaffOrderBox = {
+  id: string;
+  recipientName: string;
+  methodLabel: string;
+  destination: string;
+  deliveryDay: string | null;
+  greetingMessage: string | null;
+  stage: PackageStage;
+  itemCount: number;
+  lines: {
+    id: string;
+    name: string;
+    options: string;
+    quantity: number;
+    totalCents: number;
+    addOns: string[];
+  }[];
+};
+
+export async function readStaffOrderBoxes(orderId: string): Promise<StaffOrderBox[]> {
+  const packages = await db.package.findMany({
+    where: { orderId },
+    include: {
+      fulfillmentMethod: { select: { label: true } },
+      pickupLocation: { select: { name: true } },
+      lines: { include: { addOns: true }, orderBy: { createdAt: 'asc' } },
+    },
+    orderBy: { recipientName: 'asc' },
+  });
+
+  return packages.map((box) => ({
+    id: box.id,
+    recipientName: box.recipientName,
+    methodLabel: box.fulfillmentMethod.label,
+    destination: box.pickupLocation
+      ? `Pick up at ${box.pickupLocation.name}`
+      : box.addressLine1
+        ? addressSummary({
+            line1: box.addressLine1,
+            line2: box.addressLine2,
+            city: box.addressCity ?? '',
+            state: box.addressState ?? '',
+            postalCode: box.addressPostalCode ?? '',
+          })
+        : '—',
+    deliveryDay: box.deliveryDay,
+    greetingMessage: box.greetingMessage,
+    stage: box.stage,
+    itemCount: box.lines.reduce((count, line) => count + line.quantity, 0),
+    lines: box.lines.map((line) => ({
+      id: line.id,
+      name: line.productNameSnapshot,
+      options: optionsLabel(line.optionsSnapshot),
+      quantity: line.quantity,
+      totalCents: lineTotalWithAddOns(line),
+      addOns: line.addOns.map((addOn) => addOn.addOnNameSnapshot),
+    })),
+  }));
 }

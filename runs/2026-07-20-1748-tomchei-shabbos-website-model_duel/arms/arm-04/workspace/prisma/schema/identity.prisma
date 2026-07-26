@@ -53,6 +53,8 @@ model StaffUser {
   refundsRecorded     PaymentRefund[]
   assemblyBatches     AssemblyBatch[]
   mediaUploads        MediaAsset[]
+  posTills            Order[]              @relation("PosTill")
+  importBatches       ImportBatch[]
 
   @@index([role, status])
 }

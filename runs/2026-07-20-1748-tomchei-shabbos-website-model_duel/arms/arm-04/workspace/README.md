@@ -65,12 +65,16 @@ entirely and just set `DATABASE_URL`.
 | `npm run smoke:p2` | P2 smoke: migrate, seed, read the domain back, run the engine tests |
 | `npm run smoke:p3` | P3 smoke: storefront, gates, newsletter, media and settings over HTTP |
 | `npm run smoke:p4` | P4 smoke: builder, assignment, guest and account drafts, address book, staff audit |
+| `npm run smoke:p5` | P5 smoke: checkout, reservations, payment, webhooks, refunds |
+| `npm run smoke:p6` | P6 smoke: dashboard, order desk, POS, imports, and all of it at crunch scale |
+| `npm run fixtures:scale` | Generates 1,000 orders and 5,000 packages; `-- clear` takes them out again |
 
 `npm run smoke` needs `npm run dev` running and starts from an empty database
 (`npm run db:fresh`), because it proves the first-run bootstrap. `npm run smoke:p2`
-needs no dev server — P2 has no screens. `npm run smoke:p3` and `npm run smoke:p4`
-need both a dev server and the seeded database; `smoke:p4` clears the drafts an
-earlier run left behind so it starts from an empty cart.
+needs no dev server — P2 has no screens. `npm run smoke:p3` onwards need both a dev
+server and the seeded database; `smoke:p4` clears the drafts an earlier run left
+behind so it starts from an empty cart, and `smoke:p6` generates the scale fixtures
+and removes them again so the database is what it was.
 
 Newsletter mail is a later phase, so `npm run newsletter:link` is how the
 preferences and unsubscribe pages are opened until then.
@@ -128,6 +132,34 @@ the file's own magic bytes — plus alt text, which the form requires because no
 screen would ask for it. SVG is rejected even though it is an image: it is a
 document that can carry script, served from this site's origin.
 
+## The admin
+
+| Page | What it is |
+|---|---|
+| `/admin` | Season KPIs, the head of today's queue and the latest orders, each panel shown only to permissions that allow it |
+| `/admin/today` | The day's work: money owed, paid and waiting to be packed, and carts left open at the counter |
+| `/admin/orders` | One search box over order numbers, draft references and customers, with status and payment filters, paging, and bulk actions on the selected rows |
+| `/admin/orders/[orderId]` | What is in the boxes, what was paid, a counter payment, a refund, and a status move |
+| `/admin/pos`, `/admin/pos/[customerId]` | Find or create the customer, then the storefront's own builder and checkout pointed at the till |
+| `/admin/customers`, `/admin/customers/[customerId]` | The directory and one person's orders and address book |
+| `/admin/imports`, `/admin/imports/[batchId]` | Upload a CSV, read what it will do row by row, then commit it in one transaction |
+
+The counter is the storefront: `/admin/pos/[customerId]` renders the same product
+panel, cart and recipient picker as `/order`, and the same checkout summary priced
+by the same engine, with the actions bound to the till instead of the customer.
+Nothing about how an order is built is written twice, which is the only way "the
+POS produces the same order as the website" survives the next change to either.
+
+Cards are not taken at the counter. The POS settles in cash or by check, and the
+payment row carries the name of the staff member who took it; a card goes through
+the customer's own hosted payment page, which is what keeps card data off these
+servers.
+
+Every admin list reads one clamped page (`src/lib/admin/list-query.ts`), and a bulk
+action is a bounded batch that attempts each order separately and reports what it
+did to each — so two people sweeping the same rows during Purim week get an exact,
+repeatable account rather than a silent overwrite.
+
 ## Domain model
 
 The Prisma schema is a folder, one file per concern: `identity`, `customers`,
@@ -151,6 +183,11 @@ The engine that goes with it:
 | Where a line is going | `src/lib/orders/assignment.ts` — the three-way picker, re-checked server-side: the method must still be offered, a saved address must be in this customer's own book, and delivery still only reaches its ZIPs |
 | One address book per customer | `src/lib/addresses/address-book.ts` — normalized keys dedupe "12 Main St." onto "12 Main Street", edits follow open drafts but never a placed order, and rows are archived rather than deleted |
 | Which unsubscribe links work | `src/lib/newsletter/tokens.ts` — HMAC over a purpose string and the payload, 30-day expiry |
+| How long a list may be | `src/lib/admin/list-query.ts` — every admin list reads one clamped page, so no screen grows with the season |
+| What the order desk shows | `src/lib/orders/order-desk.ts` — one search box over order number, draft reference and customer, with status and payment filters |
+| What a sweep of orders did | `src/lib/orders/bulk-actions.ts` — bounded batches, each order attempted on its own and reported as updated, skipped or conflicted |
+| Whose cart the counter is holding | `src/lib/pos/counter.ts` — a POS draft is owned by the staff member who opened it as well as the customer, so it cannot collide with the customer's own |
+| What a spreadsheet will do before it does it | `src/lib/imports/import-service.ts` — staging writes a verdict per row and nothing else; the commit writes every row or none |
 
 Order numbers are per season and gapless: the counter increments inside the same
 transaction that places the order, so a rollback puts the number back.

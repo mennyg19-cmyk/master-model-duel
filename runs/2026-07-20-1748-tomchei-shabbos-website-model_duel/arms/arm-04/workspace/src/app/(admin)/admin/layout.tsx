@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { ImpersonationBanner } from './impersonation-banner';
 import { signOut } from '../../sign-in/actions';
+import { AlertBanner } from '@/components/admin/alert-banner';
 import { ADMIN_NAV } from '@/components/admin/nav-items';
 import { Badge } from '@/components/ui/badge';
 import { ADMIN_TITLE } from '@/lib/brand';
@@ -23,6 +24,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           impersonatedName={context.acting.fullName}
         />
       ) : null}
+
+      <AlertBanner canOpenSettings={context.permissions.includes('settings.manage')} />
 
       <header className="border-b border-[var(--color-line)] bg-[var(--color-brand)] text-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">

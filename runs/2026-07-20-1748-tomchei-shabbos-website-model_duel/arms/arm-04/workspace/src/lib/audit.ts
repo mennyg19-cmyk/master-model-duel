@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type {
+  ImportKind,
   OrderStatus,
   PackageStage,
   PaymentMethod,
@@ -23,14 +24,41 @@ import type { StaffContext } from './auth/staff';
  */
 type AuditDetails = {
   'order.finalized': { orderNumber: number; packageCount: number; totalCents: number };
-  'order.status_changed': { from: OrderStatus; to: OrderStatus };
+  /// `batchId` is set when the move came from a bulk sweep rather than from one
+  /// person on one order, and is the only thing that ties the per-order rows of
+  /// a batch together (G-024).
+  'order.status_changed': { from: OrderStatus; to: OrderStatus; batchId?: string };
   'order.draft_claimed': { draftReference: string };
+  /// R-057. Says what came across and what could not, because a repeat that
+  /// quietly dropped a discontinued box is the complaint nobody can explain.
+  'order.repeated': {
+    sourceOrderId: string;
+    copiedLines: number;
+    skippedLines: string[];
+    batchId?: string;
+  };
+  /// G-024. One summary row for the whole batch: a hundred separate rows would
+  /// bury the individual edits staff make by hand, which are the interesting
+  /// ones. The orders themselves are found by `batchId` on their own rows, which
+  /// is one join for the whole sweep whatever action it ran.
+  'orders.bulk_action': {
+    batchId: string;
+    action: string;
+    applied: number;
+    skipped: number;
+    conflicts: number;
+    droppedCount: number;
+  };
   /// UR-014 and G-019: a staff member editing somebody else's address book is
   /// the row an auditor comes looking for. The same edit made by the customer is
   /// logged as "system", which is how the two are told apart.
   'customer.address_saved': { customerId: string; created: boolean };
   'customer.address_archived': { customerId: string };
   'customer.profile_updated': { changedPhone: boolean };
+  /// R-060. A record created by somebody at the counter rather than by the
+  /// person themselves, which is the one to look at when two accounts turn out
+  /// to be the same family.
+  'customer.created_at_counter': { email: string };
   /// Money rows never carry the instrument that moved it — no check number, no
   /// Stripe intent id, no card detail. Those live on the payment row, which is
   /// behind a permission; the audit trail is read far more widely.
@@ -40,6 +68,10 @@ type AuditDetails = {
   /// R-126: the charge did not match what the order says it costs, so it was
   /// handed straight back rather than kept while somebody worked out why.
   'payment.auto_refunded': { chargedCents: number; expectedCents: number };
+  /// R-061. The counter placed the order and then could not take the cash for
+  /// it. Without this row the order is simply unpaid on the desk and nothing
+  /// says a member of staff had money in their hand when it happened.
+  'pos.sale_unpaid': { orderNumber: number; method: PaymentMethod; code: string };
   'package.created': { orderId: string; recipientName: string; lineCount: number };
   'package.stage_changed': { from: PackageStage; to: PackageStage };
   'staff.invited': { email: string; role: StaffRole };
@@ -55,6 +87,19 @@ type AuditDetails = {
   'catalog.replacement_linked': { slug: string; replacedByProductId: string | null };
   'catalog.addon_saved': { slug: string; seasonYear: number; created: boolean };
   'media.uploaded': { pathname: string; contentType: string; sizeBytes: number };
+  /// R-143. Staging and committing are two rows because they are two decisions:
+  /// somebody uploaded a file, and somebody later read the preview and accepted
+  /// it. The file name is kept; the contents are on the batch.
+  'import.staged': {
+    kind: ImportKind;
+    fileName: string;
+    rowCount: number;
+    validCount: number;
+    duplicateCount: number;
+    invalidCount: number;
+  };
+  'import.committed': { kind: ImportKind; createdCount: number; updatedCount: number };
+  'import.discarded': { kind: ImportKind; rowCount: number };
 };
 
 export type AuditAction = keyof AuditDetails;

@@ -21,7 +21,13 @@ import { db } from '../db';
  */
 export type DraftOwner =
   | { kind: 'customer'; customerId: string }
-  | { kind: 'guest'; tokenHash: string };
+  | { kind: 'guest'; tokenHash: string }
+  /**
+   * A cart being built at the counter for a named customer (R-059). The till is
+   * the staff member, not the browser: the same person can only have one open at
+   * a time, and the customer's own web session cannot see it.
+   */
+  | { kind: 'pos'; staffUserId: string; customerId: string };
 
 /**
  * A guest's cart lives about as long as the season does. Shorter and people
@@ -92,17 +98,39 @@ export async function clearGuestToken(): Promise<void> {
  * The owner half of every draft query. Guests match on the hashed token and
  * nothing else; an account matches on its own id, so a customer cannot reach a
  * draft that is still anonymous until they claim it.
+ *
+ * A customer's own filter excludes tills on purpose: the cart a member of staff
+ * is building for somebody over the phone is not a cart that person should find
+ * waiting for them on the website half-finished.
  */
 export function ownerFilter(owner: DraftOwner): Prisma.OrderWhereInput {
-  return owner.kind === 'customer'
-    ? { customerId: owner.customerId }
-    : { guestTokenHash: owner.tokenHash };
+  if (owner.kind === 'guest') return { guestTokenHash: owner.tokenHash };
+  if (owner.kind === 'pos') {
+    return { posStaffUserId: owner.staffUserId, customerId: owner.customerId };
+  }
+  return { customerId: owner.customerId, posStaffUserId: null };
 }
 
-export function ownerColumns(owner: DraftOwner): Pick<Prisma.OrderUncheckedCreateInput, 'customerId' | 'guestTokenHash'> {
-  return owner.kind === 'customer'
-    ? { customerId: owner.customerId }
-    : { guestTokenHash: owner.tokenHash };
+type OwnerColumns = Pick<
+  Prisma.OrderUncheckedCreateInput,
+  'customerId' | 'guestTokenHash' | 'posStaffUserId'
+>;
+
+export function ownerColumns(owner: DraftOwner): OwnerColumns {
+  if (owner.kind === 'guest') return { guestTokenHash: owner.tokenHash };
+  if (owner.kind === 'pos') {
+    return { customerId: owner.customerId, posStaffUserId: owner.staffUserId };
+  }
+  return { customerId: owner.customerId };
+}
+
+/**
+ * Whose address book this cart may read and write. A guest has none — the book
+ * belongs to an account — and the counter uses the customer's own, which is what
+ * makes a POS order the same order the website would have produced (UR-006).
+ */
+export function addressBookCustomerId(owner: DraftOwner): string | null {
+  return owner.kind === 'guest' ? null : owner.customerId;
 }
 
 /** The draft this owner is building for the season, or null. */
