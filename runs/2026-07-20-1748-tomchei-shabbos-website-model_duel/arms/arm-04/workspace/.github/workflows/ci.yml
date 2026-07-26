@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The embedded cluster gives CI the same Postgres the developers run,
+      # so the migration guard and the DB-backed tests need no service container.
+      - name: Start Postgres
+        run: npm run db:start &
+
+      - name: Wait for Postgres
+        run: npm run db:wait
+
+      # .env.example ships a placeholder secret that env validation rejects on
+      # purpose, so CI generates a real one instead of booting on a public key.
+      - name: Write CI .env
+        run: |
+          cp .env.example .env
+          sed -i "s|^AUTH_SESSION_SECRET=.*|AUTH_SESSION_SECRET=$(openssl rand -base64 48 | tr -d '\n/+=')|" .env
+
+      - run: npm run env:check
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      - name: Migration guard
+        run: npm run db:guard
+
+      - run: npm test
+
+      # A broken seed must fail CI, not the next developer's first checkout.
+      - name: Baseline seed
+        run: npm run db:deploy && npm run seed
+
+      - run: npm run build
+
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Fail if a secret file is committed
+        run: |
+          if git ls-files | grep -E '^\.env$|^\.env\.local$'; then
+            echo "An environment file with real secrets is committed."
+            exit 1
+          fi

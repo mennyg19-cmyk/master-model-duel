@@ -370,3 +370,12 @@
 2026-07-26T11:42:49Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,1b,arm-04,,grill_grade,glm-5.2-high,987f344f-20e7-4fb9-a791-275ba1a6eb62,,,,,,,,8/8 tq=2.00 inv=7/7 eff=0.70; usage_missing
 2026-07-26T11:52:58Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-04,,plan,claude-opus-5-thinking-high,932dc137-b8d6-4c96-8182-aa94c8563521,,,,,,,,16 phases P0-P15; 16UR/30G/192R; usage_missing
 2026-07-26T11:53:47Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-04,,plan_review,glm-5.2-high,d166c8b8-d65c-47df-ac61-d73faa6bdb99,,,,,,,,15/15 bonus_plan; usage_missing
+2026-07-26T12:35:04Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P1,build,claude-opus-5-thinking-high,e65bec3d-f510-400e-81bc-1a5641d6ad67,,,,,,,,P1 smoke 24/24 ci green; usage_missing
+2026-07-26T12:37:04Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P1,review_security,glm-5.2-high,4cad2d97-1625-4d13-8549-a5fe9866cd1c,,,,,,,,0B 2M 6m; usage_missing
+2026-07-26T12:37:53Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P1,review_rules,glm-5.2-high,66fea39e-9ccc-4fb6-b8d5-ebad922240af,,,,,,,,0B 0M 5m; usage_missing
+2026-07-26T12:38:06Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P1,review_quality,glm-5.2-high,9f8bd4d9-5c5e-4376-84c3-c888e6aa81b8,,,,,,,,0B 2M 6m; usage_missing
+2026-07-26T12:38:42Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P1,review_clean_code,glm-5.2-high,683be80b-b405-4faa-9a18-459f6f831f46,,,,,,,,P1 clean-code; usage_missing
+2026-07-26T12:40:22Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P1,review_aggregate,glm-5.2-high,03ed2ced-bf4b-4eba-9c50-99f00daf8862,,,,,,,,0B 7M 23m deduped; usage_missing
+2026-07-26T13:07:25Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P1,fix,claude-opus-5-thinking-high,c938d61a-32f6-4b3d-bed3-c7f83b5e9497,,,,,,,,"M1-M7 + m8-24,27; smoke 28/28; usage_missing"
+2026-07-26T13:08:27Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P1,fix,claude-opus-5-thinking-high,c938d61a-32f6-4b3d-bed3-c7f83b5e9497,,,,,,,,P1 fix pass M1-M7; usage_missing
+2026-07-26T13:08:27Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P2,build,claude-opus-5-thinking-high,e6824218-507b-453f-9449-d8cb0146e04f,,,,,,,,P2 build spawn; usage_missing

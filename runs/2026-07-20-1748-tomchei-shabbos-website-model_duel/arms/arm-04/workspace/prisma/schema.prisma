@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  MANAGER
+  STAFF
+  DRIVER
+}
+
+enum StaffStatus {
+  INVITED
+  ACTIVE
+  REVOKED
+}
+
+enum PermissionEffect {
+  GRANT
+  DENY
+}
+
+/// Staff are the only rows that carry roles and permissions. Customers are a
+/// separate table on purpose (UR-012): a customer can never inherit staff access.
+model StaffUser {
+  id             String      @id @default(uuid())
+  externalAuthId String?     @unique
+  email          String      @unique
+  fullName       String
+  role           StaffRole
+  status         StaffStatus @default(INVITED)
+
+  /// Optimistic-concurrency stamp. Every mutation must match the version it read.
+  version        Int         @default(1)
+
+  invitedAt      DateTime    @default(now())
+  confirmedAt    DateTime?
+  revokedAt      DateTime?
+  lastLoginAt    DateTime?
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  permissionOverrides PermissionOverride[]
+  auditEventsAsActor  AuditEvent[]         @relation("AuditActor")
+  auditEventsAsSubject AuditEvent[]        @relation("AuditImpersonated")
+  loginSessions       StaffLoginSession[]
+
+  @@index([role, status])
+}
+
+/// Per-person exception on top of the role default. DENY always beats GRANT.
+model PermissionOverride {
+  id          String           @id @default(uuid())
+  staffUserId String
+  permission  String
+  effect      PermissionEffect
+  reason      String?
+  createdAt   DateTime         @default(now())
+
+  staffUser   StaffUser        @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+
+  @@unique([staffUserId, permission])
+}
+
+model StaffLoginSession {
+  id          String    @id @default(uuid())
+  staffUserId String
+  startedAt   DateTime  @default(now())
+  ipAddress   String?
+  userAgent   String?
+
+  staffUser   StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+
+  @@index([staffUserId, startedAt])
+}
+
+/// Customers hold their own identity link. No role column exists here by design.
+model Customer {
+  id             String   @id @default(uuid())
+  externalAuthId String?  @unique
+  email          String   @unique
+  normalizedEmail String  @unique
+  fullName       String
+  phone          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([normalizedEmail])
+}
+
+model AuditEvent {
+  id                   String   @id @default(uuid())
+  action               String
+  entityType           String
+  entityId             String
+  /// Free-form detail. Never store secrets or full payment data here.
+  detail               Json     @default("{}")
+
+  actorStaffUserId     String?
+  actorLabel           String
+  impersonatedStaffUserId String?
+  ipAddress            String?
+  createdAt            DateTime @default(now())
+
+  actor                StaffUser? @relation("AuditActor", fields: [actorStaffUserId], references: [id], onDelete: SetNull)
+  impersonated         StaffUser? @relation("AuditImpersonated", fields: [impersonatedStaffUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([action, createdAt])
+}
+
+/// Typed key-value settings store (R-161). Values are validated against a Zod
+/// schema per key in src/lib/settings.ts, never read as raw JSON by callers.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
