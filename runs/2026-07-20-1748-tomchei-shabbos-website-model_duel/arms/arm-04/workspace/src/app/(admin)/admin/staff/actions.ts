@@ -7,6 +7,7 @@ import { StaffRole } from '@prisma/client';
 import { recordAudit } from '@/lib/audit';
 import { requirePermission } from '@/lib/auth/staff';
 import { startImpersonation, stopImpersonation } from '@/lib/auth/local-session';
+import { readVersionStamp } from '@/lib/forms/form-data';
 import { db } from '@/lib/db';
 import {
   changeStaffRole,
@@ -48,7 +49,7 @@ export async function changeRoleAction(formData: FormData) {
   const context = await requirePermission('staff.manage');
 
   const role = readChoice(formData, 'role', STAFF_ROLES);
-  const expectedVersion = readVersion(formData);
+  const expectedVersion = readVersionStamp(formData);
   if (!role || expectedVersion === null) redirectToStaff(INVALID_SUBMISSION);
 
   const changed = await changeStaffRole(context, {
@@ -65,7 +66,7 @@ export async function setStatusAction(formData: FormData) {
   const context = await requirePermission('staff.manage');
 
   const status = readChoice(formData, 'status', SETTABLE_STATUSES);
-  const expectedVersion = readVersion(formData);
+  const expectedVersion = readVersionStamp(formData);
   if (!status || expectedVersion === null) redirectToStaff(INVALID_SUBMISSION);
 
   const changed = await setStaffStatus(context, {
@@ -142,10 +143,4 @@ function readChoice<T extends string>(
 ): T | null {
   const value = String(formData.get(field) ?? '');
   return (allowed as readonly string[]).includes(value) ? (value as T) : null;
-}
-
-/** The optimistic-concurrency stamp has to be a real version, never NaN. */
-function readVersion(formData: FormData): number | null {
-  const version = Number(formData.get('version'));
-  return Number.isInteger(version) && version > 0 ? version : null;
 }

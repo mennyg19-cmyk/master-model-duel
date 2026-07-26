@@ -10,7 +10,7 @@ import { requirePermission } from '@/lib/auth/staff';
 import { pageQueryString, readPageRequest } from '@/lib/admin/list-query';
 import { formatCents } from '@/lib/core/money';
 import { formatDateTime } from '@/lib/core/dates';
-import { MAX_BULK_ORDERS } from '@/lib/orders/bulk-actions';
+import { MAX_BULK_ITEMS } from '@/lib/admin/bulk-report';
 import { humanizeStatus, orderStatusTone, paymentStatusTone } from '@/lib/orders/order-labels';
 import {
   ORDER_DESK_PAYMENTS,
@@ -192,7 +192,7 @@ export default async function AdminOrdersPage({
                 Apply to selected
               </Button>
               <span className="text-xs text-[var(--color-ink-muted)]">
-                Up to {MAX_BULK_ORDERS} at a time. Every order is reported on individually.
+                Up to {MAX_BULK_ITEMS} at a time. Every order is reported on individually.
               </span>
             </div>
           ) : null}

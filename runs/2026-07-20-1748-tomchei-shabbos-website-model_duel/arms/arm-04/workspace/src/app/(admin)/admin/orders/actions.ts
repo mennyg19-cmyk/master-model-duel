@@ -16,12 +16,11 @@ import {
   voidPayment,
 } from '@/lib/payments/offline-payments';
 import {
-  bulkChangeStatus,
-  bulkRepeat,
-  isBulkStatusAction,
+  firstFewOutcomes,
   summarizeBulk,
   type BulkReport,
-} from '@/lib/orders/bulk-actions';
+} from '@/lib/admin/bulk-report';
+import { bulkChangeStatus, bulkRepeat, isBulkStatusAction } from '@/lib/orders/bulk-actions';
 import { cancelUnpaidOrder, transitionOrder } from '@/lib/orders/order-service';
 import { repeatOrderAtCounter } from '@/lib/orders/repeat-order';
 import { openSeasonForCounter } from '@/lib/pos/counter';
@@ -209,20 +208,6 @@ async function runBulk(
   if (!season.ok) return season;
 
   return ok(await bulkRepeat(staff, orderIds, season.value.id));
-}
-
-/** Enough of the report to act on without opening the audit log. */
-const OUTCOMES_IN_NOTICE = 4;
-
-function firstFewOutcomes(report: BulkReport): string {
-  const notable = report.records.filter((record) => record.outcome !== 'applied');
-  const shown = (notable.length > 0 ? notable : report.records).slice(0, OUTCOMES_IN_NOTICE);
-  const rest = (notable.length > 0 ? notable.length : report.records.length) - shown.length;
-
-  return [
-    ...shown.map((record) => `${record.label} ${record.outcome}: ${record.detail}`),
-    ...(rest > 0 ? [`and ${rest} more`] : []),
-  ].join('; ');
 }
 
 /** The desk's own filters. Anything else a form posted back is not a filter. */

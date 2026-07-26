@@ -5,6 +5,7 @@ import type { Package, PackageStage } from '@prisma/client';
 import { recordAudit, type AuditActor } from '../audit';
 import { failure, STALE_VERSION, type Result } from '../core/result';
 import { abort, runInTransaction } from '../transaction';
+import { boardScopeWhere } from './channel-summary';
 import { checkPackageStage, STAGE_TIMESTAMP } from './package-stages';
 
 export const PACKAGE_NOT_FOUND = 'package_not_found';
@@ -15,18 +16,30 @@ export const PACKAGE_NOT_FOUND = 'package_not_found';
  *
  * The move and its audit row commit together. A stage that advanced with no
  * trail behind it is the one thing this table exists to prevent.
+ *
+ * The box is read through the same scope the board is drawn from: an id from
+ * another season, or from an order nobody is working, is not a box this screen
+ * may move.
  */
 export async function advancePackageStage(
-  input: { packageId: string; expectedVersion: number; stage: PackageStage },
+  input: {
+    packageId: string;
+    seasonId: string;
+    expectedVersion: number;
+    stage: PackageStage;
+    batchId?: string;
+  },
   actor: AuditActor,
 ): Promise<Result<Package>> {
   return runInTransaction(async (tx) => {
-    const current = await tx.package.findUnique({
-      where: { id: input.packageId },
+    const current = await tx.package.findFirst({
+      where: { id: input.packageId, ...boardScopeWhere(input.seasonId) },
       include: { fulfillmentMethod: { select: { kind: true } } },
     });
 
-    if (!current) abort(failure(PACKAGE_NOT_FOUND, 'That package no longer exists.'));
+    if (!current) {
+      abort(failure(PACKAGE_NOT_FOUND, 'That package is not on the packing board for this season.'));
+    }
 
     const allowed = checkPackageStage(current.stage, input.stage, current.fulfillmentMethod.kind);
     if (!allowed.ok) abort(allowed);
@@ -57,7 +70,7 @@ export async function advancePackageStage(
         action: 'package.stage_changed',
         entityType: 'Package',
         entityId: input.packageId,
-        detail: { from: current.stage, to: input.stage },
+        detail: { from: current.stage, to: input.stage, ...(input.batchId ? { batchId: input.batchId } : {}) },
       },
       tx,
     );

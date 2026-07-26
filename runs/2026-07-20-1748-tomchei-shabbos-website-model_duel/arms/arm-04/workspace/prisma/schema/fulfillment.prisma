@@ -117,6 +117,7 @@ model Package {
   lines             OrderLine[]
   shipmentBoxes     ShipmentBox[]
   shippingQuotes    ShippingQuote[]
+  printItems        PrintBatchItem[]
 
   @@unique([orderId, groupingKey])
   @@index([stage])

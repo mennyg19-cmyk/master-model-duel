@@ -9,3 +9,7 @@ export function formatDateTime(date: Date, timeZone: string = ORG_TIME_ZONE): st
     timeStyle: 'short',
   }).format(date);
 }
+
+export function formatDate(date: Date, timeZone: string = ORG_TIME_ZONE): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone, dateStyle: 'medium' }).format(date);
+}

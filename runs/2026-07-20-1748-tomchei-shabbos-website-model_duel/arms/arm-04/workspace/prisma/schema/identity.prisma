@@ -55,6 +55,7 @@ model StaffUser {
   mediaUploads        MediaAsset[]
   posTills            Order[]              @relation("PosTill")
   importBatches       ImportBatch[]
+  printBatches        PrintBatch[]
 
   @@index([role, status])
 }

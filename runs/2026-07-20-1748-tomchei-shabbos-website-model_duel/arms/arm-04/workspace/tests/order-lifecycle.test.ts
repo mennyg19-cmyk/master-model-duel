@@ -269,7 +269,7 @@ test('advancing a package stage is audited and refuses a stale version', async (
   const box = await db.package.findFirstOrThrow({ where: { orderId: draft.id } });
 
   const printed = await advancePackageStage(
-    { packageId: box.id, expectedVersion: box.version, stage: 'PRINTED' },
+    { packageId: box.id, seasonId: season.id, expectedVersion: box.version, stage: 'PRINTED' },
     null,
   );
   assert.equal(printed.ok, true);
@@ -278,7 +278,7 @@ test('advancing a package stage is audited and refuses a stale version', async (
   assert.equal(printed.ok && printed.value.sentAt, null, 'printing must not imply sent');
 
   const replay = await advancePackageStage(
-    { packageId: box.id, expectedVersion: box.version, stage: 'PACKED' },
+    { packageId: box.id, seasonId: season.id, expectedVersion: box.version, stage: 'PACKED' },
     null,
   );
   assert.equal(replay.ok, false, 'a stale version loses');

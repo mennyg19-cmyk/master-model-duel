@@ -6,6 +6,7 @@ export const ADMIN_NAV: { href: string; label: string; permission: Permission }[
   { href: '/admin/today', label: 'Today', permission: 'orders.view' },
   { href: '/admin/orders', label: 'Orders', permission: 'orders.view' },
   { href: '/admin/pos', label: 'Point of sale', permission: 'orders.manage' },
+  { href: '/admin/fulfillment', label: 'Fulfillment', permission: 'fulfillment.manage' },
   { href: '/admin/customers', label: 'Customers', permission: 'customers.view' },
   { href: '/admin/imports', label: 'Imports', permission: 'imports.manage' },
   { href: '/admin/catalog', label: 'Catalog', permission: 'catalog.manage' },

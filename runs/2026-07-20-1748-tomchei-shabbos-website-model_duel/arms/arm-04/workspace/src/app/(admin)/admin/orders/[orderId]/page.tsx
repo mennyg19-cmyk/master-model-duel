@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import {
@@ -7,7 +8,9 @@ import {
   repeatOrderAction,
   voidPaymentAction,
 } from '../actions';
+import { reprintOrderAction } from '../../fulfillment/actions';
 import { BackLink } from '@/components/admin/list-controls';
+import { OrderPrintLinks } from '@/components/admin/order-print-links';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
@@ -23,6 +26,8 @@ import {
   type StaffPaymentRow,
 } from '@/lib/orders/staff-orders';
 import { OFFLINE_METHOD_LABELS } from '@/lib/payments/offline-payments';
+import { packagePath } from '@/lib/print/paths';
+import { PRINTABLE_ORDER_STATUSES } from '@/lib/print/print-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +57,8 @@ export default async function AdminOrderMoneyPage({
 
   const boxes = await readStaffOrderBoxes(order.id);
   const canManage = staff.permissions.includes('orders.manage');
+  const canPack = staff.permissions.includes('fulfillment.manage');
+  const canPrint = canPack && PRINTABLE_ORDER_STATUSES.includes(order.status);
   const outstandingCents = order.totalCents - order.amountPaidCents;
 
   return (
@@ -137,7 +144,18 @@ export default async function AdminOrderMoneyPage({
             This order has not been packed into boxes yet.
           </p>
         ) : (
-          boxes.map((box) => <OrderBox key={box.id} box={box} />)
+          <>
+            {canPrint ? <OrderPaper orderId={order.id} /> : null}
+            {canPack && !canPrint ? (
+              <p className="text-sm text-[var(--color-ink-muted)]" data-testid="order-not-printable">
+                No paper is filed for this order: it is {order.status.toLowerCase()}, and the
+                nightly batch only prints orders that are placed or in fulfillment.
+              </p>
+            ) : null}
+            {boxes.map((box) => (
+              <OrderBox key={box.id} box={box} canPack={canPack} />
+            ))}
+          </>
         )}
       </section>
 
@@ -229,11 +247,42 @@ export default async function AdminOrderMoneyPage({
   );
 }
 
-function OrderBox({ box }: { box: StaffOrderBox }) {
+/**
+ * R-056. This order's paper without waiting for tonight's batch, plus a reprint
+ * that files it the way the nightly run would. Neither moves a box along.
+ */
+function OrderPaper({ orderId }: { orderId: string }) {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-4 rounded-md bg-[var(--color-surface-muted)] p-3 text-sm"
+      data-testid="order-paper"
+    >
+      <span>Print:</span>
+      <OrderPrintLinks orderId={orderId} />
+
+      <form action={reprintOrderAction}>
+        <input type="hidden" name="orderId" value={orderId} />
+        <Button type="submit" variant="secondary" data-testid="order-reprint">
+          File a reprint batch
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+function OrderBox({ box, canPack }: { box: StaffOrderBox; canPack: boolean }) {
   return (
     <Card data-testid="order-box" data-stage={box.stage}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <CardTitle>{box.recipientName}</CardTitle>
+        <CardTitle>
+          {canPack ? (
+            <Link href={packagePath(box.id)} className="underline underline-offset-4">
+              {box.recipientName}
+            </Link>
+          ) : (
+            box.recipientName
+          )}
+        </CardTitle>
         <Badge tone="neutral">{box.stage}</Badge>
       </div>
 

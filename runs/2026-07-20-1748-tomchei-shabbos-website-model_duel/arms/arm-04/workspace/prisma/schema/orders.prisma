@@ -93,6 +93,7 @@ model Order {
   payments       Payment[]
   paymentIntents StripePaymentIntent[]
   shippingQuotes ShippingQuote[]
+  printItems     PrintBatchItem[]
 
   @@unique([seasonId, orderNumber])
   @@index([seasonId, status])

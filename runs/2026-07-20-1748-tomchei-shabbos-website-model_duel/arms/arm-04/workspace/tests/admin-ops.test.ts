@@ -7,12 +7,8 @@ import { pageHref, pageInfo, readPageRequest, MAX_PAGE_SIZE } from '../src/lib/a
 import { readDashboard, readTodayQueue } from '../src/lib/admin/dashboard';
 import { CsvError, parseCsv } from '../src/lib/imports/csv';
 import { commitImport, readBatch, stageImport } from '../src/lib/imports/import-service';
-import {
-  bulkChangeStatus,
-  bulkRepeat,
-  MAX_BULK_ORDERS,
-  summarizeBulk,
-} from '../src/lib/orders/bulk-actions';
+import { MAX_BULK_ITEMS, summarizeBulk } from '../src/lib/admin/bulk-report';
+import { bulkChangeStatus, bulkRepeat } from '../src/lib/orders/bulk-actions';
 import { listOrderDesk, readOrderDeskFilters } from '../src/lib/orders/order-desk';
 import { repeatOrderAtCounter } from '../src/lib/orders/repeat-order';
 import { createDraftReference } from '../src/lib/orders/draft-reference';
@@ -251,15 +247,15 @@ test('two people sweeping the same list: the second is told what the first alrea
 
 test('a bulk batch is bounded, and says how much it left alone', async () => {
   const staff = await createStaffContext([...MANAGER]);
-  const ids = Array.from({ length: MAX_BULK_ORDERS + 5 }, (_, index) =>
+  const ids = Array.from({ length: MAX_BULK_ITEMS + 5 }, (_, index) =>
     `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
   );
 
   const report = await bulkChangeStatus(staff, [...ids, ids[0]], 'COMPLETED');
 
-  assert.equal(report.records.length, MAX_BULK_ORDERS);
+  assert.equal(report.records.length, MAX_BULK_ITEMS);
   assert.equal(report.droppedCount, 5);
-  assert.equal(report.requested, MAX_BULK_ORDERS + 5);
+  assert.equal(report.requested, MAX_BULK_ITEMS + 5);
   assert.match(summarizeBulk(report), /over the 100 limit/);
 });
 

@@ -1,0 +1,80 @@
+enum PrintBatchKind {
+  NIGHTLY
+  REPRINT
+}
+
+/// A night's printing (UR-005). The batch is a list of which boxes belong in
+/// which filing group, not a stored file: the PDFs are rendered from this
+/// membership every time they are asked for, so a reprint is the same paper as
+/// the original rather than a second, subtly different document.
+///
+/// A reprint is a new batch pointing at the one it came from (`supersedesBatchId`)
+/// rather than an edit of it. The pile of paper on the table came from a batch
+/// that must still be readable after somebody re-runs a group.
+model PrintBatch {
+  id       String         @id @default(uuid())
+  seasonId String
+  kind     PrintBatchKind @default(NIGHTLY)
+  label    String
+
+  packageCount Int @default(0)
+
+  createdByStaffUserId String?
+  supersedesBatchId    String?
+  createdAt            DateTime @default(now())
+
+  season     Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  createdBy  StaffUser?        @relation(fields: [createdByStaffUserId], references: [id], onDelete: SetNull)
+  supersedes PrintBatch?       @relation("BatchReprints", fields: [supersedesBatchId], references: [id], onDelete: SetNull)
+  reprints   PrintBatch[]      @relation("BatchReprints")
+  groups     PrintBatchGroup[]
+
+  @@index([seasonId, createdAt])
+  @@index([kind, createdAt])
+}
+
+/// One filing group inside a batch: the stack of boxes that get printed, filed
+/// and packed together. Separate PDFs per group are what let three people print
+/// and file at the same time (UR-005).
+model PrintBatchGroup {
+  id      String @id @default(uuid())
+  batchId String
+
+  /// Derived from the fulfillment method and its destination bucket. Stable
+  /// across batches, so "the Tuesday delivery pile" is the same key every night.
+  filingKey String
+  label     String
+  sortIndex Int    @default(0)
+
+  packageCount Int @default(0)
+
+  batch PrintBatch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  items PrintBatchItem[]
+
+  @@unique([batchId, filingKey])
+}
+
+/// A box's place in a group. This row is also the record of "already printed
+/// once": tonight's batch only picks up boxes that have no nightly row yet,
+/// which is what makes running the job twice harmless.
+model PrintBatchItem {
+  id      String @id @default(uuid())
+  groupId String
+
+  packageId String
+  orderId   String
+
+  /// Filing order within the group, frozen when the batch was built so the
+  /// reprint comes out in the same order as the pile it is replacing.
+  sortKey String
+
+  createdAt DateTime @default(now())
+
+  group   PrintBatchGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  package Package         @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, packageId])
+  @@index([packageId])
+  @@index([orderId])
+}

@@ -33,6 +33,11 @@ export const STAGE_TIMESTAMP: Record<
   PICKED_UP: 'pickedUpAt',
 };
 
+/** `PICKED_UP` is a database word. Screens say "Picked up". */
+export function stageLabel(stage: PackageStage): string {
+  return stage.charAt(0) + stage.slice(1).toLowerCase().replace('_', ' ');
+}
+
 export function checkPackageStage(
   from: PackageStage,
   to: PackageStage,

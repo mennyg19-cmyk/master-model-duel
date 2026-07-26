@@ -73,7 +73,36 @@ type AuditDetails = {
   /// says a member of staff had money in their hand when it happened.
   'pos.sale_unpaid': { orderNumber: number; method: PaymentMethod; code: string };
   'package.created': { orderId: string; recipientName: string; lineCount: number };
-  'package.stage_changed': { from: PackageStage; to: PackageStage };
+  /// `batchId` is set when the move came from a sweep of the package board
+  /// rather than from one person on one box, the same way orders record it.
+  'package.stage_changed': { from: PackageStage; to: PackageStage; batchId?: string };
+  /// G-003. Staff overruling the grouping engine: which lines left which box.
+  /// The old box keeps its fee, so the split cannot re-price the order (G-028).
+  'package.split': { orderId: string; fromPackageId: string; lineCount: number };
+  'package.regrouped': { orderId: string; fromPackageId: string; lineCount: number };
+  /// The last line left a box, so the box went with it. Kept as its own action
+  /// because "where did that package go" is otherwise unanswerable.
+  'package.emptied': { orderId: string; recipientName: string };
+  'packages.bulk_stage': {
+    batchId: string;
+    stage: PackageStage;
+    applied: number;
+    skipped: number;
+    conflicts: number;
+    droppedCount: number;
+  };
+  /// UR-005. Which boxes were filed into which groups tonight. A reprint is a
+  /// new batch naming the one it supersedes, never an edit of it.
+  'print.batch_created': {
+    kind: 'NIGHTLY' | 'REPRINT';
+    packageCount: number;
+    groupCount: number;
+    /** Null on a reprint of boxes that have never been filed before. */
+    supersedesBatchId?: string | null;
+  };
+  /// Paper came out of the printer. This row is the *only* thing printing
+  /// changes: no stage moves, nothing is marked shipped (G-002, G-004).
+  'print.rendered': { artifact: string; scope: 'group' | 'order'; packageCount: number };
   'staff.invited': { email: string; role: StaffRole };
   'staff.role_changed': { from: StaffRole; to: StaffRole };
   'staff.confirmed': never;

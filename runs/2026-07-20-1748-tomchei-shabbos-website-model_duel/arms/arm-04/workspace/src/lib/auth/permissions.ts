@@ -8,6 +8,7 @@ export const PERMISSIONS = {
   'dashboard.view': 'View the admin dashboard',
   'orders.view': 'View orders',
   'orders.manage': 'Edit orders, refunds and payments',
+  'fulfillment.manage': 'Move packages through packing, split boxes and print batches',
   'customers.view': 'View the customer directory',
   'customers.manage': 'Edit customer details and their address book',
   'imports.manage': 'Stage and commit customer and product imports',
@@ -28,7 +29,16 @@ const ROLE_DEFAULTS: Record<StaffRole, readonly Permission[]> = {
   MANAGER: ALL_PERMISSIONS,
   // Office staff take orders over the phone, so correcting a recipient's street
   // number is part of the same job as editing the order it is on (UR-014).
-  STAFF: ['dashboard.view', 'orders.view', 'orders.manage', 'customers.view', 'customers.manage'],
+  // Packing is what most of the STAFF role does on the two nights that matter,
+  // so the board and the printer are theirs by default (UR-005).
+  STAFF: [
+    'dashboard.view',
+    'orders.view',
+    'orders.manage',
+    'fulfillment.manage',
+    'customers.view',
+    'customers.manage',
+  ],
   DRIVER: ['routes.drive'],
 };
 

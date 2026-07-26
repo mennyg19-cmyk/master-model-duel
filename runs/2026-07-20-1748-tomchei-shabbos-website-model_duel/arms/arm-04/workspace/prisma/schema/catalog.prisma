@@ -35,6 +35,7 @@ model Season {
   addOns        AddOn[]
   orders        Order[]
   importBatches ImportBatch[]
+  printBatches  PrintBatch[]
 
   @@index([status, opensAt])
   @@index([status, closesAt])
