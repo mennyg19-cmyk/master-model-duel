@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { OrderStatus, PackageStage, PaymentMethod, PaymentStatus } from '@prisma/client';
 
-import { addressSummary } from '../addresses/address-summary';
+import { destinationLabel } from '../addresses/address-mapping';
 import { db } from '../db';
 import { lineTotalWithAddOns, optionsLabel } from './lines';
 
@@ -127,6 +127,12 @@ export type StaffOrderBox = {
     totalCents: number;
     addOns: string[];
   }[];
+  /**
+   * The live labels on the box. Cancelled and failed ones are left out: the
+   * order desk is answering "where is it", and only a label that is still good
+   * can answer that. The packing table sees the whole history.
+   */
+  parcels: { carrier: string; trackingNumber: string; trackingStatus: string | null }[];
 };
 
 export async function readStaffOrderBoxes(orderId: string): Promise<StaffOrderBox[]> {
@@ -136,6 +142,10 @@ export async function readStaffOrderBoxes(orderId: string): Promise<StaffOrderBo
       fulfillmentMethod: { select: { label: true } },
       pickupLocation: { select: { name: true } },
       lines: { include: { addOns: true }, orderBy: { createdAt: 'asc' } },
+      shipmentBoxes: {
+        where: { status: 'PURCHASED', trackingNumber: { not: null } },
+        orderBy: { parcelIndex: 'asc' },
+      },
     },
     orderBy: { recipientName: 'asc' },
   });
@@ -144,17 +154,7 @@ export async function readStaffOrderBoxes(orderId: string): Promise<StaffOrderBo
     id: box.id,
     recipientName: box.recipientName,
     methodLabel: box.fulfillmentMethod.label,
-    destination: box.pickupLocation
-      ? `Pick up at ${box.pickupLocation.name}`
-      : box.addressLine1
-        ? addressSummary({
-            line1: box.addressLine1,
-            line2: box.addressLine2,
-            city: box.addressCity ?? '',
-            state: box.addressState ?? '',
-            postalCode: box.addressPostalCode ?? '',
-          })
-        : '—',
+    destination: destinationLabel(box) ?? '—',
     deliveryDay: box.deliveryDay,
     greetingMessage: box.greetingMessage,
     stage: box.stage,
@@ -166,6 +166,11 @@ export async function readStaffOrderBoxes(orderId: string): Promise<StaffOrderBo
       quantity: line.quantity,
       totalCents: lineTotalWithAddOns(line),
       addOns: line.addOns.map((addOn) => addOn.addOnNameSnapshot),
+    })),
+    parcels: box.shipmentBoxes.map((parcel) => ({
+      carrier: parcel.carrier ?? 'Carrier',
+      trackingNumber: parcel.trackingNumber ?? '',
+      trackingStatus: parcel.trackingStatus,
     })),
   }));
 }

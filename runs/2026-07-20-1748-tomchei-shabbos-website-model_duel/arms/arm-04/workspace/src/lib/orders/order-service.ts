@@ -7,10 +7,17 @@ import { feeSubjectsFrom } from '../checkout/fee-subjects';
 import { resolveFulfillmentFees, type RateRules } from '../checkout/fees';
 import { formatCents, sumCents } from '../core/money';
 import { failure, type Failure, type Result } from '../core/result';
+import { db } from '../db';
 import { abort, runInTransaction } from '../transaction';
 import { inventoryDemand, type InventoryDemand } from '../inventory/demand';
 import { releaseUnits, reserveUnits, type InventoryTarget } from '../inventory/reserve';
 import { readSetting } from '../settings';
+import {
+  liveRatesFrom,
+  quoteShippingBoxes,
+  recordQuote,
+  type ShipmentQuote,
+} from '../shipping/quote-service';
 import { ownerFilter, type DraftOwner } from './draft-access';
 import { groupLinesIntoPackages } from './grouping';
 import { isLineAssigned, lineTotalWithAddOns, type AssignedLine } from './lines';
@@ -44,7 +51,12 @@ export async function finalizeOrder(
   orderId: string,
   actor: AuditActor,
 ): Promise<Result<FinalizedOrder>> {
-  const rules = await readRateRules();
+  // Both read before the transaction opens, because both of them talk to
+  // something outside this database — the settings table and a carrier — and a
+  // transaction that waits on an HTTP call holds the season's number counter
+  // while it does. A box whose contents changed in between simply finds no quote
+  // under its key and is priced at the settings rate.
+  const [rules, shippingQuotes] = await Promise.all([readRateRules(), quoteDraftShipping(orderId)]);
 
   return runInTransaction(async (tx) => {
     const order = await tx.order.findUnique({
@@ -97,7 +109,7 @@ export async function finalizeOrder(
 
     const orderNumber = await claimOrderNumber(tx, order.seasonId);
     const packages = await createPackages(tx, order.id, lines, actor);
-    const totals = await chargeFulfillment(tx, lines, packages, rules);
+    const totals = await chargeFulfillment(tx, lines, packages, rules, shippingQuotes);
 
     await tx.order.update({ where: { id: order.id }, data: { orderNumber, ...totals } });
 
@@ -371,6 +383,23 @@ export async function readRateRules(): Promise<RateRules> {
 }
 
 /**
+ * Carrier quotes for the draft's shipping boxes, keyed by grouping key — the one
+ * identifier checkout and finalize agree on before any package row exists.
+ */
+async function quoteDraftShipping(orderId: string): Promise<Map<string, ShipmentQuote>> {
+  const lines = await db.orderLine.findMany({ where: { orderId } });
+
+  return quoteShippingBoxes(
+    db,
+    groupLinesIntoPackages(lines.filter(isLineAssigned)).map((group) => ({
+      key: group.groupingKey,
+      destination: group.destination,
+      lines: group.lines.map((line) => ({ productId: line.productId, quantity: line.quantity })),
+    })),
+  );
+}
+
+/**
  * Prices the fulfillment of every package the order just produced and freezes
  * each amount on its package (G-028).
  *
@@ -378,12 +407,16 @@ export async function readRateRules(): Promise<RateRules> {
  * week two is an operations decision; recomputing the fee from the new method
  * would silently owe the customer money or bill them again for a box already
  * paid for.
+ *
+ * The carrier quote each shipping box was priced from is written down beside it,
+ * so the frozen number can always be traced back to the rates that produced it.
  */
 async function chargeFulfillment(
   tx: Prisma.TransactionClient,
   lines: AssignedInventoryLine[],
   packages: Package[],
   rules: RateRules,
+  shippingQuotes: Map<string, ShipmentQuote>,
 ) {
   const subtotalCents = sumCents(lines.map(lineTotalWithAddOns));
 
@@ -392,10 +425,28 @@ async function chargeFulfillment(
     packages.map((row) => ({ key: row.id, destination: row })),
   );
 
-  const fees = resolveFulfillmentFees(subjects, rules, subtotalCents);
+  const quotesByPackage = new Map(
+    packages
+      .map((row) => [row.id, shippingQuotes.get(row.groupingKey)] as const)
+      .filter((pair): pair is [string, ShipmentQuote] => pair[1] !== undefined),
+  );
+
+  const fees = resolveFulfillmentFees(subjects, rules, subtotalCents, liveRatesFrom(quotesByPackage));
 
   for (const fee of fees.lines) {
     await tx.package.update({ where: { id: fee.key }, data: { fulfillmentFeeCents: fee.feeCents } });
+  }
+
+  for (const row of packages) {
+    const quote = quotesByPackage.get(row.id);
+    if (!quote) continue;
+
+    await recordQuote(tx, {
+      orderId: row.orderId,
+      packageId: row.id,
+      groupingKey: row.groupingKey,
+      quote,
+    });
   }
 
   return {

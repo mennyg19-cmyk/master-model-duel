@@ -1,7 +1,7 @@
 # Tomchei Shabbos — Mishloach Manos platform
 
 Greenfield rebuild of the nonprofit Purim mishloach manos platform.
-This repository currently contains **phases P1 to P4**:
+This repository currently contains **phases P1 to P8**:
 
 - **P1** — foundation, identity, roles, permissions, staff tooling.
 - **P2** — the domain core as schema plus engine: seasons, catalog, customers and
@@ -12,10 +12,13 @@ This repository currently contains **phases P1 to P4**:
   the settings hub.
 - **P4** — the cart-first order builder, the customer address book, the customer
   account area, and the staff view of a customer's book.
+- **P5** — checkout: reservations, fulfillment fees, payment and refunds.
+- **P6** — the operations hub, the order desk, the counter and CSV imports.
+- **P7** — the package board, splitting and regrouping, and the nightly print run.
+- **P8** — carriage: carrier rates, the margin engine, labels and tracking.
 
-Checkout and payment, fulfillment and reporting land in later phases of
-`shared/MERGED-BUILD-PLAN.md`. A P4 order is built and saved but not yet paid for:
-`/order` says so, and the account area says so on the draft.
+Delivery routes, notifications and reporting land in later phases of
+`shared/MERGED-BUILD-PLAN.md`.
 
 ## Ports
 
@@ -67,6 +70,8 @@ entirely and just set `DATABASE_URL`.
 | `npm run smoke:p4` | P4 smoke: builder, assignment, guest and account drafts, address book, staff audit |
 | `npm run smoke:p5` | P5 smoke: checkout, reservations, payment, webhooks, refunds |
 | `npm run smoke:p6` | P6 smoke: dashboard, order desk, POS, imports, and all of it at crunch scale |
+| `npm run smoke:p7` | P7 smoke: the package board, splitting, the nightly batch and the three artifacts |
+| `npm run smoke:p8` | P8 smoke: carrier rates, the margin, buying and cancelling a label, tracking |
 | `npm run fixtures:scale` | Generates 1,000 orders and 5,000 packages; `-- clear` takes them out again |
 
 `npm run smoke` needs `npm run dev` running and starts from an empty database
@@ -160,6 +165,39 @@ action is a bounded batch that attempts each order separately and reports what i
 did to each — so two people sweeping the same rows during Purim week get an exact,
 repeatable account rather than a silent overwrite.
 
+## Carriage
+
+`SHIPPING_PROVIDER` selects the carrier account, the same way auth and payments do:
+
+- **`shippo`** — production. Requires `SHIPPO_API_TOKEN`. `SHIPPO_FEDEX_ACCOUNT_ID`
+  and `SHIPPO_UPS_ACCOUNT_ID` are the organization's own carrier accounts; an empty
+  slot means that carrier is never quoted and can never win the comparison.
+- **`local`** — development and CI. An offline stand-in that prices, labels, voids
+  and tracks on this machine. Env validation rejects it unless `APP_URL` is a
+  loopback address, because its labels do not exist at any carrier.
+
+Both go through the same five verbs in `src/lib/shipping/provider.ts`, so rate
+shopping, the margin engine and the two-step label claim are exercised for real in
+CI rather than mocked.
+
+The margin rule (UR-003): every carrier the organization can ship the whole box
+with is quoted, the customer is charged the **highest** of those quotes, the label
+is bought on the **cheapest**, and the difference funds the campaign. It is stored
+as its three numbers on each `ShipmentBox` row, not recovered later by re-quoting a
+rate that has since moved. A carrier that could not price every parcel of a
+multi-carton box is not eligible and is neither charged for nor bought from.
+
+Buying a label is the only button that spends money, so the parcels are claimed in
+this database *before* the carrier is called: a second person pressing Buy finds
+the box claimed, and anything bought before a failure — including the label from
+the failing attempt — is cancelled at the carrier before the error is raised.
+Nothing is left bought that no row knows about.
+
+Where carriers collect from is a setting, not an environment variable, edited on
+Settings → Shipping. With no origin, no box types, or no carrier answering, the box
+is priced at the administrator's flat rate and the quote row says `FALLBACK` — an
+outage during Purim week must not close the store.
+
 ## Domain model
 
 The Prisma schema is a folder, one file per concern: `identity`, `customers`,
@@ -175,6 +213,10 @@ The engine that goes with it:
 | Claiming the last unit | `src/lib/inventory/reserve.ts` — a single conditional UPDATE, so two checkouts cannot both win |
 | What an order took out of stock | `Reservation` rows, written inside the same transaction. A cancel releases what those rows say, never what the lines say today |
 | Package stages | `src/lib/fulfillment/package-stages.ts` — optional and forward-only; printing never means shipped |
+| Which carton a box goes in | `src/lib/shipping/bin-packing.ts` — the smallest stocked type it fits by usable volume and weight, spilling into copies of the largest when nothing does |
+| What shipping costs and who is paid | `src/lib/shipping/margin.ts` — pure: charge the highest eligible quote, buy the cheapest, keep the spread |
+| Where a quote comes from | `src/lib/shipping/quote-service.ts` — checkout and finalize both price through it, and both fall back to the settings rate when no carrier answers |
+| Buying and cancelling carriage | `src/lib/shipping/label-service.ts` — claimed here before the carrier is called, cancelled at the carrier if anything after that fails |
 | Cached payment totals | `src/lib/orders/payment-status.ts` — always recounted, never adjusted by a delta |
 | Whether the store takes orders | `src/lib/store-state.ts` — season status and the `store.open` setting, both required |
 | Where volunteers deliver | `src/lib/delivery-area.ts` — an explicit ZIP list with no override; an empty list means nobody |

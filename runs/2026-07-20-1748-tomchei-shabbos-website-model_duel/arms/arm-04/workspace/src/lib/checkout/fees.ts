@@ -10,8 +10,10 @@ import { sumCents } from '../core/money';
  * packages. Two callers, one rule — a quote the customer accepted cannot differ
  * from the amount the order is built with.
  *
- * Live carrier rates are P8. Shipping here resolves through the settings rate
- * rules, which is the placeholder this phase was scoped to.
+ * Carrier rates are asked for outside this function and handed in by key
+ * (`liveShipping`), so the rule stays pure and testable while the price on a
+ * shipping box is a real quote. A box with no live rate — no carrier answered,
+ * or shipping is not configured — falls back to the settings rate.
  */
 export type FeeMethod = {
   id: string;
@@ -38,16 +40,20 @@ export type RateRules = {
 export type FeeLine = { key: string; feeCents: number; explanation: string };
 export type FeeBreakdown = { lines: FeeLine[]; totalCents: number };
 
+/** What the margin engine decided this box costs the customer, and on whose rate. */
+export type LiveShippingRate = { customerPriceCents: number; carrierLabel: string };
+
 export function resolveFulfillmentFees(
   subjects: FeeSubject[],
   rules: RateRules,
   subtotalCents: number,
+  liveShipping: Map<string, LiveShippingRate> = new Map(),
 ): FeeBreakdown {
   const billedDestinations = new Set<string>();
 
   const lines = subjects.map((subject) => ({
     key: subject.key,
-    ...feeFor(subject, rules, subtotalCents, billedDestinations),
+    ...feeFor(subject, rules, subtotalCents, billedDestinations, liveShipping.get(subject.key)),
   }));
 
   return { lines, totalCents: sumCents(lines.map((line) => line.feeCents)) };
@@ -58,6 +64,7 @@ function feeFor(
   rules: RateRules,
   subtotalCents: number,
   billedDestinations: Set<string>,
+  live: LiveShippingRate | undefined,
 ): { feeCents: number; explanation: string } {
   const { method } = subject;
 
@@ -76,23 +83,30 @@ function feeFor(
     return { feeCents: method.baseFeeCents, explanation: `${method.label} — one fee per destination` };
   }
 
-  if (method.kind === 'SHIPPING') return shippingFee(method, rules, subtotalCents);
+  if (method.kind === 'SHIPPING') return shippingFee(method, rules, subtotalCents, live);
 
   return { feeCents: method.baseFeeCents, explanation: `${method.label} — one fee per recipient` };
 }
 
 /**
- * The placeholder rate rules the org configures in Settings → Shipping. P8
- * replaces this branch with live Shippo quotes and the margin engine; until then
- * the number on the screen is one an administrator set, never a guess.
+ * A carrier quote when there is one, the administrator's flat rate when there
+ * is not (UR-003, G-006).
+ *
+ * The free-shipping offer is checked first either way: it is the org's own
+ * promise to the customer, and a carrier price cannot override it.
  */
 function shippingFee(
   method: FeeMethod,
   rules: RateRules,
   subtotalCents: number,
+  live: LiveShippingRate | undefined,
 ): { feeCents: number; explanation: string } {
   if (rules.freeShippingThresholdCents > 0 && subtotalCents >= rules.freeShippingThresholdCents) {
     return { feeCents: 0, explanation: `${method.label} — free over the order threshold` };
+  }
+
+  if (live) {
+    return { feeCents: live.customerPriceCents, explanation: `${method.label} — ${live.carrierLabel}` };
   }
 
   const rate = rules.shippingBaseRateCents > 0 ? rules.shippingBaseRateCents : method.baseFeeCents;

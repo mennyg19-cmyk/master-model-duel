@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 
 import type { Prisma } from '@prisma/client';
 
+import { toAddressParts } from '../addresses/address-mapping';
 import { normalizeAddressKey, normalizeName } from '../core/normalize';
 
 /** Keeps the two rows apart when one field ends where the next begins. */
@@ -74,22 +75,13 @@ export function packageGroupingKey(destination: PackageDestination): string {
  * street address is not something to hand back to the browser to be posted.
  */
 export function recipientDestinationKey(destination: PackageDestination): string {
-  const line1 = destination.addressLine1 ?? '';
+  const address = toAddressParts(destination);
 
   const parts = [
     normalizeName(destination.recipientName),
     destination.fulfillmentMethodId,
     destination.pickupLocationId ?? '',
-    line1 === ''
-      ? ''
-      : normalizeAddressKey({
-          line1,
-          line2: destination.addressLine2,
-          city: destination.addressCity ?? '',
-          state: destination.addressState ?? '',
-          postalCode: destination.addressPostalCode ?? '',
-          country: destination.addressCountry,
-        }),
+    address === null ? '' : normalizeAddressKey(address),
   ];
 
   return createHash('sha256').update(parts.join(GROUPING_KEY_SEPARATOR)).digest('hex');
@@ -101,18 +93,10 @@ export function recipientDestinationKey(destination: PackageDestination): string
  * (UR-009), so it deliberately ignores the recipient's name.
  */
 export function deliveryDestinationKey(destination: PackageDestination): string {
-  const line1 = destination.addressLine1 ?? '';
+  const address = toAddressParts(destination);
+  if (address === null) return `pickup:${destination.pickupLocationId ?? 'none'}`;
 
-  if (line1 === '') return `pickup:${destination.pickupLocationId ?? 'none'}`;
-
-  return normalizeAddressKey({
-    line1,
-    line2: destination.addressLine2,
-    city: destination.addressCity ?? '',
-    state: destination.addressState ?? '',
-    postalCode: destination.addressPostalCode ?? '',
-    country: destination.addressCountry,
-  });
+  return normalizeAddressKey(address);
 }
 
 export function groupLinesIntoPackages<TLine extends PackageDestination>(

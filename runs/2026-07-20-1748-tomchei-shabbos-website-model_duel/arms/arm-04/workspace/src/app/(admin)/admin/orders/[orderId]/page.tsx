@@ -304,6 +304,17 @@ function OrderBox({ box, canPack }: { box: StaffOrderBox; canPack: boolean }) {
         ))}
       </ul>
 
+      {box.parcels.length > 0 ? (
+        <ul className="mt-3 space-y-1 text-sm" data-testid="order-box-tracking">
+          {box.parcels.map((parcel) => (
+            <li key={parcel.trackingNumber} className="text-[var(--color-ink-muted)]">
+              {parcel.carrier} {parcel.trackingNumber}
+              {parcel.trackingStatus ? ` — ${parcel.trackingStatus}` : ''}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {box.greetingMessage ? (
         <p className="mt-3 border-l-2 border-[var(--color-line)] pl-3 text-sm italic">
           {box.greetingMessage}

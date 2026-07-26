@@ -8,6 +8,8 @@ import { readActiveSeason } from '@/lib/admin/dashboard';
 import { firstFewOutcomes, summarizeBulk } from '@/lib/admin/bulk-report';
 import { recordAudit } from '@/lib/audit';
 import { requirePermission } from '@/lib/auth/staff';
+import { formatCents } from '@/lib/core/money';
+import { db } from '@/lib/db';
 import { redirectWithFlash } from '@/lib/forms/flash-redirect';
 import { readVersionStamp, trimmedField } from '@/lib/forms/form-data';
 import { bulkAdvanceStage } from '@/lib/fulfillment/bulk-stages';
@@ -15,6 +17,12 @@ import { movePackageLines, splitPackage } from '@/lib/fulfillment/package-edit';
 import { advancePackageStage } from '@/lib/fulfillment/packages';
 import { batchPath, BOARD_PATH, FULFILLMENT_PATH, packagePath } from '@/lib/print/paths';
 import { buildNightlyBatch, reprintGroup, reprintOrder } from '@/lib/print/print-batch-service';
+import { validatePackageAddress } from '@/lib/shipping/address-check';
+import {
+  buyLabelForPackage,
+  refreshTrackingForPackage,
+  voidLabelForPackage,
+} from '@/lib/shipping/label-service';
 
 /**
  * Everything the packing table can press (UR-001, UR-005, G-003).
@@ -29,6 +37,9 @@ import { buildNightlyBatch, reprintGroup, reprintOrder } from '@/lib/print/print
 const stageSchema = z.enum(['PRINTED', 'PACKED', 'SENT', 'PICKED_UP']);
 const intentSchema = z.enum(['move', 'split']);
 const STALE_SCREEN = 'This screen is out of date. Reload the box and try again.';
+
+/** A sentence explaining a cancelled label, not a place to paste a thread into. */
+const MAX_VOID_REASON_LENGTH = 500;
 
 export async function buildBatchAction(): Promise<void> {
   const staff = await requirePermission('fulfillment.manage');
@@ -182,6 +193,73 @@ export async function editPackageAction(formData: FormData): Promise<void> {
 
   revalidatePath(packagePath(packageId));
   doneAtPackage(split.value.id, 'Split into a second box. The fee stayed on the first.');
+}
+
+/**
+ * Buying carriage (UR-003). This is the only button on the packing table that
+ * spends money, so it says what it spent and on whose rate.
+ */
+export async function buyLabelAction(formData: FormData): Promise<void> {
+  const staff = await requirePermission('fulfillment.manage');
+  const packageId = trimmedField(formData, 'packageId');
+  const seasonId = await workingSeasonId();
+
+  const bought = await buyLabelForPackage(db, staff, { packageId, seasonId });
+  if (!bought.ok) backToPackage(packageId, bought.publicMessage);
+
+  const label = bought.value;
+
+  doneAtPackage(
+    packageId,
+    `${label.carrier} ${label.serviceLabel} bought for ${label.parcelCount} parcel${label.parcelCount === 1 ? '' : 's'}: ` +
+      `${formatCents(label.carrierCostCents)} paid, ${formatCents(label.customerPriceCents)} charged, ` +
+      `${formatCents(label.marginCents)} to the campaign.`,
+  );
+}
+
+/**
+ * Cancelling carriage (R-055, UR-004). The reason is required because this row
+ * is the only explanation a reconciler will ever have for a refunded label.
+ */
+export async function voidLabelAction(formData: FormData): Promise<void> {
+  const staff = await requirePermission('fulfillment.manage');
+  const packageId = trimmedField(formData, 'packageId');
+  const reason = trimmedField(formData, 'reason');
+
+  if (reason === '') backToPackage(packageId, 'Say why the label is being cancelled first.');
+
+  if (reason.length > MAX_VOID_REASON_LENGTH) {
+    backToPackage(packageId, `Keep the reason under ${MAX_VOID_REASON_LENGTH} characters.`);
+  }
+
+  const seasonId = await workingSeasonId();
+  const voided = await voidLabelForPackage(db, staff, { packageId, seasonId, reason });
+  if (!voided.ok) backToPackage(packageId, voided.publicMessage);
+
+  doneAtPackage(packageId, `${voided.value.carrier} label cancelled. ${voided.value.note}`);
+}
+
+export async function refreshTrackingAction(formData: FormData): Promise<void> {
+  const staff = await requirePermission('fulfillment.manage');
+  const packageId = trimmedField(formData, 'packageId');
+  const seasonId = await workingSeasonId();
+
+  const refreshed = await refreshTrackingForPackage(db, staff, { packageId, seasonId });
+  if (!refreshed.ok) backToPackage(packageId, refreshed.publicMessage);
+
+  doneAtPackage(packageId, `The carrier reports: ${refreshed.value.status}.`);
+}
+
+/** Advisory (R-177): a carrier that cannot match an address is often simply wrong. */
+export async function validateAddressAction(formData: FormData): Promise<void> {
+  const staff = await requirePermission('fulfillment.manage');
+  const packageId = trimmedField(formData, 'packageId');
+  const seasonId = await workingSeasonId();
+
+  const checked = await validatePackageAddress(db, staff, { packageId, seasonId });
+  if (!checked.ok) backToPackage(packageId, checked.publicMessage);
+
+  doneAtPackage(packageId, checked.value.note);
 }
 
 /** Every screen here works one season; without one there is nothing to pack. */

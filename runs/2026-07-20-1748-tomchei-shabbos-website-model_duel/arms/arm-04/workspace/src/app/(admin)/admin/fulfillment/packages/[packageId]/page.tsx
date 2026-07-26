@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { advanceStageAction, editPackageAction } from '../../actions';
 import { BackLink } from '@/components/admin/list-controls';
+import { CarriageCard } from '@/components/admin/carriage-card';
 import { OrderPrintLinks } from '@/components/admin/order-print-links';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,9 @@ import { readActiveSeason } from '@/lib/admin/dashboard';
 import { requirePermission } from '@/lib/auth/staff';
 import { formatCents } from '@/lib/core/money';
 import { formatDateTime } from '@/lib/core/dates';
+import { db } from '@/lib/db';
 import { readPackageDetail, type PackageDetail } from '@/lib/fulfillment/package-board';
+import { readCarriageCard } from '@/lib/shipping/carriage-view';
 import { ALL_STAGES } from '@/lib/fulfillment/channel-summary';
 import { checkPackageStage, stageLabel } from '@/lib/fulfillment/package-stages';
 import { batchPath, BOARD_PATH, packagePath } from '@/lib/print/paths';
@@ -44,6 +47,11 @@ export default async function PackageDetailPage({
   const season = await readActiveSeason();
   const box = season ? await readPackageDetail(season.id, packageId) : null;
   if (!box) notFound();
+
+  // Only a shipping box has carriage; a delivery run and a pickup counter have
+  // no carrier, no label and nothing to track.
+  const carriage =
+    box.methodKind === 'SHIPPING' && season ? await readCarriageCard(db, season.id, packageId) : null;
 
   const settled = box.stage === 'SENT' || box.stage === 'PICKED_UP';
   const nextStages = ALL_STAGES.filter(
@@ -152,6 +160,8 @@ export default async function PackageDetailPage({
           </p>
         </Card>
       </div>
+
+      {carriage ? <CarriageCard carriage={carriage} /> : null}
 
       {box.greetingMessage ? (
         <Card data-testid="package-greeting">

@@ -14,13 +14,15 @@ export default async function ShippingSettingsPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   await requirePermission('settings.manage');
-  const [{ error }, baseRateCents, thresholdCents, deliveryZips, deliveryDays] = await Promise.all([
-    searchParams,
-    readSetting('shipping.baseRateCents'),
-    readSetting('shipping.freeShippingThresholdCents'),
-    readSetting('shipping.deliveryZips'),
-    readSetting('delivery.dayChoices'),
-  ]);
+  const [{ error }, baseRateCents, thresholdCents, deliveryZips, deliveryDays, origin] =
+    await Promise.all([
+      searchParams,
+      readSetting('shipping.baseRateCents'),
+      readSetting('shipping.freeShippingThresholdCents'),
+      readSetting('shipping.deliveryZips'),
+      readSetting('delivery.dayChoices'),
+      readSetting('shipping.origin'),
+    ]);
 
   return (
     <div className="space-y-6">
@@ -38,9 +40,9 @@ export default async function ShippingSettingsPage({
         <Card>
           <CardTitle>Rates and rules</CardTitle>
           <CardDescription>
-            The starting rate carriers are compared against, and the order total that ships free.
-            Live carrier rates arrive with the shipping phase; these are what checkout reads until
-            then.
+            Checkout quotes the carriers and charges what they say. These two are the fallback: the
+            base rate prices a box when no carrier answers, and the free-shipping total is the
+            organization&rsquo;s own promise, which beats any carrier price.
           </CardDescription>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -55,6 +57,52 @@ export default async function ShippingSettingsPage({
                 name="freeShippingThreshold"
                 defaultValue={(thresholdCents / 100).toFixed(2)}
               />
+            </div>
+          </div>
+        </Card>
+
+        <Card data-testid="shipping-origin">
+          <CardTitle>Where carriers collect from</CardTitle>
+          <CardDescription>
+            The ship-from address every rate is quoted against and every label is printed with.
+            Leave it empty and no carrier can be asked, so shipping falls back to the base rate
+            above.
+          </CardDescription>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Label htmlFor="originName">Name on the label</Label>
+              <Input id="originName" name="originName" defaultValue={origin.name} />
+            </div>
+            <div>
+              <Label htmlFor="originLine1">Street</Label>
+              <Input id="originLine1" name="originLine1" defaultValue={origin.line1} />
+            </div>
+            <div>
+              <Label htmlFor="originLine2">Unit (optional)</Label>
+              <Input id="originLine2" name="originLine2" defaultValue={origin.line2} />
+            </div>
+            <div>
+              <Label htmlFor="originCity">City</Label>
+              <Input id="originCity" name="originCity" defaultValue={origin.city} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="originState">State</Label>
+                <Input id="originState" name="originState" defaultValue={origin.state} />
+              </div>
+              <div>
+                <Label htmlFor="originPostalCode">ZIP</Label>
+                <Input
+                  id="originPostalCode"
+                  name="originPostalCode"
+                  defaultValue={origin.postalCode}
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="originPhone">Phone the carrier can call</Label>
+              <Input id="originPhone" name="originPhone" defaultValue={origin.phone} />
             </div>
           </div>
         </Card>

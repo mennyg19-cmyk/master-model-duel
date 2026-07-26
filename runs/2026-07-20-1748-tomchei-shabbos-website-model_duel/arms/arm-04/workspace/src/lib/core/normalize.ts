@@ -1,5 +1,13 @@
 /** Normalized forms used as dedupe keys for customers and address books. */
 
+/**
+ * The country an address without one is assumed to be in. The organization
+ * ships domestically; a row that predates the column, or a form that never
+ * asked, is a US address rather than an address in no country at all. Every
+ * reader of the `addressCountry` column goes through this one default.
+ */
+export const DEFAULT_ADDRESS_COUNTRY = 'US';
+
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -22,7 +30,14 @@ type AddressParts = {
  * number cannot shift the city into the street slot.
  */
 export function normalizeAddressKey(parts: AddressParts): string {
-  return [parts.line1, parts.line2, parts.city, parts.state, parts.postalCode, parts.country ?? 'US']
+  return [
+    parts.line1,
+    parts.line2,
+    parts.city,
+    parts.state,
+    parts.postalCode,
+    parts.country ?? DEFAULT_ADDRESS_COUNTRY,
+  ]
     .map((part) => canonicalizeWords(collapseToLetters(part)))
     .join('|');
 }

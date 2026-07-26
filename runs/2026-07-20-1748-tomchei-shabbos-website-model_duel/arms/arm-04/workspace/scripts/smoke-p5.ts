@@ -95,13 +95,18 @@ async function main() {
 
   const firstLook = await buyer.get('/order/checkout');
   const openRecipients = recipientCards(firstLook.body);
+
+  // P8 put a live carrier quote where this phase had a flat placeholder, so the
+  // shipping figure is no longer a constant this run can name. What P5 owns is
+  // still checked: one card per recipient, each priced by its own method, and
+  // pickup free. The exact carrier number is proved by the P8 smoke.
   expect('S1a', 'Checkout lists every recipient with the fee its own method earns',
     firstLook.status === 200 &&
       openRecipients.length === 3 &&
       openRecipients.some((card) => card.method === 'PICKUP' && card.feeCents === 0) &&
       openRecipients.some((card) => card.method === 'DELIVERY' && card.feeCents === 500) &&
-      openRecipients.some((card) => card.method === 'SHIPPING' && card.feeCents === 1200),
-    `${openRecipients.length} recipients: ${openRecipients.map((card) => `${card.method.toLowerCase()} ${dollars(card.feeCents)}`).join(', ')} — pickup free, the volunteer run at its own rate, shipping at the placeholder rate rules (live carrier quotes are P8)`);
+      openRecipients.some((card) => card.method === 'SHIPPING' && card.feeCents > 0),
+    `${openRecipients.length} recipients: ${openRecipients.map((card) => `${card.method.toLowerCase()} ${dollars(card.feeCents)}`).join(', ')} — pickup free, the volunteer run at its own rate, shipping at the live carrier rate P8 replaced the placeholder with`);
 
   const blocked = await buyer.get('/order/checkout');
   expect('S1b', 'A delivery cannot be paid for until one of the manager\u2019s days is chosen',

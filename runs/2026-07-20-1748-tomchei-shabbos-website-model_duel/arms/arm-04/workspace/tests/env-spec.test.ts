@@ -24,6 +24,8 @@ const HOSTED_OVERRIDES = {
   BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_token',
   PAYMENT_PROVIDER: 'stripe',
   STRIPE_SECRET_KEY: 'provider-secret',
+  SHIPPING_PROVIDER: 'shippo',
+  SHIPPO_API_TOKEN: 'carrier-token',
 };
 
 function pathsRejectedBy(overrides: Record<string, string>): string[] {
@@ -90,6 +92,21 @@ test('the payment stand-in is loopback-only and the provider needs its keys', ()
   assert.deepEqual(pathsRejectedBy({ STRIPE_WEBHOOK_SECRET: 'too-short' }), [
     'STRIPE_WEBHOOK_SECRET',
   ]);
+});
+
+/**
+ * The offline shipping provider issues labels no carrier has heard of, and the
+ * carrier account slots are optional on purpose: an org with no UPS account
+ * simply never sees a UPS rate (R-183, R-184).
+ */
+test('the shipping stand-in is loopback-only and shippo needs its token', () => {
+  assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, SHIPPING_PROVIDER: 'local' }), [
+    'SHIPPING_PROVIDER',
+  ]);
+  assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, SHIPPO_API_TOKEN: '' }), [
+    'SHIPPO_API_TOKEN',
+  ]);
+  assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, SHIPPO_UPS_ACCOUNT_ID: '' }), []);
 });
 
 test('clerk still requires its keys', () => {

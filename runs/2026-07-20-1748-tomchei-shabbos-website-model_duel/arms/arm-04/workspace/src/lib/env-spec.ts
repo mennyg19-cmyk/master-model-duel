@@ -124,6 +124,39 @@ export const ENV_VARIABLES: EnvVariableSpec[] = [
     example: '',
     secret: true,
   },
+  {
+    key: 'SHIPPING_PROVIDER',
+    description:
+      'shippo = live carrier rates and labels, the deployment target. local = an offline ' +
+      'stand-in that prices and issues labels on this machine so rate shopping, the margin ' +
+      'engine and voiding all run for real in development and CI. It is rejected unless APP_URL ' +
+      'points at this machine, because its labels do not exist at any carrier.',
+    example: 'local',
+  },
+  {
+    key: 'SHIPPO_API_TOKEN',
+    description: 'Shippo API token. Required only when SHIPPING_PROVIDER=shippo.',
+    example: '',
+    secret: true,
+  },
+  {
+    key: 'SHIPPO_FEDEX_ACCOUNT_ID',
+    description:
+      "Shippo carrier account id for the organization's own FedEx account. Leave empty to quote " +
+      'only the carriers that are configured; an empty slot means that carrier is not offered. ' +
+      "It is not a password, but it names and bills the organization's contract, so it is handled " +
+      'as a secret rather than as configuration.',
+    example: '',
+    secret: true,
+  },
+  {
+    key: 'SHIPPO_UPS_ACCOUNT_ID',
+    description:
+      "Shippo carrier account id for the organization's own UPS account. Same rule as FedEx: " +
+      'empty means UPS is not quoted and never wins the rate comparison.',
+    example: '',
+    secret: true,
+  },
 ];
 
 const baseSchema = z.object({
@@ -141,6 +174,10 @@ const baseSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z
     .string()
     .min(MIN_WEBHOOK_SECRET_LENGTH, `STRIPE_WEBHOOK_SECRET must be at least ${MIN_WEBHOOK_SECRET_LENGTH} characters`),
+  SHIPPING_PROVIDER: z.enum(['shippo', 'local']).default('local'),
+  SHIPPO_API_TOKEN: z.string().optional(),
+  SHIPPO_FEDEX_ACCOUNT_ID: z.string().optional(),
+  SHIPPO_UPS_ACCOUNT_ID: z.string().optional(),
   TRUST_PROXY_HEADERS: z
     .enum(['true', 'false'])
     .default('false')
@@ -196,6 +233,26 @@ export const envSchema = baseSchema.superRefine((env, ctx) => {
       message:
         `PAYMENT_PROVIDER=local is only allowed when APP_URL is a loopback address, but APP_URL is ` +
         `${env.APP_URL}. Deploy with PAYMENT_PROVIDER=stripe`,
+    });
+  }
+
+  if (env.SHIPPING_PROVIDER === 'shippo' && !env.SHIPPO_API_TOKEN) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['SHIPPO_API_TOKEN'],
+      message: 'SHIPPO_API_TOKEN is required when SHIPPING_PROVIDER=shippo, but it was empty',
+    });
+  }
+
+  // Same loopback rule as the local payment provider: this one issues labels no
+  // carrier has heard of, so a real customer must never be quoted by it.
+  if (env.SHIPPING_PROVIDER === 'local' && !isLoopbackUrl(env.APP_URL)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['SHIPPING_PROVIDER'],
+      message:
+        `SHIPPING_PROVIDER=local is only allowed when APP_URL is a loopback address, but APP_URL is ` +
+        `${env.APP_URL}. Deploy with SHIPPING_PROVIDER=shippo`,
     });
   }
 

@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { FulfillmentKind, Prisma } from '@prisma/client';
 
-import { addressSummary } from '../addresses/address-summary';
+import { addressLine } from '../addresses/address-mapping';
 import { sumCents } from '../core/money';
 import { db } from '../db';
 import { findOwnedDraft, type DraftOwner } from '../orders/draft-access';
@@ -14,6 +14,7 @@ import {
 import { isLineAssigned, lineTotalWithAddOns, type AssignedLine } from '../orders/lines';
 import { readRateRules } from '../orders/order-service';
 import { readSetting } from '../settings';
+import { liveRatesFrom, quoteShippingBoxes, type QuotableBox } from '../shipping/quote-service';
 import { feeSubjectsFrom } from './fee-subjects';
 import { resolveFulfillmentFees } from './fees';
 import { findCheckoutConflicts, type CheckoutConflict } from './validation';
@@ -105,11 +106,18 @@ export async function readCheckoutSummary(
   const itemsCents = sumCents(assigned.map(lineTotalWithAddOns));
 
   const packages = groupLinesIntoPackages(assigned);
-  const subjects = await feeSubjectsFrom(
-    db,
-    packages.map((group) => ({ key: group.groupingKey, destination: group.destination })),
-  );
-  const fees = resolveFulfillmentFees(subjects, rules, itemsCents);
+  const [subjects, shippingQuotes] = await Promise.all([
+    feeSubjectsFrom(
+      db,
+      packages.map((group) => ({ key: group.groupingKey, destination: group.destination })),
+    ),
+    // Live carrier rates for the shipping boxes (UR-003). The screen shows what
+    // the order will actually be charged; finalize asks again, because a rate
+    // read while somebody fills in a greeting is not one to bill against.
+    quoteShippingBoxes(db, quotableBoxesFrom(packages)),
+  ]);
+
+  const fees = resolveFulfillmentFees(subjects, rules, itemsCents, liveRatesFrom(shippingQuotes));
   const feeByPackage = new Map(fees.lines.map((line) => [line.key, line]));
 
   const recipients = buildRecipients(packages, feeByPackage, deliveryDayChoices);
@@ -143,6 +151,14 @@ export async function readCheckoutSummary(
 
 type CheckoutPackage = PackageGroup<AssignedLineRow>;
 
+function quotableBoxesFrom(packages: CheckoutPackage[]): QuotableBox[] {
+  return packages.map((group) => ({
+    key: group.groupingKey,
+    destination: group.destination,
+    lines: group.lines.map((line) => ({ productId: line.productId, quantity: line.quantity })),
+  }));
+}
+
 function buildRecipients(
   packages: CheckoutPackage[],
   feeByPackage: Map<string, { feeCents: number; explanation: string }>,
@@ -166,7 +182,7 @@ function buildRecipients(
       recipientName: first.recipientName,
       methodLabel: first.fulfillmentMethod?.label ?? 'Fulfillment',
       methodKind: first.fulfillmentMethod?.kind ?? 'PICKUP',
-      addressSummary: summarizeAddress(first),
+      addressSummary: addressLine(first),
       pickupLocationName: first.pickupLocation?.name ?? null,
       boxCount: 1,
       lines: group.lines.map(toCheckoutLine),
@@ -213,14 +229,3 @@ function toCheckoutLine(line: AssignedLineRow): CheckoutLine {
   };
 }
 
-function summarizeAddress(line: CheckoutLineRow): string | null {
-  if (line.addressLine1 === null) return null;
-
-  return addressSummary({
-    line1: line.addressLine1,
-    line2: line.addressLine2,
-    city: line.addressCity ?? '',
-    state: line.addressState ?? '',
-    postalCode: line.addressPostalCode ?? '',
-  });
-}

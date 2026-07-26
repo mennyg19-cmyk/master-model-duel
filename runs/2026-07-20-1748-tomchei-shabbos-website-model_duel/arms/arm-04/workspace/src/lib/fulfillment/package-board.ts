@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { FulfillmentKind, PackageStage, Prisma } from '@prisma/client';
 
-import { addressSummary } from '../addresses/address-summary';
+import { destinationLabel } from '../addresses/address-mapping';
 import { pageInfo, type PageInfo, type PageRequest } from '../admin/list-query';
 import { db } from '../db';
 import { lineTotalWithAddOns, optionsLabel } from '../orders/lines';
@@ -113,7 +113,7 @@ export async function listPackageBoard(
       version: box.version,
       recipientName: box.recipientName,
       methodLabel: box.fulfillmentMethod.label,
-      destination: destinationOf(box),
+      destination: destinationLabel(box) ?? '—',
       deliveryDay: box.deliveryDay,
       stage: box.stage,
       itemCount: box.lines.reduce((count, line) => count + line.quantity, 0),
@@ -198,7 +198,7 @@ export async function readPackageDetail(
     recipientName: box.recipientName,
     methodLabel: box.fulfillmentMethod.label,
     methodKind: box.fulfillmentMethod.kind,
-    destination: destinationOf(box),
+    destination: destinationLabel(box) ?? '—',
     deliveryDay: box.deliveryDay,
     greetingMessage: box.greetingMessage,
     fulfillmentFeeCents: box.fulfillmentFeeCents,
@@ -231,26 +231,4 @@ export async function readPackageDetail(
       groupLabel: filing.group.label,
     })),
   };
-}
-
-type DestinationParts = {
-  pickupLocation: { name: string } | null;
-  addressLine1: string | null;
-  addressLine2: string | null;
-  addressCity: string | null;
-  addressState: string | null;
-  addressPostalCode: string | null;
-};
-
-function destinationOf(box: DestinationParts): string {
-  if (box.pickupLocation) return `Pick up at ${box.pickupLocation.name}`;
-  if (!box.addressLine1) return '—';
-
-  return addressSummary({
-    line1: box.addressLine1,
-    line2: box.addressLine2,
-    city: box.addressCity ?? '',
-    state: box.addressState ?? '',
-    postalCode: box.addressPostalCode ?? '',
-  });
 }

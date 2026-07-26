@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 
-import { addressSummary } from '../addresses/address-summary';
+import { destinationLabel } from '../addresses/address-mapping';
 import { sumCents } from '../core/money';
 import { db } from '../db';
 import { findOwnedOrder, ownerFilter, type DraftOwner } from './draft-access';
@@ -141,7 +141,7 @@ export async function readOrderDetail(
       addOns: line.addOns.map((addOn) => addOn.addOnNameSnapshot),
       recipientName: line.recipientName,
       methodLabel: line.fulfillmentMethod?.label ?? null,
-      destination: destinationOf(line),
+      destination: destinationLabel(line),
       greetingMessage: line.greetingMessage,
     })),
     packages: order.packages.map((row) => ({
@@ -178,22 +178,3 @@ function toSummary(order: SummaryRow): OrderSummary {
   };
 }
 
-function destinationOf(line: {
-  addressLine1: string | null;
-  addressLine2: string | null;
-  addressCity: string | null;
-  addressState: string | null;
-  addressPostalCode: string | null;
-  pickupLocation: { name: string } | null;
-}): string | null {
-  if (line.pickupLocation) return `Pick up at ${line.pickupLocation.name}`;
-  if (!line.addressLine1) return null;
-
-  return addressSummary({
-    line1: line.addressLine1,
-    line2: line.addressLine2,
-    city: line.addressCity ?? '',
-    state: line.addressState ?? '',
-    postalCode: line.addressPostalCode ?? '',
-  });
-}

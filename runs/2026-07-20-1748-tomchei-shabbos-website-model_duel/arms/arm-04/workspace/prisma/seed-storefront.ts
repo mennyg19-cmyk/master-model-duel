@@ -64,6 +64,17 @@ async function seedSettings(): Promise<void> {
   await writeSetting('delivery.dayChoices', DELIVERY_DAYS);
   await writeSetting('shipping.baseRateCents', 1200);
   await writeSetting('shipping.freeShippingThresholdCents', 15000);
+  // Without a ship-from address no carrier can be asked for a rate, so a seeded
+  // database would demonstrate only the fallback.
+  await writeSetting('shipping.origin', {
+    name: 'Tomchei Shabbos shipping room',
+    line1: '1 Clifton Avenue',
+    line2: 'Rear entrance',
+    city: 'Lakewood',
+    state: 'NJ',
+    postalCode: '08701',
+    phone: '732-555-0100',
+  });
   await writeSetting('email.fromName', 'Tomchei Shabbos');
   await writeSetting('email.fromAddress', 'orders@tomchei.example');
   await writeSetting('email.replyToAddress', 'office@tomchei.example');

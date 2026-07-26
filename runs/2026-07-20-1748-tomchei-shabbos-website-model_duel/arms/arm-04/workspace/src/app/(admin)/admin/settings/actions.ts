@@ -62,6 +62,19 @@ const shippingSchema = z.object({
   freeShippingThreshold: dollarsFromForm,
   deliveryZips: z.string(),
   deliveryDays: z.string(),
+  // Where carriers collect from. Blank is allowed and means "not set up yet":
+  // checkout then quotes nobody and prices shipping at the flat rate above,
+  // which is a working store rather than a broken one.
+  originName: z.string().trim(),
+  originLine1: z.string().trim(),
+  originLine2: z.string().trim(),
+  originCity: z.string().trim(),
+  originState: z.string().trim().max(2, 'Use the two-letter state code.'),
+  originPostalCode: z
+    .string()
+    .trim()
+    .regex(/^(\d{5})?$/, 'Use a five-digit ZIP code, or leave it empty.'),
+  originPhone: z.string().trim(),
 });
 
 /** One label per line, in the words the drivers use ("Sunday 12 Adar"). */
@@ -156,10 +169,20 @@ export async function saveShippingSettingsAction(formData: FormData) {
   await writeSetting('shipping.freeShippingThresholdCents', parsed.data.freeShippingThreshold);
   await writeSetting('shipping.deliveryZips', zips);
   await writeSetting('delivery.dayChoices', days);
+  await writeSetting('shipping.origin', {
+    name: parsed.data.originName,
+    line1: parsed.data.originLine1,
+    line2: parsed.data.originLine2,
+    city: parsed.data.originCity,
+    state: parsed.data.originState.toUpperCase(),
+    postalCode: parsed.data.originPostalCode,
+    phone: parsed.data.originPhone,
+  });
   await audit(
     context,
     'shipping',
-    `${zips.length} delivery ZIPs, ${days.length} delivery days, base rate ${parsed.data.baseRate}c`,
+    `${zips.length} delivery ZIPs, ${days.length} delivery days, base rate ${parsed.data.baseRate}c, ` +
+      `origin ${parsed.data.originPostalCode || 'unset'}`,
   );
 
   revalidateStorefront(SHIPPING_PATH);

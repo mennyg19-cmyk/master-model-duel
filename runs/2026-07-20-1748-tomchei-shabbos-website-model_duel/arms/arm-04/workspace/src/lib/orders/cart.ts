@@ -3,7 +3,7 @@ import 'server-only';
 import type { AddOn, FulfillmentKind, Prisma } from '@prisma/client';
 import { z } from 'zod';
 
-import { addressSummary } from '../addresses/address-summary';
+import { addressLine } from '../addresses/address-mapping';
 import type { CatalogOption } from '../catalog/browse';
 import { sumCents } from '../core/money';
 import { db } from '../db';
@@ -185,16 +185,7 @@ function toAssignment(row: CartLineRow): CartLineAssignment | null {
     recipientName: row.recipientName,
     methodLabel: row.fulfillmentMethod.label,
     methodKind: row.fulfillmentMethod.kind,
-    addressSummary:
-      row.addressLine1 === null
-        ? null
-        : addressSummary({
-            line1: row.addressLine1,
-            line2: row.addressLine2,
-            city: row.addressCity ?? '',
-            state: row.addressState ?? '',
-            postalCode: row.addressPostalCode ?? '',
-          }),
+    addressSummary: addressLine(row),
     pickupLocationName: row.pickupLocation?.name ?? null,
     customerAddressId: row.customerAddressId,
     greetingMessage: row.greetingMessage,

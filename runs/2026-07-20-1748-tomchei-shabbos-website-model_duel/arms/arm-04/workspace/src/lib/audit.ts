@@ -103,6 +103,34 @@ type AuditDetails = {
   /// Paper came out of the printer. This row is the *only* thing printing
   /// changes: no stage moves, nothing is marked shipped (G-002, G-004).
   'print.rendered': { artifact: string; scope: 'group' | 'order'; packageCount: number };
+  /// Money left the organisation at a carrier, and the spread the campaign keeps
+  /// is part of the row (UR-003). The carrier's own transaction id is not: it is
+  /// on the shipment box, behind the fulfillment permission.
+  'shipping.label_purchased': {
+    carrier: string;
+    serviceCode: string;
+    parcelCount: number;
+    carrierCostCents: number;
+    customerPriceCents: number;
+    marginCents: number;
+  };
+  /// R-055, UR-004. A label cancelled before the box went out — usually because
+  /// the box was rerouted onto a van — and whether the carrier has confirmed the
+  /// refund yet.
+  'shipping.label_voided': {
+    carrier: string;
+    parcelCount: number;
+    reason: string;
+    confirmed: boolean;
+  };
+  /// The carrier refused, or this database failed after it agreed. Either way
+  /// nothing was left bought; the reason the carrier gave is on the box, not
+  /// here, because it is the carrier's wording and not for wide reading.
+  'shipping.label_failed': { carrier: string; parcelCount: number };
+  'shipping.tracking_refreshed': { status: string; parcelCount: number };
+  /// R-177. Somebody asked the carrier whether this address exists before a
+  /// label was bought against it.
+  'shipping.address_validated': { isValid: boolean; postalCode: string };
   'staff.invited': { email: string; role: StaffRole };
   'staff.role_changed': { from: StaffRole; to: StaffRole };
   'staff.confirmed': never;
