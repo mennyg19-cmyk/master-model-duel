@@ -9,7 +9,7 @@ export type Authorization =
   | { ok: false; status: 401 | 403 | 503; error: string };
 
 export type Authentication =
-  | { ok: true; userId: string; email?: string }
+  | { ok: true; userId: string; email?: string; emailVerified?: boolean }
   | { ok: false; status: 401 | 503; error: string };
 
 export async function authenticate(
@@ -18,7 +18,7 @@ export async function authenticate(
 ): Promise<Authentication> {
   const devSession = readDevSession(request);
   if (devSession) {
-    return { ok: true, userId: devSession.userId, email: devSession.email };
+    return { ok: true, userId: devSession.userId, email: devSession.email, emailVerified: true };
   }
   if (!isClerkConfigured()) {
     return { ok: false, status: 503, error: "Authentication is not configured." };
@@ -31,7 +31,12 @@ export async function authenticate(
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress;
   if (!email) return { ok: false, status: 401, error: "Your signed-in account needs a primary email address." };
-  return { ok: true, userId, email };
+  return {
+    ok: true,
+    userId,
+    email,
+    emailVerified: user.primaryEmailAddress?.verification?.status === "verified",
+  };
 }
 
 export async function authorize(request: Request, permission?: Permission): Promise<Authorization> {

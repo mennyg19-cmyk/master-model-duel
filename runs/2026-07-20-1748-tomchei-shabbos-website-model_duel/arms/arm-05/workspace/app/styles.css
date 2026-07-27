@@ -58,4 +58,19 @@ label { font-weight: 700; }
 .tabs a { color: var(--accent); font-weight: 700; }
 .catalog-list { margin-top: 22px; }
 .admin-thumbnail { height: 90px; margin: 12px 0; max-width: 140px; }
+.order-layout { display: grid; gap: 32px; grid-template-columns: minmax(0, 1fr) 260px; }
+.order-line { margin-top: 20px; position: relative; }
+.order-line fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 20px 0; padding: 12px; }
+.check-row { align-items: center; display: flex; font-weight: 400; gap: 8px; }
+.check-row input { margin: 0; width: auto; }
+.address-fields { display: grid; gap: 0 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cart-sidebar { align-self: start; background: var(--ink); border-radius: 16px; color: white; padding: 24px; position: sticky; top: 92px; }
+.cart-sidebar .button { margin-top: 20px; width: 100%; }
+.cart-total { display: block; font-size: 1.8rem; margin: 16px 0; }
+.cart-fab { display: none; }
+.account-orders { margin-top: 22px; }
+.order-history { align-items: center; border-top: 1px solid var(--line); display: flex; justify-content: space-between; padding: 14px 0; }
+.order-history div:last-child { align-items: center; display: flex; gap: 12px; }
+@media (max-width: 850px) { .order-layout { grid-template-columns: 1fr; } .cart-sidebar { position: static; } }
 @media (max-width: 700px) { .store-header { flex-wrap: wrap; } .menu-toggle { display: block; } .store-nav { display: none; flex-basis: 100%; flex-direction: column; align-items: stretch; } .store-nav.open { display: flex; } .store-footer { display: block; } .catalog-tools { display: block; } .catalog-tools label { display: block; margin-bottom: 12px; } }
+@media (max-width: 700px) { .address-fields { grid-template-columns: 1fr; } .cart-sidebar { display: none; } .cart-fab { background: var(--accent); border: 0; border-radius: 999px; bottom: 18px; color: white; display: block; font: inherit; font-weight: 700; padding: 13px 18px; position: fixed; right: 18px; z-index: 4; } .order-history { align-items: start; flex-direction: column; gap: 10px; } }

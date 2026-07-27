@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { formatMoney } from "@/lib/foundation";
+import { isProductAvailable } from "@/lib/inventory";
 
 type CatalogProduct = {
   id: string;
@@ -12,10 +14,6 @@ type CatalogProduct = {
   options: { id: string; name: string; value: string; priceAdjustmentCents: number }[];
   inventoryItems: { quantityOnHand: number; quantityReserved: number }[];
 };
-
-function formatMoney(cents: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
-}
 
 export function CatalogGrid({ products, canOrder }: { products: CatalogProduct[]; canOrder: boolean }) {
   const [kind, setKind] = useState<"ALL" | CatalogProduct["kind"]>("ALL");
@@ -49,7 +47,7 @@ export function CatalogGrid({ products, canOrder }: { products: CatalogProduct[]
       </div>
       <div className="catalog-grid">
         {visibleProducts.map((product) => {
-          const available = product.inventoryItems.every((inventory) => inventory.quantityOnHand > inventory.quantityReserved);
+          const available = isProductAvailable(product);
           return (
             <article className="product-card" key={product.id}>
               {product.media ? <img alt="" src={product.media.url} /> : <div className="product-placeholder">Purim collection</div>}

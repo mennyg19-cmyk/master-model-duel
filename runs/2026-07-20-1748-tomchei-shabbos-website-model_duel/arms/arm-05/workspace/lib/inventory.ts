@@ -1,6 +1,22 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
+type InventoryBalance = {
+  quantityOnHand: number;
+  quantityReserved: number;
+};
+
+export function getAvailableQuantity(inventoryItems: readonly InventoryBalance[]) {
+  return inventoryItems.reduce(
+    (total, inventory) => total + Math.max(0, inventory.quantityOnHand - inventory.quantityReserved),
+    0,
+  );
+}
+
+export function isProductAvailable(product: { inventoryItems: readonly InventoryBalance[] }) {
+  return getAvailableQuantity(product.inventoryItems) > 0;
+}
+
 export async function reserveInventory(
   inventoryItemId: string,
   quantity: number,

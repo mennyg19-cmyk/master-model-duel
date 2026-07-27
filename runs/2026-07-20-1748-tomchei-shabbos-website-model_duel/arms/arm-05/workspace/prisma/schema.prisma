@@ -271,6 +271,8 @@ model Order {
   id                    String                 @id @default(cuid())
   seasonId              String
   customerId            String?
+  guestAccessTokenHash  String?                @unique
+  guestAccessExpiresAt  DateTime?
   status                OrderStatus            @default(DRAFT)
   version               Int                    @default(1)
   orderNumber           Int?

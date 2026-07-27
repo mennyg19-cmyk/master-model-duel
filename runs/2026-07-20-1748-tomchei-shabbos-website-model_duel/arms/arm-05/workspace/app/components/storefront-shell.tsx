@@ -28,6 +28,7 @@ export function StorefrontShell({ children, isOpen }: { children: React.ReactNod
         <nav className={menuOpen ? "store-nav open" : "store-nav"}>
           <Link href="/catalog">Shop</Link>
           <Link href="/collections">Past collections</Link>
+          <Link href="/account">My account</Link>
           <Link href="/admin">Staff sign in</Link>
           {isOpen && <Link className="button" href="/order">Start an order</Link>}
         </nav>

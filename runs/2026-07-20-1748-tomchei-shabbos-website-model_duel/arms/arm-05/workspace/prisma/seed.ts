@@ -110,6 +110,27 @@ async function seed() {
     create: { productId: product.id, quantityOnHand: 25 },
     update: { quantityOnHand: 25, quantityReserved: 0 },
   });
+  const celebrationProduct = await prisma.product.upsert({
+    where: { seasonId_sku: { seasonId: season.id, sku: "PURIM-BOX-03" } },
+    create: {
+      seasonId: season.id,
+      sku: "PURIM-BOX-03",
+      name: "Neighborhood Joy Box",
+      kind: "PACKAGE",
+      priceCents: 4600,
+    },
+    update: { name: "Neighborhood Joy Box", priceCents: 4600 },
+  });
+  await prisma.inventoryItem.upsert({
+    where: { productId: celebrationProduct.id },
+    create: { productId: celebrationProduct.id, quantityOnHand: 25 },
+    update: { quantityOnHand: 25, quantityReserved: 0 },
+  });
+  await prisma.customerIdentity.upsert({
+    where: { clerkUserId: "customer-seed" },
+    create: { clerkUserId: "customer-seed", email: "seed@example.test", customerId: customer.id },
+    update: { email: "seed@example.test", customerId: customer.id },
+  });
   await prisma.appSetting.upsert({
     where: { key: "delivery.zipCodes" },
     create: { key: "delivery.zipCodes", value: ["11201", "11205", "11211"] },

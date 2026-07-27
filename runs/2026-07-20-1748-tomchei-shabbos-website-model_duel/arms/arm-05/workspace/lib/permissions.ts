@@ -3,6 +3,7 @@ export const permissions = [
   "audit.read",
   "settings.manage",
   "orders.read",
+  "customers.write",
 ] as const;
 
 export type Permission = (typeof permissions)[number];

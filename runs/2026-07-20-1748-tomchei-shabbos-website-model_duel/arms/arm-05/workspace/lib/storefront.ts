@@ -1,13 +1,7 @@
 import { prisma } from "@/lib/db";
+export { formatMoney } from "@/lib/foundation";
 
 export const defaultDeliveryZipCodes = ["11201", "11205", "11211"];
-
-export function formatMoney(cents: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(cents / 100);
-}
 
 export async function getStorefront() {
   const [currentSeason, archives] = await Promise.all([
@@ -19,6 +13,9 @@ export async function getStorefront() {
           where: { isActive: true, kind: { not: "ADD_ON" } },
           include: {
             options: { where: { isActive: true } },
+            restrictedAddons: {
+              include: { addOnProduct: { include: { inventoryItems: true } } },
+            },
             media: true,
             inventoryItems: true,
           },
