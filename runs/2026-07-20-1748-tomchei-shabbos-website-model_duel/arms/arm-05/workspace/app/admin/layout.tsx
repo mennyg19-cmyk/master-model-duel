@@ -11,6 +11,8 @@ export default function AdminLayout({ children }: Readonly<{ children: React.Rea
         <Link href="/admin/pos">Point of sale</Link>
         <Link href="/admin/packages">Packages & print</Link>
         <Link href="/admin/delivery">Delivery operations</Link>
+        <Link href="/admin/reports">Reports & exports</Link>
+        <Link href="/admin/test-console">Test console</Link>
         <Link href="/admin/catalog">Catalog & media</Link>
         <Link href="/admin/seasons">Seasons & repeats</Link>
         <Link href="/admin/settings">Settings</Link>
@@ -18,7 +20,7 @@ export default function AdminLayout({ children }: Readonly<{ children: React.Rea
         <Link href="/admin/audit">Security audit</Link>
       </aside>
       <section className="content">
-        <p className="admin-alert">Staff workspace · changes to orders, payments, and imports are audited.</p>
+        <p className="admin-alert">{process.env.TEST_MODE === "true" ? "TEST MODE · outbound providers are fixture-backed and destructive controls are enabled." : "LIVE MODE · changes to orders, payments, and imports are audited."}</p>
         <p><Link href="/admin">← Back to admin overview</Link></p>
         {children}
       </section>

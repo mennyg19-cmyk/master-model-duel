@@ -4,6 +4,7 @@
     { "path": "/api/cron/email-log-purge", "schedule": "0 4 * * *" },
     { "path": "/api/cron/pickup-expiry", "schedule": "0 3 * * *" },
     { "path": "/api/cron/payment-reminders", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/stripe-reconciliation", "schedule": "30 9 * * *" },
     { "path": "/api/cron/season-auto-flip", "schedule": "0 * * * *" }
   ]
 }

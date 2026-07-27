@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { normalizeEmail } from "@/lib/foundation";
+import { normalizeAddress, normalizeEmail } from "@/lib/foundation";
 import { getAvailableQuantity } from "@/lib/inventory";
 import { authenticate } from "@/lib/route-auth";
 
@@ -61,19 +61,6 @@ type DraftRecord = Prisma.OrderGetPayload<{
 
 function tokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
-}
-
-function addressKey(address: {
-  line1: string;
-  line2?: string | null;
-  city: string;
-  state: string;
-  postalCode: string;
-}) {
-  return [address.line1, address.line2, address.city, address.state, address.postalCode, "US"]
-    .filter((value): value is string => Boolean(value))
-    .map((value) => value.trim().toLowerCase().replace(/\s+/g, " "))
-    .join("|");
 }
 
 function coordinatesForPostalCode(postalCode: string) {
@@ -181,7 +168,7 @@ async function resolveRecipient(
   recipient: DraftInput["lines"][number]["recipient"],
 ) {
   if (recipient.kind === "new") {
-    const normalizedAddress = addressKey(recipient);
+    const normalizedAddress = normalizeAddress(recipient);
     const coordinates = coordinatesForPostalCode(recipient.postalCode);
     if (coordinates) {
       await prisma.geocodeCache.upsert({
@@ -354,7 +341,7 @@ export async function updateCustomerAddress(
   addressInput: z.infer<typeof addressSchema>,
   staffActorId?: string,
 ) {
-  const normalizedAddress = addressKey(addressInput);
+  const normalizedAddress = normalizeAddress(addressInput);
   const coordinates = coordinatesForPostalCode(addressInput.postalCode);
   const existingAddress = await prisma.address.findFirst({ where: { id: addressId, customerId } });
   if (!existingAddress) throw new Error("Address not found.");

@@ -1,6 +1,6 @@
 import { prisma } from "../lib/db";
 
-async function seed() {
+export async function seed() {
   await prisma.appSetting.upsert({
     where: { key: "foundation.seeded" },
     create: { key: "foundation.seeded", value: { version: 1 } },
@@ -190,9 +190,11 @@ async function seed() {
   console.log("P3 seasons, storefront catalog, customer, order, and inventory seeded.");
 }
 
-void seed()
-  .catch((error: unknown) => {
-    console.error("Unable to seed the PostgreSQL database.", error);
-    process.exitCode = 1;
-  })
-  .finally(() => prisma.$disconnect());
+if (process.argv[1]?.endsWith("seed.ts")) {
+  void seed()
+    .catch((error: unknown) => {
+      console.error("Unable to seed the PostgreSQL database.", error);
+      process.exitCode = 1;
+    })
+    .finally(() => prisma.$disconnect());
+}

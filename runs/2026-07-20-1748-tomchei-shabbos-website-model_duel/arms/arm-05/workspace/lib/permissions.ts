@@ -5,6 +5,7 @@ export const permissions = [
   "orders.read",
   "orders.write",
   "orders.refund",
+  "payments.reconcile",
   "customers.read",
   "customers.write",
   "imports.manage",

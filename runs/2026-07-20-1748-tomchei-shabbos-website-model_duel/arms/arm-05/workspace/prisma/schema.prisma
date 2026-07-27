@@ -70,6 +70,11 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum AddressReviewStatus {
+  PENDING
+  APPROVED
+}
+
 enum EmailCampaignStatus {
   DRAFT
   SENT
@@ -372,11 +377,15 @@ model Address {
   latitude          Decimal?  @db.Decimal(9, 6)
   longitude         Decimal?  @db.Decimal(9, 6)
   geocodedAt        DateTime?
+  reviewStatus      AddressReviewStatus @default(APPROVED)
+  reviewReason      String?
+  reviewedAt        DateTime?
   customer          Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
   packageRecipients Package[] @relation("PackageAddress")
 
   @@unique([customerId, normalizedAddress])
   @@index([postalCode])
+  @@index([reviewStatus])
 }
 
 model FulfillmentMethod {

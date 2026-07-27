@@ -564,3 +564,12 @@
 2026-07-27T22:19:35Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P11,fix,gpt-5.6-terra-high,09a5b00a-3d7e-4186-ab3a-994eff46e315,,,,,,,,P11 fix pass; supersedes pending-p11-fix placeholder; usage_missing_pending_export
 2026-07-27T22:20:01Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P11,fix,gpt-5.6-terra-high,,,,,,,,,P11 single fix pass; usage_missing_pending_export
 2026-07-27T22:27:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P12,contestant,gpt-5.6-terra-high,7a5f6b85-093a-4343-a457-502100d57b31,,,,,,,,P12 build; usage pending; usage_missing_pending_export
+2026-07-27T22:33:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P12,review_security,glm-5.2-high,b3d8c24d-c601-42c1-9b6a-c48ff14aca2d,,,,,,,,P12 security; usage pending; usage_missing_pending_export
+2026-07-27T22:33:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P12,review_quality,glm-5.2-high,9b6c67b5-c74b-4e55-a19c-75331fda8615,,,,,,,,P12 quality; usage pending; usage_missing_pending_export
+2026-07-27T22:33:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P12,review_rules,glm-5.2-high,76487168-b3af-47f8-8d41-e1c9d39d73a9,,,,,,,,P12 rules; usage pending; usage_missing_pending_export
+2026-07-27T22:33:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P12,review_clean_code,glm-5.2-high,4aaf0e03-85b1-4381-a95d-7d4ecdfb32bf,,,,,,,,P12 clean-code; usage pending; usage_missing_pending_export
+2026-07-27T22:37:15Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P12,review_aggregate,glm-5.2-high,pending-p12-agg,,,,,,,,placeholder; usage_missing_pending_export
+2026-07-27T22:37:23Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P12,review_aggregate,glm-5.2-high,37aa452a-920b-4e1f-9514-2027c000dac8,,,,,,,,P12 aggregate; supersedes pending-p12-agg placeholder; usage_missing_pending_export
+2026-07-27T22:42:30Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P12,fix,gpt-5.6-terra-high,pending-p12-fix,,,,,,,,placeholder; usage_missing_pending_export
+2026-07-27T22:42:39Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P12,fix,gpt-5.6-terra-high,957877f2-04c2-4e47-8592-3c7e09bdea48,,,,,,,,P12 fix pass; supersedes pending-p12-fix placeholder; usage_missing_pending_export
+2026-07-27T22:49:58Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-05,self-review,contestant,gpt-5.6-terra-high,78db22ab-84e6-4d18-907d-be810a580d2d,,,,,,,,T5 self-review single; usage pending; usage_missing_pending_export

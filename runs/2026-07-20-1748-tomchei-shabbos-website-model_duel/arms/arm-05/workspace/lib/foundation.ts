@@ -21,6 +21,19 @@ export function normalizePhone(phone: string) {
   return phone.replace(/\D/g, "").replace(/^1/, "");
 }
 
+export function normalizeAddress(address: {
+  line1: string;
+  line2?: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+}) {
+  return [address.line1, address.line2, address.city, address.state, address.postalCode, "US"]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.trim().toLowerCase().replace(/\s+/g, " "))
+    .join("|");
+}
+
 export function createPublicId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`;
 }
