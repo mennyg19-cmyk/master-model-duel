@@ -15,6 +15,13 @@ import { env } from '../env';
  * That is the safe reading of "not set up yet", and `env-spec.ts` makes a hosted
  * deployment set one so the refusal cannot become a silent outage nobody notices
  * until pickups stop expiring.
+ *
+ * Every job answers GET as well as POST (P12). The jobs were written POST-only
+ * because a GET is the verb a browser, a link preview or a crawler follows on
+ * its own — but the platform's scheduler only issues GET, so POST-only means
+ * "scheduled and never running". None of those accidental callers carries a
+ * bearer token, which is what this gate has always relied on; the verb never
+ * was the protection.
  */
 export function cronRequestIsAuthorized(request: Request): boolean {
   const configured = env.CRON_SECRET ?? '';

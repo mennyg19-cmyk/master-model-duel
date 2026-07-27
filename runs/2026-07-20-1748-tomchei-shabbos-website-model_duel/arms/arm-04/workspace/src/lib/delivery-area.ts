@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { ZIP_CODE } from './core/addresses';
 import { readSetting } from './settings';
 
 /**
@@ -14,8 +15,7 @@ export type DeliveryAreaCheck =
 
 /** Accepts "08701", "08701-1234" and " 08701 "; anything else is not a US ZIP. */
 export function normalizePostalCode(value: string): string | null {
-  const digits = value.trim().replace(/\s+/g, '');
-  const match = /^(\d{5})(?:-\d{4})?$/.exec(digits);
+  const match = ZIP_CODE.exec(value.trim().replace(/\s+/g, ''));
   return match ? match[1] : null;
 }
 

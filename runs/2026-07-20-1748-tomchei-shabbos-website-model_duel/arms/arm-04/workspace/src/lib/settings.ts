@@ -13,6 +13,11 @@ import { db } from './db';
 const SETTING_SCHEMAS = {
   'setup.completed': z.boolean(),
   'store.open': z.boolean(),
+  // R-101, R-129. The deployment is a rehearsal: every screen says so and the
+  // destructive test console will answer. Stored rather than derived from
+  // NODE_ENV because the rehearsal that matters is the one on the real hosting,
+  // with the real database, the week before the season opens.
+  'platform.testMode': z.boolean(),
   'brand.announcement': z.string(),
   // The office's own clock (UR-008). A scheduled season flip is entered as a
   // wall-clock time and stored as an instant, and this is what the two are
@@ -60,6 +65,7 @@ type SettingValue<K extends SettingKey> = z.infer<(typeof SETTING_SCHEMAS)[K]>;
 const DEFAULTS: { [K in SettingKey]: SettingValue<K> } = {
   'setup.completed': false,
   'store.open': false,
+  'platform.testMode': false,
   'brand.announcement': '',
   'store.timezone': DEFAULT_TIME_ZONE,
   'orders.followUpDays': 3,

@@ -1,5 +1,6 @@
 import { SiteFooter } from '@/components/storefront/site-footer';
 import { SiteHeader } from '@/components/storefront/site-header';
+import { TestModeBanner } from '@/components/test-mode-banner';
 import { closedStoreMessage, readStoreState } from '@/lib/store-state';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,8 @@ export default async function StorefrontLayout({ children }: { children: React.R
 
   return (
     <div className="flex min-h-full flex-col">
+      <TestModeBanner />
+
       <SiteHeader isStoreOpen={store.isOpen} />
 
       {store.isOpen ? null : (

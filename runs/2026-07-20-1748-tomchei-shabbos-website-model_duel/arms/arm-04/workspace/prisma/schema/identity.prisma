@@ -57,6 +57,9 @@ model StaffUser {
   importBatches       ImportBatch[]
   printBatches        PrintBatch[]
   routesDriven        DeliveryRoute[]      @relation("RouteDriver")
+  exports             ExportLog[]
+  reconciliationRuns  PaymentReconciliationRun[]
+  legacyImports       LegacyImportRun[]
 
   @@index([role, status])
 }

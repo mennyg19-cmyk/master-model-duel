@@ -7,7 +7,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 | arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** | — | no |
 | arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** | — | no |
 | arm-03 | **6** | **8** | **15** | | **18.0** | **11.0** | **11.0** | **69.0** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
-| arm-04 | **7** | **8** | **15** | | **16.5** | | | | inv_novel=6; bonus_plan | **yes** (join after Test 6; Opus 5 high; T6 rerun) |
+| arm-04 | **7** | **8** | **15** | | **18.0** | | | | inv_novel=6; bonus_plan | **yes** (join after Test 6; Opus 5 high; T6 rerun) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -74,6 +74,7 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **P9 arm-04:** **1.5/20** → **13.5/20** ([fix notes](arms/arm-04/results/P9-FIX-NOTES.md); 11 majors + 22 minors; smoke 24/24, tests 193/193)
 - **P10 arm-04:** **1.5/20** → **15.0/20** ([fix notes](arms/arm-04/results/P10-FIX-NOTES.md); 10 majors + 9 minors; smoke 21/21, tests 206/206)
 - **P11 arm-04:** **1.5/20** → **16.5/20** ([fix notes](arms/arm-04/results/P11-FIX-NOTES.md); 8 majors + 11 minors; smoke 27/27, tests 217/217, ladder 275/275)
+- **P12 arm-04:** **1.5/20** → **18.0/20** ([fix notes](arms/arm-04/results/P12-FIX-NOTES.md); 6 majors + 10 minors; smoke 28/28, tests 226/226) — **Test 4 complete**
 - **Test 6 winner:** tie **15.0/15** both arms (detect 8/8 · vague fix 7/7)
 
 ## Test 6 notes

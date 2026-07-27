@@ -3,12 +3,10 @@ import { NOTIFICATION_SWEEP_JOB, sweepNotificationOutbox } from '@/lib/notificat
 
 export const dynamic = 'force-dynamic';
 
-/**
- * Empties the notification outbox (R-088, R-181). Bearer secret or 401.
- *
- * POST only, like the other sweeps: this one actually posts mail, and a GET is
- * the verb a browser, a link preview or a crawler follows on its own.
- */
+/** Empties the notification outbox (R-088, R-181). Bearer secret or 401. */
 export async function POST(request: Request): Promise<Response> {
   return runCronJob(request, NOTIFICATION_SWEEP_JOB, () => sweepNotificationOutbox());
 }
+
+/** The scheduler only issues GET; the gate is the same one. See `authorize.ts`. */
+export const GET = POST;

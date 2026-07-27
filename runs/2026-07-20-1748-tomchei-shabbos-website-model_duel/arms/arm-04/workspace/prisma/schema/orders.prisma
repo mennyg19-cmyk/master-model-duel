@@ -100,6 +100,7 @@ model Order {
   paymentIntents StripePaymentIntent[]
   shippingQuotes ShippingQuote[]
   printItems     PrintBatchItem[]
+  reconciliationFlags PaymentReconciliationFlag[]
 
   @@unique([seasonId, orderNumber])
   @@unique([seasonId, importedOrderReference])

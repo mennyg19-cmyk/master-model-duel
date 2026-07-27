@@ -1,6 +1,8 @@
 import 'server-only';
 
 import type {
+  AddressCleanupKind,
+  ExportDataset,
   ImportKind,
   OrderStatus,
   PackageStage,
@@ -242,6 +244,41 @@ type AuditDetails = {
   };
   'import.committed': { kind: ImportKind; createdCount: number; updatedCount: number };
   'import.discarded': { kind: ImportKind; rowCount: number };
+  /// R-092. A file of donors' names and addresses left the building. The row
+  /// count is here because "somebody exported the deliveries" and "somebody
+  /// exported all five thousand of them" are different events.
+  'report.exported': { dataset: ExportDataset; seasonYear: number; rowCount: number };
+  /// R-186, G-029. The dry run reads the legacy export and writes nothing; the
+  /// commit writes it in chunks. `resumedFromChunk` is non-zero when the commit
+  /// picked up a run that had died partway through.
+  'migration.dry_run': {
+    fileName: string;
+    seasonYear: number;
+    rowCount: number;
+    invalidCount: number;
+    needsMappingCount: number;
+  };
+  'migration.committed': {
+    fileName: string;
+    seasonYear: number;
+    resumedFromChunk: number;
+    ordersWritten: number;
+    customersWritten: number;
+  };
+  'migration.discarded': { fileName: string; rowCount: number };
+  /// A person decided which customer an ambiguous legacy row meant. Recorded
+  /// because the import cannot be reproduced from the file alone afterwards.
+  'migration.row_mapped': { runId: string; lineNumber: number };
+  /// UR-014. What the address-book cleanup pass found, and what somebody
+  /// decided about one of its findings.
+  'cleanup.scanned': { flagged: number; reopened: number };
+  'cleanup.resolved': { kind: AddressCleanupKind; status: 'MERGED' | 'KEPT' };
+  /// R-101, R-129. Test mode changes what the whole deployment claims to be, so
+  /// it is its own row rather than a settings edit.
+  'settings.test_mode_changed': { on: boolean };
+  /// R-014, R-103. Somebody pressed a destructive button in the test console.
+  /// Only reachable while test mode is on, which is exactly why the row exists.
+  'testing.console_ran': { action: 'seed' | 'reset' | 'wipe'; seasonYear: number | null };
 };
 
 export type AuditAction = keyof AuditDetails;

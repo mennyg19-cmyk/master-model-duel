@@ -449,3 +449,11 @@
 2026-07-27T04:38:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P11,review_clean_code,glm-5.2-high,329ea6bf-f258-4dbf-9655-3e6ca66872a8,,,,,,,,P11 clean-code review; usage_missing
 2026-07-27T04:40:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P11,review_aggregate,glm-5.2-high,c8464288-2bd7-466e-8855-f8e9d9a04022,,,,,,,,P11 aggregate spawn; usage_missing
 2026-07-27T04:41:45Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P11,fix,claude-opus-5-thinking-high,2b0b07bf-399f-48c7-b11c-7be63ac8d749,,,,,,,,P11 fix 8 majors + minors; usage_missing
+2026-07-27T05:28:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P12,build,claude-opus-5-thinking-high,cbedc8af-5a93-474e-a7bf-b7a4cf023577,,,,,,,,P12 build spawn final T4 phase; usage_missing
+2026-07-27T07:13:17Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P12,review_security,glm-5.2-high,ef109af9-2ba1-478c-850b-76a3862f044c,,,,,,,,P12 security review; usage_missing
+2026-07-27T07:13:18Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P12,review_quality,glm-5.2-high,73fa854d-095f-4bec-b6bb-732bb39f6098,,,,,,,,P12 quality review; usage_missing
+2026-07-27T07:13:18Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P12,review_rules,glm-5.2-high,a1bedef7-81c0-46e6-b46c-d6191e655bd7,,,,,,,,P12 rules review; usage_missing
+2026-07-27T07:13:18Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P12,review_clean_code,glm-5.2-high,8a2083ca-c9c9-4bec-a7b2-1275dd694f11,,,,,,,,P12 clean-code review; usage_missing
+2026-07-27T07:16:51Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P12,review_aggregate,glm-5.2-high,af31532a-f7fe-4bdf-8a1b-cb482670c955,,,,,,,,P12 aggregate spawn; usage_missing
+2026-07-27T07:18:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P12,fix,claude-opus-5-thinking-high,b7ac9e26-1465-447c-b9c5-0841a0f58de7,,,,,,,,P12 fix 6 majors + minors; usage_missing
+2026-07-27T07:50:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-04,self,self_review,claude-opus-5-thinking-high,b876f1fd-5b2a-4132-80a7-cd994805f369,,,,,,,,Test 5 self-review spawn; usage_missing

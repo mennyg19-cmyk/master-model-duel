@@ -22,6 +22,8 @@ export const PERMISSIONS = {
   'routes.manage': 'Plan delivery routes, hand out driver links and reroute boxes',
   'routes.drive': 'Open assigned delivery routes',
   'email.manage': 'Write campaigns, edit triggered emails and manage subscriber lists',
+  'reports.view': 'Read season reports, download exports and reconcile payments',
+  'migration.manage': 'Import historical data and clean up the address books',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -40,7 +42,9 @@ const ROLE_DEFAULTS: Record<StaffRole, readonly Permission[]> = {
   // Neither is opening a season: that puts the shop live and rewrites what it
   // sells, so `seasons.manage` stays with the manager (UR-008). Writing to the
   // whole donor list is the same kind of decision, so `email.manage` stays
-  // there too.
+  // there too. So do the two P12 permissions: `reports.view` is every donor's
+  // giving history in one downloadable file, and `migration.manage` rewrites
+  // history and merges households.
   STAFF: [
     'dashboard.view',
     'orders.view',

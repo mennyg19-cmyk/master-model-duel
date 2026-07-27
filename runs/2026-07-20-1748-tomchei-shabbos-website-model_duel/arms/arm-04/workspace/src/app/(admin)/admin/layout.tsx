@@ -4,6 +4,7 @@ import { ImpersonationBanner } from './impersonation-banner';
 import { signOut } from '../../sign-in/actions';
 import { AlertBanner } from '@/components/admin/alert-banner';
 import { ADMIN_NAV } from '@/components/admin/nav-items';
+import { TestModeBanner } from '@/components/test-mode-banner';
 import { Badge } from '@/components/ui/badge';
 import { ADMIN_TITLE } from '@/lib/brand';
 import { requirePermission } from '@/lib/auth/staff';
@@ -18,6 +19,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex min-h-full flex-col">
+      <TestModeBanner />
+
       {context.isImpersonating ? (
         <ImpersonationBanner
           actorName={context.actor.fullName}
@@ -33,6 +36,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             {ADMIN_TITLE}
           </Link>
           <div className="flex items-center gap-3 text-sm">
+            <Link href="/admin/help" className="underline" data-testid="header-help">
+              Help
+            </Link>
             <Link href="/" className="underline">
               Visit store
             </Link>

@@ -68,15 +68,15 @@ export default async function FulfillmentPage({
       <FlashMessages notice={params.notice} problem={params.problem} testIdPrefix="fulfillment" />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Figure testId="figure-packages" amount={totals.packageCount} label="Boxes this season" />
-        <Figure testId="figure-items" amount={totals.itemCount} label="Items in those boxes" />
-        <Figure
+        <Kpi testId="figure-packages" amount={totals.packageCount} label="Boxes this season" />
+        <Kpi testId="figure-items" amount={totals.itemCount} label="Items in those boxes" />
+        <Kpi
           testId="figure-saved"
           amount={totals.savedCents}
           value={formatCents(totals.savedCents)}
           label="Saved by grouping bulk deliveries"
         />
-        <Figure testId="figure-waiting" amount={waiting} label="Boxes not yet on a batch" />
+        <Kpi testId="figure-waiting" amount={waiting} label="Boxes not yet on a batch" />
       </div>
 
       <section className="space-y-3">
@@ -183,7 +183,8 @@ export default async function FulfillmentPage({
   );
 }
 
-function Figure({
+/** Not `Figure`: that is the label-over-number card the reports use. */
+function Kpi({
   amount,
   value,
   label,

@@ -44,6 +44,12 @@ async function main() {
   const orderIds = await createOrders(season.id, customers);
   await createLinesAndPackages(orderIds, method.id, product);
 
+  // Six thousand rows arrived in bulk, and until the planner is told, it is
+  // still planning for the empty tables it last measured — which turns an
+  // indexed read of one season into a scan. Every bulk loader owes the database
+  // this, and timing a page against stale statistics measures nothing.
+  await db.$executeRawUnsafe('ANALYZE');
+
   const [orderCount, packageCount, lineCount] = await Promise.all([
     db.order.count({ where: { seasonId: season.id, orderNumber: { gte: ORDER_NUMBER_BASE } } }),
     db.package.count({ where: { greetingMessage: MARK } }),

@@ -52,6 +52,13 @@ model CustomerAddress {
   /// the same aunt every year types it once.
   lastGreeting String?
 
+  /// Set by the cleanup pass (UR-014) when the entry cannot be delivered to as
+  /// written. It stays usable — an address nobody can fix is still the only
+  /// thing the office knows about that recipient — but the customer screen says
+  /// so, and the cleanup queue lists it.
+  needsReview Boolean @default(false)
+  reviewNote  String?
+
   /// Addresses are archived, never deleted: past orders point at them.
   isArchived Boolean  @default(false)
   createdAt  DateTime @default(now())

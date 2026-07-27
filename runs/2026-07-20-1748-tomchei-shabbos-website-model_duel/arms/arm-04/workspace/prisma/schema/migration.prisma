@@ -1,0 +1,151 @@
+/// Bringing the years before this system existed in (R-186, G-029).
+///
+/// The staged-preview shape is the same one `ImportBatch` uses for a
+/// spreadsheet of customers, and for the same reason: nobody applies a file they
+/// have not read. What is different is the size and the mess. A legacy export is
+/// tens of thousands of lines written by a dozen volunteers over a decade, and
+/// one transaction around all of it would either time out or lock the order
+/// table for minutes. So the commit is chunked, and `committedChunkCount` is
+/// what lets a run that died halfway pick up where it stopped instead of
+/// importing the first half twice.
+enum LegacyImportStatus {
+  DRY_RUN
+  COMMITTING
+  COMMITTED
+  DISCARDED
+}
+
+/// `NEEDS_MAPPING` is the verdict that separates this from the CSV importer: a
+/// row naming "Mrs. Klein" when two Kleins are on file is not invalid and not a
+/// duplicate — it is a question for a person, and the commit refuses while one
+/// is unanswered.
+enum LegacyRowStatus {
+  VALID
+  DUPLICATE
+  NEEDS_MAPPING
+  INVALID
+}
+
+model LegacyImportRun {
+  id       String             @id @default(uuid())
+  fileName String
+  /// The campaign year these orders belong to. History is imported into the
+  /// season it happened in, which is what makes "same as last year" resolvable.
+  seasonYear Int
+  status     LegacyImportStatus @default(DRY_RUN)
+
+  rowCount          Int @default(0)
+  validCount        Int @default(0)
+  duplicateCount    Int @default(0)
+  needsMappingCount Int @default(0)
+  invalidCount      Int @default(0)
+
+  /// Orders are never split across a chunk boundary, so a chunk is a whole
+  /// number of orders and a resumed run can never write half of one.
+  chunkCount          Int @default(0)
+  committedChunkCount Int @default(0)
+
+  customersWritten  Int @default(0)
+  addressesWritten  Int @default(0)
+  ordersWritten     Int @default(0)
+  orderLinesWritten Int @default(0)
+
+  /// The two sides of the reconciliation the plan asks for: what the file said
+  /// the orders were worth, and what this database now holds for them.
+  sourceTotalCents   Int @default(0)
+  importedTotalCents Int @default(0)
+
+  stagedByStaffUserId String?
+  stagedAt            DateTime  @default(now())
+  committedAt         DateTime?
+
+  stagedBy StaffUser?        @relation(fields: [stagedByStaffUserId], references: [id], onDelete: SetNull)
+  rows     LegacyImportRow[]
+
+  @@index([status, stagedAt])
+}
+
+/// One line of the legacy export: a product a customer sent to somebody in a
+/// given year. `parsed` holds the normalized values the commit writes from, so
+/// the commit never re-reads the uploaded file or trusts the preview screen.
+model LegacyImportRow {
+  id         String @id @default(uuid())
+  runId      String
+  lineNumber Int
+  /// Which commit transaction this row belongs to. Assigned during the dry run,
+  /// grouped by order reference.
+  chunkIndex Int
+
+  status LegacyRowStatus
+
+  /// The legacy order number after repair, which is what groups lines into
+  /// orders and what `Order.importedOrderReference` is keyed on.
+  orderReference String?
+
+  parsed  Json    @default("{}")
+  problem String?
+
+  /// The customers an ambiguous row could mean, as `[{ id, label }]`, and the
+  /// one a member of staff picked. Plain id rather than a relation: it is a
+  /// decision recorded on a historical row, not a live link, and customers are
+  /// never deleted.
+  candidates       Json    @default("[]")
+  mappedCustomerId String?
+
+  run LegacyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, lineNumber])
+  @@index([runId, status])
+  @@index([runId, chunkIndex])
+}
+
+/// What the cleanup pass found in the address books (UR-014).
+enum AddressCleanupKind {
+  /// The address cannot be delivered to as written — no ZIP, no state, no
+  /// street. Flagged rather than deleted: it is somebody's aunt, badly typed.
+  UNUSABLE_ADDRESS
+  /// Two entries in one book that are almost certainly the same door but do not
+  /// normalize to the same key, so the unique index never caught them.
+  DUPLICATE_ADDRESS
+  /// Two customer records that look like one household.
+  DUPLICATE_CUSTOMER
+}
+
+enum AddressCleanupStatus {
+  OPEN
+  MERGED
+  KEPT
+}
+
+/// One finding in the cleanup queue.
+///
+/// Ids rather than relations on both sides on purpose: a finding is a symmetric
+/// statement about two rows — this address and that one, this customer and that
+/// one — and modelling it with relations would mean four named back-relations
+/// that no query ever walks. The queue loads the rows it needs by id.
+///
+/// `fingerprint` is unique for the same reason the reconciliation flag's is:
+/// running the pass again must not file the same pair a second time, and must
+/// not resurrect a pair somebody already decided about.
+model AddressCleanupFlag {
+  id          String               @id @default(uuid())
+  fingerprint String               @unique
+  kind        AddressCleanupKind
+  status      AddressCleanupStatus @default(OPEN)
+
+  customerId String
+  addressId  String?
+
+  duplicateOfAddressId  String?
+  duplicateOfCustomerId String?
+
+  /// What the pass saw, in words the office can act on.
+  note String
+
+  createdAt            DateTime  @default(now())
+  resolvedAt           DateTime?
+  resolvedByStaffUserId String?
+
+  @@index([status, kind, createdAt])
+  @@index([customerId])
+}

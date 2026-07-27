@@ -37,6 +37,7 @@ model Season {
   importBatches ImportBatch[]
   printBatches  PrintBatch[]
   deliveryRoutes DeliveryRoute[]
+  exports       ExportLog[]
 
   @@index([status, opensAt])
   @@index([status, closesAt])
