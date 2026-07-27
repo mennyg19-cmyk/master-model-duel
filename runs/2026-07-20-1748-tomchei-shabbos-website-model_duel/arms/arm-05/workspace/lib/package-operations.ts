@@ -15,6 +15,7 @@ const allowedTransitions: Record<PackageStatus, PackageStatus[]> = {
   PACKED: ["SENT", "PICKED_UP"],
   SENT: [],
   PICKED_UP: [],
+  UNCLAIMED: [],
 };
 
 function readCheckout(wireFormat: Prisma.JsonValue) {

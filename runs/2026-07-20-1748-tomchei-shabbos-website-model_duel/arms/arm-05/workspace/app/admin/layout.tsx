@@ -10,6 +10,7 @@ export default function AdminLayout({ children }: Readonly<{ children: React.Rea
         <Link href="/admin/operations">Operations</Link>
         <Link href="/admin/pos">Point of sale</Link>
         <Link href="/admin/packages">Packages & print</Link>
+        <Link href="/admin/delivery">Delivery operations</Link>
         <Link href="/admin/catalog">Catalog & media</Link>
         <Link href="/admin/settings">Settings</Link>
         <Link href="/admin/staff">Staff & permissions</Link>

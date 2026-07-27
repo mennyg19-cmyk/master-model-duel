@@ -1,0 +1,1 @@
+ALTER TYPE "PackageStatus" ADD VALUE 'UNCLAIMED';

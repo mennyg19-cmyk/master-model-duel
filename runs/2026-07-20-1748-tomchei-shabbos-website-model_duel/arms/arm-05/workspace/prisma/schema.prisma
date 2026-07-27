@@ -41,6 +41,13 @@ enum PackageStatus {
   PACKED
   SENT
   PICKED_UP
+  UNCLAIMED
+}
+
+enum DeliveryRouteStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
 }
 
 enum PrintArtifactKind {
@@ -75,6 +82,9 @@ model StaffUser {
   loginStamps   SessionLoginStamp[]
   auditEvents   AuditEvent[]         @relation("AuditActor")
   packageAudits PackageAudit[]
+  assignedRoutes DeliveryRoute[]     @relation("RouteDriver")
+  createdRoutes  DeliveryRoute[]     @relation("RouteCreator")
+  bulkSchedules  BulkDeliverySchedule[] @relation("BulkScheduleCreator")
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 }
@@ -236,6 +246,7 @@ model Customer {
   identities      CustomerIdentity[]
   addresses       Address[]
   orders          Order[]
+  notifications   DeliveryNotification[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 }
@@ -298,6 +309,7 @@ model Order {
   stripePaymentIntents  StripePaymentIntent[]
   checkoutSessions      CheckoutSession[]
   inventoryReservations InventoryReservation[]
+  bulkSchedules         BulkDeliverySchedule[]
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 
@@ -362,11 +374,92 @@ model Package {
   audits              PackageAudit[]
   shippingQuotes      ShippingQuote[]
   shipmentBoxes       ShipmentBox[]
+  deliveryStop        DeliveryRouteStop?
+  notifications       DeliveryNotification[]
+  pickupReadyAt       DateTime?
+  pickupExpiresAt     DateTime?
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
   @@index([orderId, groupingKey])
   @@index([isActive, status])
+  @@index([pickupReadyAt, pickupExpiresAt])
+}
+
+model DeliveryRoute {
+  id          String              @id @default(cuid())
+  name        String
+  status      DeliveryRouteStatus @default(DRAFT)
+  driverId    String?
+  createdById String
+  startedAt   DateTime?
+  completedAt DateTime?
+  driver      StaffUser?          @relation("RouteDriver", fields: [driverId], references: [id], onDelete: SetNull)
+  createdBy   StaffUser           @relation("RouteCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  stops       DeliveryRouteStop[]
+  links       DriverRouteLink[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([status, driverId])
+}
+
+model DeliveryRouteStop {
+  id          String        @id @default(cuid())
+  routeId     String
+  packageId   String        @unique
+  sequence    Int
+  deliveredAt DateTime?
+  route       DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  package     Package       @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  createdAt   DateTime      @default(now())
+
+  @@unique([routeId, sequence])
+  @@index([routeId, deliveredAt])
+}
+
+model DriverRouteLink {
+  id           String        @id @default(cuid())
+  routeId      String
+  tokenHash    String        @unique
+  pinHash      String?
+  failedAttempts Int         @default(0)
+  throttledUntil DateTime?
+  expiresAt    DateTime?
+  route        DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([routeId, expiresAt])
+}
+
+model DeliveryNotification {
+  id          String    @id @default(cuid())
+  packageId   String?
+  customerId  String?
+  event       String
+  channel     String
+  dedupeKey   String    @unique
+  payload     Json
+  capturedAt  DateTime  @default(now())
+  package     Package?  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([event, capturedAt])
+}
+
+model BulkDeliverySchedule {
+  id          String    @id @default(cuid())
+  orderId     String
+  scheduledById String
+  deliveryDate DateTime
+  window      String
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  scheduledBy StaffUser @relation("BulkScheduleCreator", fields: [scheduledById], references: [id], onDelete: Restrict)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([deliveryDate])
 }
 
 model PackageLine {

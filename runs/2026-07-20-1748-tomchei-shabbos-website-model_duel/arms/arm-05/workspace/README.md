@@ -12,6 +12,8 @@ P5 adds recipient fulfillment choices, per-recipient greetings, local delivery Z
 
 P8 adds a native Shippo REST wrapper for rate shopping, label purchase/refund, tracking, and address validation. `SHIPPO_API_TOKEN` enables live Shippo calls; optional `SHIPPO_FEDEX_CARRIER_ACCOUNT_ID` and `SHIPPO_UPS_CARRIER_ACCOUNT_ID` constrain quotes to organization accounts. Without a token, deterministic local fixtures power the same rate-margin and label lifecycle flow. Shipped checkout recipients charge the highest eligible ground-equivalent quote while labels buy the cheapest and save the exact spread.
 
+P9 adds delivery routes with cached deterministic local geocodes, route and greeting-card PDFs, and per-route hashed driver magic links with optional PIN throttling. Driver links expose only their route stops, capture a route-link ID when a stop is delivered, and expire when every stop is delivered. Shipping-to-delivery reroutes require manager confirmation and void active unshipped labels first; pickup, bulk-delivery test captures, and bearer-authenticated expiry/reminder crons are included. Set `CRON_SECRET` to invoke either cron route.
+
 ## Local verification
 
 `npm run dev` starts the app on port 3105. It requires configured Clerk keys and PostgreSQL on port 4105 for protected staff flows. `/api/health` returns 503 rather than claiming success when PostgreSQL is unavailable.
@@ -22,6 +24,6 @@ Run `npm run db:start` in one terminal to launch the workspace-managed PostgreSQ
 
 For local smoke only, set `DEV_AUTH_MODE=true` and an uncommitted random `DEV_AUTH_SECRET` in `.env.local`, then run `npm run dev`. The API accepts a short-lived HMAC-signed `x-dev-session` header only in `next dev`; it resolves the signed user ID through the same PostgreSQL staff records and permissions as Clerk. It is disabled in production and never trusts an email or user ID query parameter.
 
-Start the embedded database with `npm run db:start`, then run `npm run smoke:p1`, `npm run smoke:p2`, `npm run smoke:p3`, `npm run smoke:p4`, `npm run smoke:p5`, `npm run smoke:p6`, `npm run smoke:p7`, or `npm run smoke:p8`. The P8 smoke deploys migrations, seeds the storefront fixture, and proves rate margin math, label void/rebuy, checkout Shippo quotes, tracking refresh, and the unshipped-label guard.
+Start the embedded database with `npm run db:start`, then run `npm run smoke:p1`, `npm run smoke:p2`, `npm run smoke:p3`, `npm run smoke:p4`, `npm run smoke:p5`, `npm run smoke:p6`, `npm run smoke:p7`, `npm run smoke:p8`, or `npm run smoke:p9`. P9 starts and stops the local database itself, applies migrations, seeds the fixture, and proves the S1-S5 delivery, reroute, notification, pickup, and cron checks.
 
 Run `npm run lint`, `npm run typecheck`, `npm test`, `npm run migration:guard`, and `npm run migration:harness` before a handoff.

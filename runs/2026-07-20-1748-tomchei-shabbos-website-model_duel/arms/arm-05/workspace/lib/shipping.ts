@@ -39,7 +39,7 @@ function numberValue(value: { toString(): string } | null) {
   return value === null ? null : Number(value.toString());
 }
 
-function checkoutChargeForPackage(packageRecord: {
+export function checkoutChargeForPackage(packageRecord: {
   addressId: string | null;
   order: { wireFormat: unknown };
 }) {
