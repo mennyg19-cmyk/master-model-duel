@@ -498,3 +498,10 @@
 2026-07-27T18:28:32Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P4,review_aggregate,glm-5.2-high,pending,,,,,,,,placeholder; usage_missing_pending_export
 2026-07-27T18:28:40Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P4,review_aggregate,glm-5.2-high,7d330e70-8ba9-4dd6-9b7f-948b7ca1ebc4,,,,,,,,P4 aggregate; supersedes pending placeholder; usage_missing_pending_export
 2026-07-27T18:32:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P4,fix,gpt-5.6-terra-high,ac37e768-3845-47ef-9d9e-f74feccb69ee,,,,,,,,P4 fix pass; usage pending; usage_missing_pending_export
+2026-07-27T18:39:13Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P5,build,gpt-5.6-terra-high,56a83c82-8c3e-47c7-a16f-cc0b756e729e,,,,,,,,P5 initial build; usage pending; usage_missing_pending_export
+2026-07-27T18:49:59Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P5,review_security,glm-5.2-high,8511528f-ee6c-49e9-8438-461a5d6c82bc,,,,,,,,P5 security; usage pending; usage_missing_pending_export
+2026-07-27T18:49:59Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P5,review_quality,glm-5.2-high,1deefa5c-36c1-49a8-aa7d-04a0b7b2af79,,,,,,,,P5 quality; usage pending; usage_missing_pending_export
+2026-07-27T18:49:59Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P5,review_rules,glm-5.2-high,0bfbd4f6-84e7-46ec-ad59-b79db4f2a166,,,,,,,,P5 rules; usage pending; usage_missing_pending_export
+2026-07-27T18:50:00Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P5,review_clean_code,glm-5.2-high,be643978-bcec-4ef8-aff3-a8d971f0703b,,,,,,,,P5 clean-code; usage pending; usage_missing_pending_export
+2026-07-27T18:54:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P5,review_aggregate,glm-5.2-high,c2f8c005-c760-442f-969c-ce5a4d4dbf7f,,,,,,,,P5 aggregate; usage pending; usage_missing_pending_export
+2026-07-27T19:01:53Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-05,P5,fix,gpt-5.6-terra-high,1fed5b7f-2e44-4d6c-8117-922530fe514c,,,,,,,,P5 fix pass; usage pending; usage_missing_pending_export

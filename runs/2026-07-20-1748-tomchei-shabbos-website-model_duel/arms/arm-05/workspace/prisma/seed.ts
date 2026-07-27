@@ -136,6 +136,26 @@ async function seed() {
     create: { key: "delivery.zipCodes", value: ["11201", "11205", "11211"] },
     update: { value: ["11201", "11205", "11211"] },
   });
+  await prisma.appSetting.upsert({
+    where: { key: "checkout.deliveryRules" },
+    create: {
+      key: "checkout.deliveryRules",
+      value: {
+        allowedZipCodes: ["11201", "11205", "11211"],
+        bulkDeliveryFeeCents: 1200,
+        perPackageDeliveryFeeCents: 700,
+        deliveryDates: ["2026-03-02", "2026-03-03"],
+      },
+    },
+    update: {
+      value: {
+        allowedZipCodes: ["11201", "11205", "11211"],
+        bulkDeliveryFeeCents: 1200,
+        perPackageDeliveryFeeCents: 700,
+        deliveryDates: ["2026-03-02", "2026-03-03"],
+      },
+    },
+  });
   console.log("P3 seasons, storefront catalog, customer, order, and inventory seeded.");
 }
 

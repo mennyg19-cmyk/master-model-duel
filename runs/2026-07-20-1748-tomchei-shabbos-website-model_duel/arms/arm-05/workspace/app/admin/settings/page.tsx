@@ -2,10 +2,10 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
-type Settings = { deliveryZipCodes: string[]; storeStatus: "OPEN" | "CLOSED" };
+type Settings = { deliveryZipCodes: string[]; deliveryDates: string[]; storeStatus: "OPEN" | "CLOSED" };
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>({ deliveryZipCodes: [], storeStatus: "CLOSED" });
+  const [settings, setSettings] = useState<Settings>({ deliveryZipCodes: [], deliveryDates: [], storeStatus: "CLOSED" });
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -21,6 +21,7 @@ export default function SettingsPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         deliveryZipCodes: settings.deliveryZipCodes,
+        deliveryDates: settings.deliveryDates,
         storeStatus: settings.storeStatus,
       }),
     });
@@ -35,7 +36,7 @@ export default function SettingsPage() {
       <div className="tabs"><a href="#orders">Orders</a><a href="#shipping">Shipping</a><a href="#email">Email</a><a href="#developer">Developer</a></div>
       <form className="card" onSubmit={saveSettings}>
         <section id="orders"><h2>Orders</h2><label>Store status<select onChange={(event) => setSettings({ ...settings, storeStatus: event.target.value as Settings["storeStatus"] })} value={settings.storeStatus}><option value="OPEN">Open</option><option value="CLOSED">Closed</option></select></label><p>Package types, pickup locations, and follow-up rules will be connected in later operations phases.</p></section>
-        <section id="shipping"><h2>Shipping</h2><label>Delivery ZIP codes<textarea onChange={(event) => setSettings({ ...settings, deliveryZipCodes: event.target.value.split(/[\s,]+/).filter(Boolean) })} value={settings.deliveryZipCodes.join(", ")} /></label><p>Rates and shipping rules will be added before checkout launches.</p></section>
+        <section id="shipping"><h2>Shipping</h2><label>Delivery ZIP codes<textarea onChange={(event) => setSettings({ ...settings, deliveryZipCodes: event.target.value.split(/[\s,]+/).filter(Boolean) })} value={settings.deliveryZipCodes.join(", ")} /></label><label>Purim-week delivery dates<textarea onChange={(event) => setSettings({ ...settings, deliveryDates: event.target.value.split(/[\s,]+/).filter(Boolean) })} value={settings.deliveryDates.join(", ")} /></label><p>Checkout uses these ZIP and date rules now. Live carrier rates arrive in P8.</p></section>
         <section id="email"><h2>Email</h2><p>Newsletter preferences are live; campaigns and transactional email arrive in P11.</p></section>
         <section id="developer"><h2>Developer</h2><p>Health, environment validation, and the local test database are available now.</p></section>
         <button className="button" type="submit">Save settings</button>

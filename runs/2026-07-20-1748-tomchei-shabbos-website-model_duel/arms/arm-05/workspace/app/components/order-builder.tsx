@@ -253,7 +253,8 @@ export function OrderBuilder({ products }: { products: Product[] }) {
         <h2>{lines.length} {lines.length === 1 ? "gift" : "gifts"}</h2>
         <strong className="cart-total">{formatMoney(total)}</strong>
         <button className="button" disabled={lines.length === 0 || isSaving} onClick={() => void save()} type="button">{isSaving ? "Saving…" : "Save draft"}</button>
-        <p>Checkout and payment open in the next step.</p>
+        <button className="button" disabled={lines.length === 0 || isSaving} onClick={() => { void save().then(() => { window.location.assign("/checkout"); }); }} type="button">Continue to checkout</button>
+        <p>Delivery details and secure payment open in the next step.</p>
       </aside>
       <button className="cart-fab" onClick={() => document.querySelector(".cart-sidebar")?.scrollIntoView({ behavior: "smooth" })} type="button">Cart · {formatMoney(total)}</button>
     </div>

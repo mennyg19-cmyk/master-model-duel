@@ -3,6 +3,7 @@ export const permissions = [
   "audit.read",
   "settings.manage",
   "orders.read",
+  "orders.write",
   "customers.write",
 ] as const;
 
@@ -12,7 +13,7 @@ export type PermissionEffect = "GRANT" | "DENY";
 
 const rolePermissions: Record<StaffRole, readonly Permission[]> = {
   MANAGER: permissions,
-  STAFF: ["orders.read"],
+  STAFF: ["orders.read", "orders.write"],
   DRIVER: [],
 };
 

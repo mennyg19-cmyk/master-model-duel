@@ -1,9 +1,9 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
-export default function UnsubscribePage() {
+function UnsubscribeFlow() {
   const searchParams = useSearchParams();
   const [statusMessage, setStatusMessage] = useState("");
   const [preferences, setPreferences] = useState({ marketing: true, updates: true, reminders: true });
@@ -62,4 +62,8 @@ export default function UnsubscribePage() {
       {statusMessage && <p role="status">{statusMessage}</p>}
     </main>
   );
+}
+
+export default function UnsubscribePage() {
+  return <Suspense fallback={<main><p>Loading email preferences…</p></main>}><UnsubscribeFlow /></Suspense>;
 }
