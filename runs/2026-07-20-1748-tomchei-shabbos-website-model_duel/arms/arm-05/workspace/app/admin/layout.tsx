@@ -6,6 +6,8 @@ export default function AdminLayout({ children }: Readonly<{ children: React.Rea
       <aside className="sidebar">
         <strong>Tomchei Shabbos</strong>
         <Link href="/admin">Overview</Link>
+        <Link href="/admin/catalog">Catalog & media</Link>
+        <Link href="/admin/settings">Settings</Link>
         <Link href="/admin/staff">Staff & permissions</Link>
         <Link href="/admin/audit">Security audit</Link>
       </aside>

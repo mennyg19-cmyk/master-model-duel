@@ -17,11 +17,13 @@
     "db:migrate": "tsx scripts/db.ts migrate",
     "db:seed": "tsx scripts/db.ts seed",
     "smoke:p1": "tsx scripts/smoke-p1.ts",
-    "smoke:p2": "tsx scripts/smoke-p2.ts"
+    "smoke:p2": "tsx scripts/smoke-p2.ts",
+    "smoke:p3": "tsx scripts/smoke-p3.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "7.6.1",
     "@prisma/client": "^6.19.3",
+    "@vercel/blob": "^2.6.1",
     "next": "16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8",

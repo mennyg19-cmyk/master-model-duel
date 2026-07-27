@@ -133,6 +133,7 @@ model Season {
 model Product {
   id                 String               @id @default(cuid())
   seasonId           String
+  mediaId            String?
   sku                String
   name               String
   description        String?
@@ -145,6 +146,7 @@ model Product {
   isInventoryTracked Boolean              @default(true)
   isActive           Boolean              @default(true)
   season             Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  media              MediaAsset?          @relation(fields: [mediaId], references: [id], onDelete: SetNull)
   options            ProductOption[]
   restrictedAddons   ProductAddOn[]       @relation("ParentProduct")
   addonFor           ProductAddOn[]       @relation("AddOnProduct")
@@ -158,6 +160,28 @@ model Product {
 
   @@unique([seasonId, sku])
   @@index([seasonId, isActive])
+  @@index([mediaId])
+}
+
+model MediaAsset {
+  id          String    @id @default(cuid())
+  url         String    @unique
+  pathname    String    @unique
+  contentType String
+  sizeBytes   Int
+  createdAt   DateTime  @default(now())
+  products    Product[]
+}
+
+model NewsletterSubscriber {
+  id                    String    @id @default(cuid())
+  email                 String    @unique
+  preferences           Json      @default("{\"marketing\":true,\"updates\":true,\"reminders\":true}")
+  confirmationTokenHash String?
+  confirmedAt           DateTime?
+  unsubscribedAt        DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 }
 
 model ProductOption {

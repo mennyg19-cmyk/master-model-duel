@@ -23,6 +23,45 @@ async function seed() {
     },
     update: { name: "Classic Mishloach Manos", priceCents: 3600 },
   });
+  await prisma.productOption.upsert({
+    where: { productId_name_value: { productId: product.id, name: "Presentation", value: "Classic ribbon" } },
+    create: { productId: product.id, name: "Presentation", value: "Classic ribbon", priceAdjustmentCents: 0 },
+    update: { priceAdjustmentCents: 0 },
+  });
+  const premiumProduct = await prisma.product.upsert({
+    where: { seasonId_sku: { seasonId: season.id, sku: "PURIM-BOX-02" } },
+    create: {
+      seasonId: season.id,
+      sku: "PURIM-BOX-02",
+      name: "Community Celebration Box",
+      description: "A larger collection for sharing with family, friends, or a whole office.",
+      kind: "PACKAGE",
+      priceCents: 5400,
+    },
+    update: { name: "Community Celebration Box", priceCents: 5400 },
+  });
+  await prisma.inventoryItem.upsert({
+    where: { productId: premiumProduct.id },
+    create: { productId: premiumProduct.id, quantityOnHand: 0 },
+    update: { quantityOnHand: 0, quantityReserved: 0 },
+  });
+  const archivedSeason = await prisma.season.upsert({
+    where: { year: 2025 },
+    create: { name: "Purim 2025", year: 2025, status: "CLOSED" },
+    update: { name: "Purim 2025", status: "CLOSED" },
+  });
+  await prisma.product.upsert({
+    where: { seasonId_sku: { seasonId: archivedSeason.id, sku: "PURIM-BOX-2025" } },
+    create: {
+      seasonId: archivedSeason.id,
+      sku: "PURIM-BOX-2025",
+      name: "Purim 2025 Keepsake Box",
+      description: "A past collection shown for inspiration only.",
+      kind: "PACKAGE",
+      priceCents: 4200,
+    },
+    update: { name: "Purim 2025 Keepsake Box" },
+  });
   const customer = await prisma.customer.upsert({
     where: { emailNormalized: "seed@example.test" },
     create: {
@@ -71,7 +110,12 @@ async function seed() {
     create: { productId: product.id, quantityOnHand: 25 },
     update: { quantityOnHand: 25, quantityReserved: 0 },
   });
-  console.log("P2 season, catalog, customer, order, and inventory seeded.");
+  await prisma.appSetting.upsert({
+    where: { key: "delivery.zipCodes" },
+    create: { key: "delivery.zipCodes", value: ["11201", "11205", "11211"] },
+    update: { value: ["11201", "11205", "11211"] },
+  });
+  console.log("P3 seasons, storefront catalog, customer, order, and inventory seeded.");
 }
 
 void seed()
