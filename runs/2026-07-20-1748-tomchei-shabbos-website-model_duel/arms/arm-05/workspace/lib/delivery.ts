@@ -51,17 +51,41 @@ function fixtureCoordinates(normalizedAddress: string) {
   };
 }
 
-async function geocodeAddress(address: Address) {
-  if (address.latitude && address.longitude) {
-    return { latitude: Number(address.latitude), longitude: Number(address.longitude), provider: "stored" };
+function shouldUseFixtureGeocodes() {
+  return process.env.TEST_MODE === "true" && process.env.NODE_ENV !== "production";
+}
+
+async function mapboxCoordinates(address: Address) {
+  const accessToken = process.env.MAPBOX_ACCESS_TOKEN;
+  if (!accessToken) {
+    throw new Error("MAPBOX_ACCESS_TOKEN must be configured to create routes from ungeocoded addresses.");
   }
+  const query = new URLSearchParams({
+    q: addressLabel(address),
+    country: "US",
+    limit: "1",
+    access_token: accessToken,
+  });
+  const response = await fetch(`https://api.mapbox.com/search/geocode/v6/forward?${query}`);
+  if (!response.ok) throw new Error("Mapbox could not resolve this address. Confirm it before creating a route.");
+  const body = await response.json() as { features?: Array<{ geometry?: { coordinates?: unknown } }> };
+  const coordinates = body.features?.[0]?.geometry?.coordinates;
+  if (!Array.isArray(coordinates) || typeof coordinates[0] !== "number" || typeof coordinates[1] !== "number") {
+    throw new Error("Mapbox could not resolve this address. Confirm it before creating a route.");
+  }
+  return { latitude: coordinates[1], longitude: coordinates[0], provider: "mapbox" };
+}
+
+async function geocodeAddress(address: Address) {
   const cached = await prisma.geocodeCache.findFirst({
     where: { normalizedAddress: address.normalizedAddress, expiresAt: { gt: new Date() } },
   });
-  const coordinates = cached
+  const coordinates = cached && (cached.provider !== "fixture" || shouldUseFixtureGeocodes())
     ? { latitude: Number(cached.latitude), longitude: Number(cached.longitude), provider: cached.provider }
-    : { ...fixtureCoordinates(address.normalizedAddress), provider: "fixture" };
-  if (!cached) {
+    : shouldUseFixtureGeocodes()
+      ? { ...fixtureCoordinates(address.normalizedAddress), provider: "fixture" }
+      : await mapboxCoordinates(address);
+  if (!cached || cached.provider === "fixture") {
     await prisma.geocodeCache.upsert({
       where: { normalizedAddress: address.normalizedAddress },
       create: {
@@ -196,7 +220,7 @@ export async function createRoute(input: { name: string; packageIds: string[]; d
       include: { links: true, stops: true },
     });
     await transaction.auditEvent.create({
-      data: { actorId: input.actorId, action: "delivery.route_created", subjectId: created.id, details: { packageIds: uniquePackageIds, geocodeProvider: "fixture" } },
+      data: { actorId: input.actorId, action: "delivery.route_created", subjectId: created.id, details: { packageIds: uniquePackageIds, geocodeProviders: [...new Set(coordinates.map((coordinate) => coordinate.provider))] } },
     });
     return created;
   });

@@ -24,7 +24,25 @@ export default function SeasonsAdminPage() {
     setMessage("");
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/admin/seasons", { signal: controller.signal })
+      .then(async (response) => ({ response, body: await response.json() as SeasonState & { error?: string } }))
+      .then(({ response, body }) => {
+        if (controller.signal.aborted) return;
+        if (!response.ok) {
+          setMessage(body.error ?? "Unable to load seasons.");
+          return;
+        }
+        setState(body);
+        setTargetSeasonId((current) => current || body.seasons.find((season) => season.status === "OPEN")?.id || "");
+        setMessage("");
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Unable to load seasons.");
+      });
+    return () => controller.abort();
+  }, []);
 
   async function post(body: unknown) {
     const response = await fetch("/api/admin/seasons", {

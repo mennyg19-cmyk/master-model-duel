@@ -149,7 +149,7 @@ export async function performanceReport() {
 
 export async function shippingMarginReport() {
   const shipments = await prisma.shipmentBox.findMany({
-    where: { chargedCents: { not: null }, labelCostCents: { not: null } },
+    where: { chargedCents: { not: null }, labelCostCents: { not: null }, labelVoidedAt: null },
     include: { package: { include: { order: { include: { season: true } } } } },
     orderBy: { createdAt: "desc" },
   });
@@ -183,7 +183,10 @@ export async function exportCsv(dataset: CsvDataset) {
     ].map(csvCell).join(","))].join("\n");
   }
   if (dataset === "item_sales") {
-    const lines = await prisma.orderLine.findMany({ include: { order: { include: { season: true } } } });
+    const lines = await prisma.orderLine.findMany({
+      where: { order: { status: "FINALIZED" } },
+      include: { order: { include: { season: true } } },
+    });
     return ["season,sku,product,quantity,unit_price_cents", ...lines.map((line) => [
       line.order.season.name, line.skuSnapshot, line.productNameSnapshot, line.quantity, line.unitPriceCents,
     ].map(csvCell).join(","))].join("\n");
@@ -255,14 +258,31 @@ export async function commitLegacyImport(batchId: string, actorId: string) {
           },
           update: { recipientName: row.recipient_name || `${customer.firstName} ${customer.lastName}` },
         });
-        await transaction.order.create({
+        const fulfillmentMethod = await transaction.fulfillmentMethod.upsert({
+          where: { code: "DELIVERY" },
+          create: { code: "DELIVERY", name: "Delivery" },
+          update: {},
+          select: { id: true },
+        });
+        const order = await transaction.order.create({
           data: {
             seasonId: season.id, customerId: customer.id, status: "FINALIZED", orderNumber: Number(row.order_number) || null,
             draftReference: `LEGACY-${batchId.slice(0, 8)}-${index}`, totalCents: Number(row.total_cents), paymentStatus: "POSTED",
             wireFormat: { version: 1, legacyBatchId: batchId, sourceOrderNumber: row.order_number },
             lines: { create: { productId: product.id, quantity: Number(row.quantity) || 1, productNameSnapshot: product.name, skuSnapshot: product.sku, unitPriceCents: product.priceCents } },
             payments: { create: { method: "COMP", status: "POSTED", amountCents: Number(row.total_cents), postedAt: new Date(), notes: "Imported legacy payment." } },
-            packages: { create: { recipientName: row.recipient_name || `${customer.firstName} ${customer.lastName}`, greeting: row.greeting || "", groupingKey: `legacy:${index}`, fulfillmentMethod: { connect: { code: "DELIVERY" } }, address: { connect: { id: address.id } } } },
+          },
+          include: { lines: { select: { id: true } } },
+        });
+        await transaction.package.create({
+          data: {
+            orderId: order.id,
+            recipientName: row.recipient_name || `${customer.firstName} ${customer.lastName}`,
+            greeting: row.greeting || "",
+            groupingKey: `legacy:${index}`,
+            fulfillmentMethodId: fulfillmentMethod.id,
+            addressId: address.id,
+            lines: { create: { orderLineId: order.lines[0]!.id, quantity: Number(row.quantity) || 1 } },
           },
         });
       }

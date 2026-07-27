@@ -30,7 +30,27 @@ export default function ReportsPage() {
     setAddressReviews(body.addressReviews);
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/admin/reports", { signal: controller.signal })
+      .then(async (response) => ({ response, body: await response.json() }))
+      .then(({ response, body }) => {
+        if (controller.signal.aborted) return;
+        if (!response.ok) {
+          setMessage(body.error ?? "Reports could not be loaded.");
+          return;
+        }
+        setPerformance(body.performance);
+        setMargins(body.margins.packages);
+        setMarginTotals(Object.values(body.margins.totals));
+        setExports(body.exports);
+        setAddressReviews(body.addressReviews);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Reports could not be loaded.");
+      });
+    return () => controller.abort();
+  }, []);
 
   async function post(action: Record<string, unknown>) {
     const response = await fetch("/api/admin/reports", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(action) });

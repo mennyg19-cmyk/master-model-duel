@@ -45,6 +45,7 @@ async function createFixturePackage(prisma: PrismaClient, input: { productId: st
 
 async function verifySmoke() {
   process.env.CRON_SECRET = "p9-cron-secret";
+  process.env.TEST_MODE = "true";
   delete process.env.SHIPPO_API_TOKEN;
   const prisma = new PrismaClient({ datasources: { db: { url: LOCAL_DATABASE_URL } } });
   const runId = randomUUID();

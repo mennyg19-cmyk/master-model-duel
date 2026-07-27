@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { PrismaClient } from "@prisma/client";
-import { createRepeatDraft } from "../lib/repeat-orders";
+import { createRepeatDraft, readRepeatDraft } from "../lib/repeat-orders";
+import { packageDashboard } from "../lib/package-operations";
 import { commitLegacyImport, exportCsv, performanceReport, runStripeReconciliation, shippingMarginReport, stageLegacyImport } from "../lib/reporting";
 import { LOCAL_DATABASE_URL, runWithLocalDatabase, startLocalDatabase, stopLocalDatabase } from "./local-db";
 
@@ -30,11 +31,24 @@ async function verifySmoke() {
       include: { packages: true },
     });
     await prisma.shipmentBox.create({ data: { packageId: order.packages[0].id, packageTypeId: packageType.id, carrier: "Fixture", chargedCents: 1200, labelCostCents: 800, marginCents: 400 } });
-    const [performance, margins, marginCsv] = await Promise.all([performanceReport(), shippingMarginReport(), exportCsv("shipping_margin")]);
+    const voidedShipment = await prisma.shipmentBox.create({ data: { packageId: order.packages[0].id, packageTypeId: packageType.id, carrier: "Voided fixture", chargedCents: 1200, labelCostCents: 800, marginCents: 400, labelVoidedAt: new Date() } });
+    const draft = await prisma.order.create({
+      data: {
+        seasonId: season.id,
+        customerId: customer.id,
+        draftReference: `P12-DRAFT-${randomUUID()}`,
+        wireFormat: { source: "p12-smoke" },
+        lines: { create: { productId: product.id, quantity: 1, productNameSnapshot: "Draft-only item", skuSnapshot: "DRAFT-ONLY", unitPriceCents: product.priceCents } },
+      },
+    });
+    const [performance, margins, marginCsv, itemSalesCsv] = await Promise.all([performanceReport(), shippingMarginReport(), exportCsv("shipping_margin"), exportCsv("item_sales")]);
     assert.ok(performance.some((entry) => entry.year === 2026 && entry.grossCents >= 5000));
     assert.ok(performance.some((entry) => entry.year === 2025));
     assert.ok(margins.packages.some((entry) => entry.packageId === order.packages[0].id && entry.marginCents === 400));
+    assert.ok(!margins.packages.some((entry) => entry.shipmentId === voidedShipment.id));
     assert.match(marginCsv, /charged_cents/);
+    assert.doesNotMatch(itemSalesCsv, /DRAFT-ONLY/);
+    assert.ok(draft.id);
     console.log("S1 passed: multi-season totals and package shipping margins match the seeded ledger.");
 
     const intent = await prisma.stripePaymentIntent.create({ data: { orderId: order.id, stripeIntentId: `pi_p12_${randomUUID().replaceAll("-", "")}`, status: "succeeded", amountCents: 5000 } });
@@ -59,10 +73,11 @@ async function verifySmoke() {
     const staged = await stageLegacyImport(fixture, staff.id);
     assert.equal(staged.errors.length, 0);
     await commitLegacyImport(staged.batchId, staff.id);
-    const imported = await prisma.order.findFirstOrThrow({ where: { draftReference: { startsWith: `LEGACY-${staged.batchId.slice(0, 8)}` } }, include: { lines: true, payments: true, packages: { include: { address: true } } } });
+    const imported = await prisma.order.findFirstOrThrow({ where: { draftReference: { startsWith: `LEGACY-${staged.batchId.slice(0, 8)}` } }, include: { lines: true, payments: true, packages: { include: { address: true, lines: true } } } });
     assert.equal(imported.status, "FINALIZED");
     assert.equal(imported.payments.length, 1);
     assert.equal(imported.packages[0].address?.reviewStatus, "PENDING");
+    assert.equal(imported.packages[0].lines.length, 1);
     assert.equal(await prisma.auditEvent.count({ where: { action: "legacy_import.committed", subjectId: staged.batchId } }), 1);
     console.log("S3 passed: malformed data stays dry-run-only; quoted CSV commits atomically with payment, audit, and address review evidence.");
 
@@ -70,6 +85,8 @@ async function verifySmoke() {
     await prisma.productReplacement.upsert({ where: { sourceProductId_targetProductId: { sourceProductId: sourceProduct.id, targetProductId: product.id } }, create: { sourceProductId: sourceProduct.id, targetProductId: product.id }, update: {} });
     const repeat = await createRepeatDraft(imported.id, season.id);
     assert.ok(repeat.id);
+    const repeatDetails = await readRepeatDraft(repeat.id);
+    assert.equal(repeatDetails?.repeat.lines[0]?.recipient.recipientName, "Legacy, Recipient");
     console.log("S4 passed: a prior-year imported order enters the P10 repeat-order review flow.");
 
     const highestOrderNumber = await prisma.order.aggregate({ _max: { orderNumber: true } });
@@ -85,6 +102,7 @@ async function verifySmoke() {
     }))) });
     assert.equal(await prisma.order.count({ where: { draftReference: { startsWith: scalePrefix } } }), 1000);
     assert.equal(await prisma.package.count({ where: { groupingKey: { startsWith: scalePrefix } } }), 5000);
+    assert.ok((await packageDashboard(51)).total >= 5000);
     const vercel = await readFile(new URL("../vercel.json", import.meta.url), "utf8");
     assert.equal((JSON.parse(vercel).crons as unknown[]).length, 6);
     console.log("S5 scale check passed: 1k orders and 5k packages load; all six cron registrations remain present. Full E2E, nightly batch, and test-console route checks remain manual.");

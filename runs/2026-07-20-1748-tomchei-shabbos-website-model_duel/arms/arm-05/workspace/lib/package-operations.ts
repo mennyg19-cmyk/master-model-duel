@@ -7,7 +7,7 @@ type Transaction = Prisma.TransactionClient;
 type WireLine = { productId: string; productOptionId?: string; quantity: number; recipient: { addressId: string } };
 type CheckoutRecipient = { addressId: string; method: string; greeting: string };
 
-const PACKAGE_DASHBOARD_LIMIT = 250;
+const PACKAGE_DASHBOARD_PAGE_SIZE = 100;
 
 const allowedTransitions: Record<PackageStatus, PackageStatus[]> = {
   NEW: ["PRINTED", "PACKED", "SENT", "PICKED_UP"],
@@ -117,8 +117,11 @@ export function materializeOrderPackages(orderId: string, actorId?: string) {
   return prisma.$transaction((transaction) => materializeFinalizedOrder(transaction, orderId, actorId));
 }
 
-export async function packageDashboard() {
-  const packages = await prisma.package.findMany({
+export async function packageDashboard(page = 1) {
+  const where = { isActive: true };
+  const [total, packages, packageSummaries] = await prisma.$transaction([
+    prisma.package.count({ where }),
+    prisma.package.findMany({
     where: { isActive: true },
     include: {
       order: { select: { id: true, orderNumber: true, draftReference: true } },
@@ -132,10 +135,16 @@ export async function packageDashboard() {
       },
     },
     orderBy: { updatedAt: "desc" },
-    take: PACKAGE_DASHBOARD_LIMIT,
-  });
+      skip: (page - 1) * PACKAGE_DASHBOARD_PAGE_SIZE,
+      take: PACKAGE_DASHBOARD_PAGE_SIZE,
+    }),
+    prisma.package.findMany({
+      where,
+      select: { fulfillmentMethod: { select: { code: true } }, lines: { select: { quantity: true } } },
+    }),
+  ]);
   const channels = new Map<string, { code: string; packageCount: number; productionUnits: number }>();
-  for (const packageRecord of packages) {
+  for (const packageRecord of packageSummaries) {
     const productionUnits = packageItemCount(packageRecord.lines);
     const channel = channels.get(packageRecord.fulfillmentMethod.code) ?? {
       code: packageRecord.fulfillmentMethod.code,
@@ -149,6 +158,9 @@ export async function packageDashboard() {
   const productionUnits = [...channels.values()].reduce((total, channel) => total + channel.productionUnits, 0);
   return {
     packages,
+    total,
+    page,
+    pageSize: PACKAGE_DASHBOARD_PAGE_SIZE,
     channels: [...channels.values()],
     productionUnits,
     consolidatedItems: Math.max(0, productionUnits - packages.length),

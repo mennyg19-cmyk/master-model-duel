@@ -26,7 +26,9 @@ const requestSchema = z.discriminatedUnion("action", [
 export async function GET(request: Request) {
   const authorization = await authorize(request, "orders.read");
   if (!authorization.ok) return NextResponse.json({ error: authorization.error }, { status: authorization.status });
-  return NextResponse.json(await packageDashboard());
+  const requestedPage = Number(new URL(request.url).searchParams.get("page"));
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  return NextResponse.json(await packageDashboard(page));
 }
 
 export async function POST(request: Request) {

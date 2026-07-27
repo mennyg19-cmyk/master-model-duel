@@ -3,6 +3,7 @@ import test from "node:test";
 import { reserveInventory } from "../lib/inventory";
 import { assertOrderTransition, discardOrder, finalizeOrder } from "../lib/orders";
 import { groupPackageCandidates } from "../lib/packages";
+import { createPdf } from "../lib/print-batches";
 import { prisma } from "../lib/db";
 
 test("grouping key uses recipient, address, fulfillment method, and greeting", () => {
@@ -25,6 +26,13 @@ test("order state machine rejects illegal transitions", () => {
     () => assertOrderTransition("FINALIZED", "DISCARDED"),
     /Cannot transition an order from FINALIZED to DISCARDED/,
   );
+});
+
+test("PDF output keeps lines after the first page", () => {
+  const pdf = createPdf({ title: "Packing slips", lines: Array.from({ length: 56 }, (_, index) => `Package ${index + 1}`) }).toString("utf8");
+
+  assert.match(pdf, /\/Count 2/);
+  assert.match(pdf, /Package 56/);
 });
 
 test("concurrent finalizations claim unique seasonal order numbers", {

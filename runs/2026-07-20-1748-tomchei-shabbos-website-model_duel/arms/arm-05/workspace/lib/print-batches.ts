@@ -126,21 +126,32 @@ export function createPdf(document: PrintDocument) {
     .replaceAll("\\", "\\\\")
     .replaceAll("(", "\\(")
     .replaceAll(")", "\\)");
-  const content = [
+  const pages = Array.from(
+    { length: Math.max(1, Math.ceil(document.lines.length / PDF_LINES_PER_PAGE)) },
+    (_, index) => document.lines.slice(index * PDF_LINES_PER_PAGE, (index + 1) * PDF_LINES_PER_PAGE),
+  );
+  const contents = pages.map((lines) => [
     "BT",
     "/F1 16 Tf",
     "72 760 Td",
     `(${pdfText(document.title)}) Tj`,
     "/F1 10 Tf",
-    ...document.lines.slice(0, PDF_LINES_PER_PAGE).flatMap((line) => ["0 -16 Td", `(${pdfText(line)}) Tj`]),
+    ...lines.flatMap((line) => ["0 -16 Td", `(${pdfText(line)}) Tj`]),
     "ET",
-  ].join("\n");
+  ].join("\n"));
+  const pageObjectIds = pages.map((_, index) => 4 + index * 2);
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
+    ...pages.flatMap((_, index) => {
+      const pageObjectId = pageObjectIds[index];
+      const content = contents[index];
+      return [
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${pageObjectId + 1} 0 R >>`,
+        `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
+      ];
+    }),
   ];
   let pdf = "%PDF-1.4\n";
   const offsets = [0];

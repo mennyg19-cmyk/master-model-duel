@@ -17,6 +17,9 @@ type PackageRecord = {
 type Artifact = { id: string; filingGroup: string; kind: string };
 type Dashboard = {
   packages: PackageRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
   channels: { code: string; packageCount: number; productionUnits: number }[];
   productionUnits: number;
   consolidatedItems: number;
@@ -26,6 +29,7 @@ export default function PackagesPage() {
   const [packages, setPackages] = useState<PackageRecord[]>([]);
   const [channels, setChannels] = useState<{ code: string; packageCount: number; productionUnits: number }[]>([]);
   const [summary, setSummary] = useState({ productionUnits: 0, consolidatedItems: 0 });
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 100, total: 0 });
   const [selected, setSelected] = useState<string[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [message, setMessage] = useState("");
@@ -34,10 +38,11 @@ export default function PackagesPage() {
     setPackages(dashboard.packages);
     setChannels(dashboard.channels);
     setSummary({ productionUnits: dashboard.productionUnits, consolidatedItems: dashboard.consolidatedItems });
+    setPagination({ page: dashboard.page, pageSize: dashboard.pageSize, total: dashboard.total });
   }
 
-  async function load(signal?: AbortSignal) {
-    const response = await fetch("/api/admin/packages", { signal });
+  async function load(page = pagination.page, signal?: AbortSignal) {
+    const response = await fetch(`/api/admin/packages?page=${page}`, { signal });
     const body = await response.json();
     if (!response.ok) {
       if (!signal?.aborted) setMessage(body.error ?? "Packages could not be loaded.");
@@ -62,7 +67,7 @@ export default function PackagesPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch("/api/admin/packages", { signal: controller.signal })
+    void fetch("/api/admin/packages?page=1", { signal: controller.signal })
       .then(async (response) => ({ response, body: await response.json() as Dashboard & { error?: string } }))
       .then(({ response, body }) => {
         if (controller.signal.aborted) return;
@@ -133,6 +138,11 @@ export default function PackagesPage() {
       <section className="card ops-list">
         <h2>Package board</h2>
         <p>Select two new packages from one order to regroup them, or select any eligible packages for a bulk stage change.</p>
+        <p>
+          Showing {packages.length ? (pagination.page - 1) * pagination.pageSize + 1 : 0}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total} packages
+          <button className="button secondary" disabled={pagination.page === 1} onClick={() => void load(pagination.page - 1)} type="button">Previous</button>
+          <button className="button secondary" disabled={pagination.page * pagination.pageSize >= pagination.total} onClick={() => void load(pagination.page + 1)} type="button">Next</button>
+        </p>
         <p>
           <button className="button secondary" disabled={selected.length < 2} onClick={() => void runPackageAction({ action: "regroup", packageIds: selected, versions: bulkVersions })} type="button">Regroup selected</button>
           <button className="button secondary" disabled={!selected.length} onClick={() => void runPackageAction({ action: "bulk_status", packageIds: selected, versions: bulkVersions, status: "PRINTED" })} type="button">Mark selected printed</button>

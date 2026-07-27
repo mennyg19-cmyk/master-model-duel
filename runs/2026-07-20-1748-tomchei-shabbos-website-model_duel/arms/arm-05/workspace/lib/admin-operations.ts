@@ -175,12 +175,15 @@ export async function createWalkInPosOrder(input: unknown, actorId: string, requ
   const product = await prisma.product.findUniqueOrThrow({ where: { id: parsed.productId }, include: { inventoryItems: true } });
   if (!product.isActive) throw new Error("This product is no longer available.");
   const emailNormalized = normalizeEmail(parsed.email);
-  const anonymousEmail = "walk-in@local.test";
-  const customer = await prisma.customer.upsert({
-    where: { emailNormalized: emailNormalized ?? anonymousEmail },
-    create: { firstName: parsed.firstName, lastName: parsed.lastName, emailNormalized: emailNormalized ?? anonymousEmail },
-    update: canUpdateCustomer ? { firstName: parsed.firstName, lastName: parsed.lastName } : {},
-  });
+  const customer = emailNormalized
+    ? await prisma.customer.upsert({
+      where: { emailNormalized },
+      create: { firstName: parsed.firstName, lastName: parsed.lastName, emailNormalized },
+      update: canUpdateCustomer ? { firstName: parsed.firstName, lastName: parsed.lastName } : {},
+    })
+    : await prisma.customer.create({
+      data: { firstName: parsed.firstName, lastName: parsed.lastName },
+    });
   const address = await prisma.address.create({
     data: { customerId: customer.id, recipientName: `${customer.firstName} ${customer.lastName}`, line1: "Walk-in pickup", city: "Brooklyn", state: "NY", postalCode: "11201", normalizedAddress: `walkin|${randomUUID()}` },
   });
