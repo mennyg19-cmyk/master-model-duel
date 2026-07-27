@@ -323,6 +323,11 @@ export async function createPosOrder(
   actorId: string,
   requestUrl: string,
 ) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, select: { wireFormat: true } });
+  const source = order?.wireFormat && typeof order.wireFormat === "object" && !Array.isArray(order.wireFormat)
+    ? (order.wireFormat as { source?: unknown }).source
+    : undefined;
+  if (source !== "POS") throw new Error("Only orders created through staff POS can accept an offline payment.");
   const checkout = await startCheckout(orderId, input, requestUrl, true);
   await completeCheckout(checkout.sessionId, `evt_pos_${checkout.sessionId}`);
   return prisma.$transaction(async (transaction) => {
@@ -347,6 +352,33 @@ export async function voidOfflinePayment(paymentId: string, actorId: string) {
     const activePayments = await transaction.payment.count({ where: { orderId: payment.orderId, status: "POSTED" } });
     await transaction.order.update({ where: { id: payment.orderId }, data: { paymentStatus: activePayments ? "POSTED" : "VOIDED" } });
     await transaction.auditEvent.create({ data: { actorId, action: "payment.offline_voided", subjectId: paymentId, details: { orderId: payment.orderId } } });
+  });
+}
+
+export async function refundStripePayment(paymentId: string, actorId: string) {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId }, include: { stripeIntent: true } });
+  if (!payment || payment.method !== "STRIPE" || payment.status !== "POSTED" || !payment.stripeIntent) {
+    throw new Error("Only a posted Stripe payment can be refunded.");
+  }
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) throw new Error("Stripe refunds require STRIPE_SECRET_KEY.");
+  const response = await fetch("https://api.stripe.com/v1/refunds", {
+    method: "POST",
+    headers: { authorization: `Bearer ${secretKey}`, "content-type": "application/x-www-form-urlencoded", "idempotency-key": `staff-refund-${payment.id}` },
+    body: new URLSearchParams({ payment_intent: payment.stripeIntent.stripeIntentId }),
+  });
+  const body = await response.json() as { id?: string; error?: { message?: string } };
+  if (!response.ok || !body.id) throw new Error(body.error?.message ?? "Stripe could not issue the refund.");
+  await prisma.$transaction(async (transaction) => {
+    await transaction.payment.update({ where: { id: payment.id }, data: { status: "REFUNDED" } });
+    const activePayments = await transaction.payment.count({ where: { orderId: payment.orderId, status: "POSTED" } });
+    await transaction.order.update({
+      where: { id: payment.orderId },
+      data: { paymentStatus: activePayments ? "POSTED" : "REFUNDED" },
+    });
+    await transaction.auditEvent.create({
+      data: { actorId, action: "payment.stripe_refunded", subjectId: payment.id, details: { orderId: payment.orderId, refundId: body.id } },
+    });
   });
 }
 

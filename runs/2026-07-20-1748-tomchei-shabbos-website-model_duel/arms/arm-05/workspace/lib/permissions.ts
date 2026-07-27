@@ -4,7 +4,10 @@ export const permissions = [
   "settings.manage",
   "orders.read",
   "orders.write",
+  "orders.refund",
+  "customers.read",
   "customers.write",
+  "imports.manage",
 ] as const;
 
 export type Permission = (typeof permissions)[number];
@@ -13,7 +16,7 @@ export type PermissionEffect = "GRANT" | "DENY";
 
 const rolePermissions: Record<StaffRole, readonly Permission[]> = {
   MANAGER: permissions,
-  STAFF: ["orders.read", "orders.write"],
+  STAFF: ["orders.read", "orders.write", "customers.read", "customers.write"],
   DRIVER: [],
 };
 

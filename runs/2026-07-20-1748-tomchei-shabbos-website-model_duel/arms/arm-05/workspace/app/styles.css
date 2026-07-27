@@ -24,9 +24,14 @@ label { font-weight: 700; }
 .sidebar { background: var(--ink); color: white; padding: 28px 20px; }
 .sidebar a { display: block; margin: 14px 0; text-decoration: none; }
 .content { padding: 36px; }
+.admin-alert { background: #fff0e9; border-left: 4px solid var(--accent); margin: 0 0 20px; padding: 10px 12px; }
+.ops-list { margin-top: 24px; }
+.ops-row { align-items: center; border-top: 1px solid var(--line); display: flex; gap: 16px; justify-content: space-between; padding: 12px 0; }
+.ops-row span:last-child { color: var(--muted); text-align: right; }
 .notice { background: #fff0e9; border-left: 4px solid var(--accent); margin-bottom: 20px; padding: 12px; }
 .error { color: #a12828; font-weight: 700; }
 @media (max-width: 700px) { .shell { display: block; } .sidebar { padding: 16px 24px; } .sidebar a { display: inline-block; margin-right: 16px; } .content { padding: 28px 20px; } }
+@media (max-width: 700px) { .ops-row { align-items: start; flex-direction: column; gap: 4px; } .ops-row span:last-child { text-align: left; } }
 
 .closed-banner { background: var(--ink); color: white; padding: 10px 24px; text-align: center; }
 .store-header { align-items: center; background: white; border-bottom: 1px solid var(--line); display: flex; gap: 24px; justify-content: space-between; padding: 18px max(24px, calc((100vw - 1000px) / 2)); position: sticky; top: 0; z-index: 2; }

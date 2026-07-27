@@ -8,6 +8,16 @@ export default function AdminPage() {
       <p className="lead">Manage the live catalog and storefront settings alongside secure staff access.</p>
       <div className="grid">
         <section className="card">
+          <h2>Order operations</h2>
+          <p>Search live orders, work the Today queue, stage imports, and trace staff actions.</p>
+          <Link className="button" href="/admin/operations">Open operations</Link>
+        </section>
+        <section className="card">
+          <h2>Walk-in POS</h2>
+          <p>Build a cash or check order with server-validated prices and inventory.</p>
+          <Link className="button secondary" href="/admin/pos">Open point of sale</Link>
+        </section>
+        <section className="card">
           <h2>Catalog & media</h2>
           <p>Add packages and add-ons, upload product photos, and spot missing imagery.</p>
           <Link className="button" href="/admin/catalog">Manage catalog</Link>
