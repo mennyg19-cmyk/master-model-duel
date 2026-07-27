@@ -7,7 +7,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 | arm-01 | 5 | 8 | 14 | | 18.0 | 12.0 | **15.0** | **72.0** | — | no |
 | arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** | — | no |
 | arm-03 | **6** | **8** | **15** | | **18.0** | **11.0** | **11.0** | **69.0** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
-| arm-04 | **7** | **8** | **15** | | **18.0** | | | | inv_novel=6; bonus_plan | **yes** (join after Test 6; Opus 5 high; T6 rerun) |
+| arm-04 | **7** | **8** | **15** | | **18.0** | **14.0** | | | inv_novel=6; bonus_plan | **yes** (join after Test 6; Opus 5 high; T6 rerun) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -32,7 +32,7 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 | Headline | Winner arm | Notes |
 |---|---|---|
 | With external reviewer (1+2+4+6 renorm) | **arm-02** (95.4/100) | Test 3 skipped |
-| Solo commit (1+2+5 renorm) | **arm-02** (92.2/100) | |
+| Solo commit (1+2+5 renorm) | **arm-04** (44/45 → **97.8/100**) | Late join; originals: arm-02 92.2 |
 | Best interviewer (1b) | **arm-04** (tie 8/8; wins efficiency 0.70 on 10 turns; tq 2.00) | Original duel: arm-02 (tq 2.00 vs 1.98) |
 
 ## Test 4 notes (partial)
@@ -90,7 +90,8 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 - **arm-01:** **12.0/15** — self-review 1B·6M·1m; fixed SR-01–07; residual **3B·14M·25m** ([aggregate](arms/arm-01/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 3/6 (3 clean-code blockers, 0 security blockers). Fix rate 4/4. Regressions 3/3. Hygiene 2/2.
 - **arm-02:** **12.5/15** — self-review 3M·4m; fixed SR-01–07 (all); residual **1B·11M·20m** ([aggregate](arms/arm-02/results/AGGREGATE-RESIDUAL-REVIEW.md)). Residual 4.5/6 (1 adoption-debt blocker). Fix rate 4/4. Regressions 2/3 (verify-email flow untested). Hygiene 2/2.
 - **arm-03:** **11.0/15** — self-review 1B·6M·9m; fixed SR-B1 + SR-M1–M6; residual **0B·5M·10m** ([aggregate](arms/arm-03/results/AGGREGATE-RESIDUAL-REVIEW.md), [score](arms/arm-03/results/TEST5-SCORE.md)). Residual 3.5/6. Fix rate 3/4 (75%). Regressions 3/3. Hygiene 1.5/2.
-- **Test 5 winner: arm-02** (fewer residual blockers, full minor fix pass)
+- **arm-04:** **14.0/15** — self-review 1B·4M·12m; fixed F-01–F-05 + 8 minors; residual **0B·3M·14m** ([aggregate](arms/arm-04/results/AGGREGATE-RESIDUAL-REVIEW.md), [score](arms/arm-04/results/TEST5-SCORE.md)). Residual 5.0/6. Fix rate 4/4. Regressions 3/3. Hygiene 2/2.
+- **Test 5 winner: arm-04** (0 residual blockers; full self-major fix; cleanest residual panel)
 
 ## Test 2 notes
 
