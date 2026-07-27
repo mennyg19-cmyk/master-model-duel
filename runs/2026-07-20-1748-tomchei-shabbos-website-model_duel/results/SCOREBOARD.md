@@ -22,10 +22,16 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 
 ## Cost (from COST-LEDGER.csv)
 
-| Arm | Builder $ | Full pipeline $ | Solo TCO (T5) |
+Backfilled 2026-07-27 from Cursor usage export (`usage-events-2026-07-27.csv`). `verify-cost-ledger.ps1 -RequireUsage` → **ok=true**.
+
+| Arm | Builder $ | Full pipeline $ | Solo TCO (T5 lineage) |
 |---|---:|---:|---:|
-| arm-01 | | | |
-| arm-02 | | | |
+| arm-01 | 88.60 | 106.82 | 85.42 |
+| arm-02 | 296.41 | 319.83 | 286.19 |
+| arm-03 | Included* | 33.72† | Included* |
+| arm-04 | 622.27 | 663.03 | 607.98 |
+
+\* Grok contestant rows export as `Included` (no dollar amount). † arm-03 full pipeline $ is **reviewer (glm) billed only**.
 
 ## Headlines (Option D)
 
