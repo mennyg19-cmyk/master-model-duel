@@ -14,11 +14,11 @@ const subscribeSchema = z.object({
 });
 
 const unsubscribeSchema = z.object({
-  token: z.string().min(20).max(1000),
+  token: z.string().min(20).max(1000).optional(),
 });
 
 const preferencesSchema = z.object({
-  token: z.string().min(20).max(1000),
+  token: z.string().min(20).max(1000).optional(),
   preferences: z.object({
     marketing: z.boolean(),
     updates: z.boolean(),
@@ -29,6 +29,11 @@ const preferencesSchema = z.object({
 const subscribeAttempts = new Map<string, { count: number; startedAt: number }>();
 const subscribeWindowMs = 60_000;
 const maximumSubscribeAttempts = 5;
+
+function readCookie(request: Request, name: string) {
+  const entry = request.headers.get("cookie")?.split(";").find((value) => value.trim().startsWith(`${name}=`));
+  return entry?.trim().slice(name.length + 1) ?? null;
+}
 
 function isRateLimited(request: Request) {
   const clientAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
@@ -50,17 +55,19 @@ export async function POST(request: Request) {
   const parsed = subscribeSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   const { confirmationToken } = await subscribe(parsed.data.email);
-  try {
-    await deliverSubscriptionConfirmation(parsed.data.email, confirmationToken, new URL(request.url).origin);
-  } catch (error) {
-    console.error("Newsletter confirmation delivery failed.", error);
-    return NextResponse.json({ error: "We could not send a confirmation email. Please try again later." }, { status: 503 });
+  if (confirmationToken) {
+    try {
+      await deliverSubscriptionConfirmation(parsed.data.email, confirmationToken, new URL(request.url).origin);
+    } catch {
+      console.error("Newsletter confirmation delivery failed.");
+      return NextResponse.json({ error: "We could not send a confirmation email. Please try again later." }, { status: 503 });
+    }
   }
   return NextResponse.json({ message: "Check your email to confirm your subscription." }, { status: 202 });
 }
 
 export async function GET(request: Request) {
-  const token = new URL(request.url).searchParams.get("token");
+  const token = new URL(request.url).searchParams.get("token") ?? readCookie(request, "newsletter-preferences-token");
   if (!token) return NextResponse.json({ error: "A valid email preferences link is required." }, { status: 400 });
   const subscription = await getNewsletterSubscription(token);
   if (!subscription) return NextResponse.json({ error: "This email preferences link is invalid or expired." }, { status: 400 });
@@ -70,7 +77,8 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   if (!hasSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   const parsed = preferencesSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success || !(await updateNewsletterPreferences(parsed.data.token, parsed.data.preferences))) {
+  const token = parsed.success ? parsed.data.token ?? readCookie(request, "newsletter-preferences-token") : null;
+  if (!token || !parsed.success || !(await updateNewsletterPreferences(token, parsed.data.preferences))) {
     return NextResponse.json({ error: "This email preferences link is invalid or expired." }, { status: 400 });
   }
   return NextResponse.json({ message: "Your email preferences have been saved." });
@@ -79,8 +87,12 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   if (!hasSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   const parsed = unsubscribeSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success || !(await unsubscribe(parsed.data.token))) {
+  const token = parsed.success ? parsed.data.token ?? readCookie(request, "newsletter-unsubscribe-token") : null;
+  if (!token || !parsed.success || !(await unsubscribe(token))) {
     return NextResponse.json({ error: "This unsubscribe link is invalid or expired." }, { status: 400 });
   }
-  return NextResponse.json({ message: "You have been unsubscribed." });
+  const response = NextResponse.json({ message: "You have been unsubscribed." });
+  response.cookies.delete({ name: "newsletter-preferences-token", path: "/api/newsletter" });
+  response.cookies.delete({ name: "newsletter-unsubscribe-token", path: "/api/newsletter" });
+  return response;
 }

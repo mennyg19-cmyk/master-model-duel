@@ -27,6 +27,7 @@ async function verifyNewsletter() {
   process.env.NEWSLETTER_TOKEN_SECRET = "smoke-secret";
   const {
     confirmSubscription,
+    createNewsletterPreferencesToken,
     createUnsubscribeToken,
     getNewsletterSubscription,
     readUnsubscribeToken,
@@ -35,15 +36,17 @@ async function verifyNewsletter() {
     updateNewsletterPreferences,
   } = await import("../lib/newsletter");
   const { confirmationToken } = await subscribe("newsletter@example.test");
+  assert.ok(confirmationToken);
   const subscriber = await confirmSubscription(confirmationToken);
   assert.ok(subscriber);
-  const token = createUnsubscribeToken(subscriber.id);
-  assert.ok(readUnsubscribeToken(token));
-  assert.equal(readUnsubscribeToken(`${token}changed`), null);
+  const preferenceToken = createNewsletterPreferencesToken(subscriber.id);
+  const unsubscribeToken = createUnsubscribeToken(subscriber.id);
+  assert.ok(readUnsubscribeToken(unsubscribeToken));
+  assert.equal(readUnsubscribeToken(`${unsubscribeToken}changed`), null);
   assert.equal(readUnsubscribeToken(createUnsubscribeToken(subscriber.id, Date.now() - 1)), null);
-  assert.equal(await updateNewsletterPreferences(token, { marketing: false, updates: true, reminders: false }), true);
-  assert.deepEqual((await getNewsletterSubscription(token))?.preferences, { marketing: false, updates: true, reminders: false });
-  assert.equal(await unsubscribe(token), true);
+  assert.equal(await updateNewsletterPreferences(preferenceToken, { marketing: false, updates: true, reminders: false }), true);
+  assert.deepEqual((await getNewsletterSubscription(preferenceToken))?.preferences, { marketing: false, updates: true, reminders: false });
+  assert.equal(await unsubscribe(unsubscribeToken), true);
 }
 
 async function runSmoke() {

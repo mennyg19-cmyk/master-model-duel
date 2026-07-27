@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { completeCheckout, isValidStripeSignature, refundSafetyPayment } from "@/lib/checkout";
 import { prisma } from "@/lib/db";
+import { queueOrderLifecycleEmail } from "@/lib/email";
 
 type StripeEvent = {
   id?: string;
@@ -28,7 +29,7 @@ async function markRefunded(event: StripeEvent) {
     if (!intent?.paymentId) return { replayed: false };
     await transaction.payment.update({ where: { id: intent.paymentId }, data: { status: "REFUNDED" } });
     await transaction.order.update({ where: { id: intent.orderId }, data: { paymentStatus: "REFUNDED" } });
-    return { replayed: false };
+    return { replayed: false, orderId: intent.orderId };
   });
 }
 
@@ -52,7 +53,9 @@ export async function POST(request: Request) {
     return NextResponse.json(completed);
   }
   if (event.type === "charge.refunded" || event.type === "payment_intent.canceled") {
-    return NextResponse.json({ received: true, ...(await markRefunded(event)) });
+    const refunded = await markRefunded(event);
+    if (!refunded.replayed && refunded.orderId) await queueOrderLifecycleEmail(refunded.orderId, "REFUND");
+    return NextResponse.json({ received: true, ...refunded });
   }
   await prisma.webhookEvent.upsert({
     where: { provider_externalId: { provider: "stripe", externalId: event.id } },

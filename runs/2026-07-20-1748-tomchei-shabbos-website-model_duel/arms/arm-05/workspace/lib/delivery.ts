@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createPdf } from "@/lib/print-batches";
 import { checkoutChargeForPackage, voidPackageLabel } from "@/lib/shipping";
+import { dispatchSms } from "@/lib/sms";
 
 const DELIVERY_CODES = ["DELIVERY", "LOCAL_DELIVERY"];
 const MAGIC_LINK_TTL_MS = 24 * 60 * 60 * 1_000;
@@ -102,6 +103,7 @@ async function captureNotification(input: {
   dedupeKey: string;
   payload: Prisma.InputJsonValue;
 }) {
+  if (input.channel === "SMS") return dispatchSms(input);
   return prisma.deliveryNotification.upsert({
     where: { dedupeKey: input.dedupeKey },
     create: input,

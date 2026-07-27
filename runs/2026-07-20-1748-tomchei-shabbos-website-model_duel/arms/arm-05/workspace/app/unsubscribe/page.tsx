@@ -7,14 +7,18 @@ function UnsubscribeFlow() {
   const searchParams = useSearchParams();
   const [statusMessage, setStatusMessage] = useState("");
   const [preferences, setPreferences] = useState({ marketing: true, updates: true, reminders: true });
+  const [hasSubscription, setHasSubscription] = useState(false);
   const token = searchParams.get("token");
 
   useEffect(() => {
-    if (!token) return;
-    void fetch(`/api/newsletter?token=${encodeURIComponent(token)}`)
+    const url = token ? `/api/newsletter?token=${encodeURIComponent(token)}` : "/api/newsletter";
+    void fetch(url)
       .then(async (response) => ({ ok: response.ok, body: await response.json() }))
       .then(({ ok, body }) => {
-        if (ok) setPreferences(body.preferences);
+        if (ok) {
+          setPreferences(body.preferences);
+          setHasSubscription(true);
+        }
         else setStatusMessage(body.error);
       });
   }, [token]);
@@ -23,7 +27,7 @@ function UnsubscribeFlow() {
     const response = await fetch("/api/newsletter", {
       method: "DELETE",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify(token ? { token } : {}),
     });
     const body = await response.json();
     setStatusMessage(response.ok ? body.message : body.error);
@@ -33,7 +37,7 @@ function UnsubscribeFlow() {
     const response = await fetch("/api/newsletter", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ token, preferences }),
+      body: JSON.stringify(token ? { token, preferences } : { preferences }),
     });
     const body = await response.json();
     setStatusMessage(response.ok ? body.message : body.error);
@@ -44,7 +48,7 @@ function UnsubscribeFlow() {
       <p className="eyebrow">Email preferences</p>
       <h1>Unsubscribe from updates</h1>
       <p className="lead">Choose the updates you want, or unsubscribe entirely.</p>
-      <fieldset disabled={!token}>
+      <fieldset disabled={!hasSubscription}>
         <legend>Send me</legend>
         {(["marketing", "updates", "reminders"] as const).map((preference) => (
           <label key={preference}>
@@ -57,8 +61,8 @@ function UnsubscribeFlow() {
           </label>
         ))}
       </fieldset>
-      <button className="button secondary" disabled={!token} onClick={() => void savePreferences()}>Save preferences</button>
-      <button className="button" disabled={!token} onClick={() => void unsubscribe()}>Unsubscribe</button>
+      <button className="button secondary" disabled={!hasSubscription} onClick={() => void savePreferences()}>Save preferences</button>
+      <button className="button" disabled={!hasSubscription} onClick={() => void unsubscribe()}>Unsubscribe</button>
       {statusMessage && <p role="status">{statusMessage}</p>}
     </main>
   );

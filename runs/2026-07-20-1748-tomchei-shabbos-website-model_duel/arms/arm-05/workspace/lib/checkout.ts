@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { queueOrderLifecycleEmail } from "@/lib/email";
 import { materializeFinalizedOrder } from "@/lib/package-operations";
 import { quoteCheckoutShipping } from "@/lib/shipping";
 
@@ -215,6 +216,7 @@ export async function startCheckout(orderId: string, input: unknown, requestUrl:
       status: "OPEN",
     },
   });
+  await queueOrderLifecycleEmail(orderId, "PAYMENT_LINK", provider.url);
   return { url: provider.url, sessionId: provider.sessionId, local: provider.local, totalCents: details.totalCents };
 }
 
@@ -236,7 +238,7 @@ async function reserveLineInventory(
 }
 
 export async function completeCheckout(sessionId: string, eventId: string) {
-  return prisma.$transaction(async (transaction) => {
+  const completed = await prisma.$transaction(async (transaction) => {
     const session = await transaction.checkoutSession.findUnique({
       where: { providerSessionId: sessionId },
       include: {
@@ -261,17 +263,18 @@ export async function completeCheckout(sessionId: string, eventId: string) {
           replayed: true,
           refundNeeded: session.status === "SAFETY_REFUND_REQUIRED",
           paymentIntentId: session.providerIntentId,
+          orderId: session.orderId,
         };
       }
       throw error;
     }
-    if (session.status === "COMPLETED") return { replayed: true, refundNeeded: false };
+    if (session.status === "COMPLETED") return { replayed: true, refundNeeded: false, orderId: session.orderId };
     if (session.status === "SAFETY_REFUND_REQUIRED") {
-      return { replayed: true, refundNeeded: true, paymentIntentId: session.providerIntentId };
+      return { replayed: true, refundNeeded: true, paymentIntentId: session.providerIntentId, orderId: session.orderId };
     }
     if (session.amountCents !== session.order.totalCents || session.order.status !== "DRAFT") {
       await transaction.checkoutSession.update({ where: { id: session.id }, data: { status: "SAFETY_REFUND_REQUIRED" } });
-      return { replayed: false, refundNeeded: true, paymentIntentId: session.providerIntentId };
+      return { replayed: false, refundNeeded: true, paymentIntentId: session.providerIntentId, orderId: session.orderId };
     }
 
     const seasons = await transaction.$queryRaw<{ nextOrderNumber: number; status: string }[]>(Prisma.sql`
@@ -309,8 +312,12 @@ export async function completeCheckout(sessionId: string, eventId: string) {
     await transaction.checkoutSession.update({ where: { id: session.id }, data: { status: "COMPLETED" } });
     await materializeFinalizedOrder(transaction, session.orderId);
     await transaction.auditEvent.create({ data: { action: "checkout.completed", subjectId: session.orderId, details: { sessionId, paymentId: payment.id } } });
-    return { replayed: false, refundNeeded: false };
+    return { replayed: false, refundNeeded: false, orderId: session.orderId };
   });
+  if (!completed.replayed && !completed.refundNeeded) {
+    await queueOrderLifecycleEmail(completed.orderId, "ORDER_CONFIRMATION");
+  }
+  return completed;
 }
 
 export async function postOfflinePayment(orderId: string, method: Extract<PaymentMethod, "CASH" | "CHECK">, actorId: string, notes?: string) {
@@ -390,6 +397,7 @@ export async function refundStripePayment(paymentId: string, actorId: string) {
       data: { actorId, action: "payment.stripe_refunded", subjectId: payment.id, details: { orderId: payment.orderId, refundId: body.id } },
     });
   });
+  await queueOrderLifecycleEmail(payment.orderId, "REFUND");
 }
 
 export function isValidStripeSignature(body: string, signature: string | null, secret: string | undefined) {

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { authorizeCron } from "@/lib/cron-auth";
-import { expirePickupPackages } from "@/lib/delivery";
+import { sweepEmailOutbox } from "@/lib/email";
 
 export async function GET(request: Request) {
   const rejected = authorizeCron(request);
   if (rejected) return rejected;
-  return NextResponse.json({ expired: await expirePickupPackages() });
+  return NextResponse.json(await sweepEmailOutbox());
 }
 
 export const POST = GET;

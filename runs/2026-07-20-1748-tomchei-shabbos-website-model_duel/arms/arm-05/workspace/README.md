@@ -14,6 +14,7 @@ P8 adds a native Shippo REST wrapper for rate shopping, label purchase/refund, t
 
 P9 adds delivery routes with cached deterministic local geocodes, route and greeting-card PDFs, and per-route hashed driver magic links with optional PIN throttling. Driver links expose only their route stops, capture a route-link ID when a stop is delivered, and expire when every stop is delivered. Shipping-to-delivery reroutes require manager confirmation and void active unshipped labels first; pickup, bulk-delivery test captures, and bearer-authenticated expiry/reminder crons are included. Set `CRON_SECRET` to invoke either cron route.
 P10 adds manager-controlled season setup and Open/Closed lifecycle, optional scheduled opening, cross-season replacement mappings, and customer/staff repeat-order flows. Repeat orders pause at a review page to confirm mapped items, recipients, and greetings before the new-season draft is created. `season-auto-flip` uses the existing `CRON_SECRET` bearer policy.
+P11 adds an isolated Resend adapter, editable transactional templates, subscriber lists, campaigns, and a retrying transactional outbox. `RESEND_API_KEY` and `RESEND_FROM_EMAIL` enable live delivery; local development captures messages when credentials are absent or `EMAIL_TEST_MODE=true`. Vercel registers the outbox, log-purge, pickup-expiry, payment-reminder, and season-auto-flip crons; each requires `CRON_SECRET`.
 
 ## Local verification
 
@@ -25,6 +26,6 @@ Run `npm run db:start` in one terminal to launch the workspace-managed PostgreSQ
 
 For local smoke only, set `DEV_AUTH_MODE=true` and an uncommitted random `DEV_AUTH_SECRET` in `.env.local`, then run `npm run dev`. The API accepts a short-lived HMAC-signed `x-dev-session` header only in `next dev`; it resolves the signed user ID through the same PostgreSQL staff records and permissions as Clerk. It is disabled in production and never trusts an email or user ID query parameter.
 
-Start the embedded database with `npm run db:start`, then run `npm run smoke:p1`, `npm run smoke:p2`, `npm run smoke:p3`, `npm run smoke:p4`, `npm run smoke:p5`, `npm run smoke:p6`, `npm run smoke:p7`, `npm run smoke:p8`, `npm run smoke:p9`, or `npm run smoke:p10`. P9 and P10 start and stop the local database themselves, apply migrations, seed the fixture, and prove their phase smoke checks.
+Start the embedded database with `npm run db:start`, then run `npm run smoke:p1`, `npm run smoke:p2`, `npm run smoke:p3`, `npm run smoke:p4`, `npm run smoke:p5`, `npm run smoke:p6`, `npm run smoke:p7`, `npm run smoke:p8`, `npm run smoke:p9`, `npm run smoke:p10`, or `npm run smoke:p11`. P9 through P11 start and stop the local database themselves, apply migrations, seed the fixture, and prove their phase smoke checks.
 
 Run `npm run lint`, `npm run typecheck`, `npm test`, `npm run migration:guard`, and `npm run migration:harness` before a handoff.
