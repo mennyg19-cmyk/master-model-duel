@@ -16,6 +16,7 @@ const PLACEHOLDER_SESSION_SECRET = 'change-me-to-a-32-character-random-string';
 
 const MIN_DISTINCT_SECRET_CHARACTERS = 12;
 const MIN_WEBHOOK_SECRET_LENGTH = 24;
+const MIN_CRON_SECRET_LENGTH = 24;
 const WEAK_SECRET_PATTERN = /change[-_ ]?me|placeholder|example|insecure|^0+$/i;
 
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
@@ -157,6 +158,24 @@ export const ENV_VARIABLES: EnvVariableSpec[] = [
     example: '',
     secret: true,
   },
+  {
+    key: 'MAPBOX_ACCESS_TOKEN',
+    description:
+      'Mapbox token used to turn a delivery address into coordinates so route stops can be ' +
+      'ordered. Empty is allowed only on this machine, where an offline stand-in places ' +
+      'addresses instead; a deployment that plans real routes must set it.',
+    example: '',
+    secret: true,
+  },
+  {
+    key: 'CRON_SECRET',
+    description:
+      'Bearer secret the scheduled-job endpoints require. Empty means every cron endpoint ' +
+      'refuses every request, which is the safe reading of "not configured" — so a hosted ' +
+      'deployment has to set it or its sweepers never run. At least 24 characters.',
+    example: '',
+    secret: true,
+  },
 ];
 
 const baseSchema = z.object({
@@ -178,6 +197,8 @@ const baseSchema = z.object({
   SHIPPO_API_TOKEN: z.string().optional(),
   SHIPPO_FEDEX_ACCOUNT_ID: z.string().optional(),
   SHIPPO_UPS_ACCOUNT_ID: z.string().optional(),
+  MAPBOX_ACCESS_TOKEN: z.string().optional(),
+  CRON_SECRET: z.string().optional(),
   TRUST_PROXY_HEADERS: z
     .enum(['true', 'false'])
     .default('false')
@@ -253,6 +274,40 @@ export const envSchema = baseSchema.superRefine((env, ctx) => {
       message:
         `SHIPPING_PROVIDER=local is only allowed when APP_URL is a loopback address, but APP_URL is ` +
         `${env.APP_URL}. Deploy with SHIPPING_PROVIDER=shippo`,
+    });
+  }
+
+  // Same loopback rule again, for the weakest of the stand-ins: made-up
+  // coordinates plan a van's afternoon, and off this machine that is a real
+  // driver sent to the wrong end of town.
+  if (!env.MAPBOX_ACCESS_TOKEN && !isLoopbackUrl(env.APP_URL)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MAPBOX_ACCESS_TOKEN'],
+      message:
+        'MAPBOX_ACCESS_TOKEN is required unless APP_URL is a loopback address, where an ' +
+        'offline stand-in places addresses instead',
+    });
+  }
+
+  if (env.CRON_SECRET !== undefined && env.CRON_SECRET !== '' && env.CRON_SECRET.length < MIN_CRON_SECRET_LENGTH) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['CRON_SECRET'],
+      message: `CRON_SECRET must be at least ${MIN_CRON_SECRET_LENGTH} characters when it is set`,
+    });
+  }
+
+  // A deployment with no cron secret has no working sweepers: pickups never
+  // expire and no payment reminder is ever sent. On this machine that is a
+  // choice; anywhere else it is a silent outage.
+  if (!env.CRON_SECRET && !isLoopbackUrl(env.APP_URL)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['CRON_SECRET'],
+      message:
+        'CRON_SECRET is required unless APP_URL is a loopback address: without it every ' +
+        'scheduled-job endpoint refuses every request',
     });
   }
 

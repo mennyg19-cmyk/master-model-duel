@@ -131,6 +131,50 @@ type AuditDetails = {
   /// R-177. Somebody asked the carrier whether this address exists before a
   /// label was bought against it.
   'shipping.address_validated': { isValid: boolean; postalCode: string };
+  /// UR-004, R-075. A van's afternoon: which boxes are on it and which day it is for.
+  'route.created': { stopCount: number; deliveryDay: string | null; unplacedCount: number };
+  'route.driver_assigned': { driverStaffUserId: string | null };
+  /// The moment the recipients are told the box is coming today (G-023): the
+  /// count is what went out, not what was on the route, because a second start
+  /// notifies nobody.
+  'route.started': { stopCount: number; notified: number };
+  /// UR-015, G-025. A credential was handed to somebody who is not staff, so the
+  /// row says which link and whether it needs a PIN — never the token itself.
+  'route.link_issued': { linkId: string; hasPin: boolean; expiresAt: string };
+  'route.link_revoked': { linkId: string };
+  /// G-025: every Delivered tap, with the link that made it. `linkId` is null
+  /// when the office marked it from the printed sheet, which is the difference
+  /// between "the driver says so" and "the office says so".
+  'route.stop_delivered': { routeId: string; linkId: string | null; source: 'driver_link' | 'office' };
+  'route.completed': { stopCount: number };
+  /// UR-002, G-005. The box changed how it travels and the customer's charge did
+  /// not, which is the pair an auditor is checking.
+  'package.method_switched': {
+    fromMethodCode: string;
+    toMethodCode: string;
+    feeCents: number;
+    labelVoided: boolean;
+  };
+  /// UR-004, G-027. A shipping box lifted onto a van because it was next door to
+  /// a stop the driver was making anyway.
+  'package.rerouted': { routeId: string; labelVoided: boolean; milesFromStop: number };
+  /// UR-010, G-026. The counter told somebody their box is on the shelf, and
+  /// when it stops waiting for them.
+  'pickup.ready_notified': { expiresAt: string };
+  'pickup.collected': never;
+  /// R-182. The nightly sweep found a box past its holding date. The box stays
+  /// on the shelf and stays collectable — this row is what turns it into a
+  /// phone call, and it is written per box so the office can see which one.
+  'pickup.expired': { expiresAt: string | null };
+  /// G-021. The office set a delivery day and window over a stack of boxes at
+  /// once; `customerCount` is how many people were written to, not how many boxes.
+  'delivery.bulk_scheduled': {
+    batchId: string;
+    packageCount: number;
+    customerCount: number;
+    deliveryDay: string;
+    deliveryWindow: string;
+  };
   'staff.invited': { email: string; role: StaffRole };
   'staff.role_changed': { from: StaffRole; to: StaffRole };
   'staff.confirmed': never;

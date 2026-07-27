@@ -17,6 +17,11 @@ export function lineTotalWithAddOns(line: {
   return line.lineTotalCents + sumCents(line.addOns.map((addOn) => addOn.lineTotalCents));
 }
 
+/** How many things are in a box, for a row that says "3 item(s)". */
+export function sumLineQuantities(lines: { quantity: number }[]): number {
+  return lines.reduce((count, line) => count + line.quantity, 0);
+}
+
 type BuildableLine = { recipientName: string | null; fulfillmentMethodId: string | null };
 
 /** A line the assignment step has finished with, so it carries a destination. */

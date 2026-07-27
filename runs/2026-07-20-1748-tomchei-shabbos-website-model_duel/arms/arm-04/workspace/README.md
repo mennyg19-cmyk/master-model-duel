@@ -1,7 +1,7 @@
 # Tomchei Shabbos — Mishloach Manos platform
 
 Greenfield rebuild of the nonprofit Purim mishloach manos platform.
-This repository currently contains **phases P1 to P8**:
+This repository currently contains **phases P1 to P9**:
 
 - **P1** — foundation, identity, roles, permissions, staff tooling.
 - **P2** — the domain core as schema plus engine: seasons, catalog, customers and
@@ -16,9 +16,12 @@ This repository currently contains **phases P1 to P8**:
 - **P6** — the operations hub, the order desk, the counter and CSV imports.
 - **P7** — the package board, splitting and regrouping, and the nightly print run.
 - **P8** — carriage: carrier rates, the margin engine, labels and tracking.
+- **P9** — the van: delivery routes and driver links, the pickup counter, bulk
+  scheduling, the follow-up list and the scheduled sweeps.
 
-Delivery routes, notifications and reporting land in later phases of
-`shared/MERGED-BUILD-PLAN.md`.
+Repeat orders, the mail and SMS transport, and reporting land in later phases of
+`shared/MERGED-BUILD-PLAN.md`. P9 writes every customer message into a
+notification outbox; nothing is actually posted until that transport exists.
 
 ## Ports
 
@@ -72,6 +75,7 @@ entirely and just set `DATABASE_URL`.
 | `npm run smoke:p6` | P6 smoke: dashboard, order desk, POS, imports, and all of it at crunch scale |
 | `npm run smoke:p7` | P7 smoke: the package board, splitting, the nightly batch and the three artifacts |
 | `npm run smoke:p8` | P8 smoke: carrier rates, the margin, buying and cancelling a label, tracking |
+| `npm run smoke:p9` | P9 smoke: building a route, the driver link, rerouting, pickup, bulk scheduling and the crons |
 | `npm run fixtures:scale` | Generates 1,000 orders and 5,000 packages; `-- clear` takes them out again |
 
 `npm run smoke` needs `npm run dev` running and starts from an empty database
@@ -148,6 +152,10 @@ document that can carry script, served from this site's origin.
 | `/admin/pos`, `/admin/pos/[customerId]` | Find or create the customer, then the storefront's own builder and checkout pointed at the till |
 | `/admin/customers`, `/admin/customers/[customerId]` | The directory and one person's orders and address book |
 | `/admin/imports`, `/admin/imports/[batchId]` | Upload a CSV, read what it will do row by row, then commit it in one transaction |
+| `/admin/routes`, `/admin/routes/[routeId]` | Build a route from the waiting boxes or just schedule their day; assign a driver, hand out a link, print the sheet and the cards, tick stops off |
+| `/admin/pickup` | The counter: what is ready, what is blocked and why, the door list, and the collected stamp |
+| `/admin/follow-up` | The call list: money owed, boxes nobody came for, deliveries promised and not out |
+| `/drive/[token]`, `/driver` | The volunteer's phone — one route, no account — and the staff driver's list of their own vans |
 
 The counter is the storefront: `/admin/pos/[customerId]` renders the same product
 panel, cart and recipient picker as `/order`, and the same checkout summary priced
@@ -198,6 +206,39 @@ Settings → Shipping. With no origin, no box types, or no carrier answering, th
 is priced at the administrator's flat rate and the quote row says `FALLBACK` — an
 outage during Purim week must not close the store.
 
+## The van, the counter and the sweeps
+
+`/admin/routes` is where a manager ticks the boxes going out together and either
+builds a route from them or just tells those customers which day they are coming.
+Stops are placed with `MAPBOX_ACCESS_TOKEN` through the shared `GeocodeCache` — the
+same cache the address book fills, so a house looked up when a donor saved it is
+free when the route is planned — and ordered nearest-first from the shipping room.
+With no token an offline stand-in places addresses instead; env validation refuses
+it off this machine, because a real driver sent to a made-up point is a wasted
+afternoon.
+
+A driver gets a link, not an account: a random token whose SHA-256 is all the
+database keeps, an optional 4-digit PIN kept as a salted scrypt hash and throttled
+after five wrong tries, and a page that shows one route's stops with a Google Maps
+link and a Delivered button. Every tap is audited with the link that made it. The
+printed route sheet is the same run on paper, because a phone with no signal must
+not be a stopped van.
+
+Moving a box between shipping and delivery keeps the fee the customer agreed to and
+cancels any carrier label through the P8 void hook. A van passing a shipping box's
+door is offered it as a suggestion, and lifting it on takes a manager's explicit
+confirmation, because that is what spends the label.
+
+`/admin/pickup` is the counter: a box is announced only once it is packed and its
+food is on the shelf, the notice goes out once, and the door list prints what is
+waiting. `/admin/follow-up` is the call list — money owed, boxes nobody came for,
+deliveries promised and not out — filtered one reason at a time.
+
+Two scheduled jobs run behind `CRON_SECRET` as a bearer token: `/api/cron/pickup-expiry`
+stamps boxes nobody collected, and `/api/cron/payment-reminder` chases overdue
+orders once each. No secret configured means both endpoints refuse everybody, which
+is the safe reading of "not set up"; a hosted deployment must set it.
+
 ## Domain model
 
 The Prisma schema is a folder, one file per concern: `identity`, `customers`,
@@ -230,6 +271,12 @@ The engine that goes with it:
 | What a sweep of orders did | `src/lib/orders/bulk-actions.ts` — bounded batches, each order attempted on its own and reported as updated, skipped or conflicted |
 | Whose cart the counter is holding | `src/lib/pos/counter.ts` — a POS draft is owned by the staff member who opened it as well as the customer, so it cannot collide with the customer's own |
 | What a spreadsheet will do before it does it | `src/lib/imports/import-service.ts` — staging writes a verdict per row and nothing else; the commit writes every row or none |
+| What order the van drives in | `src/lib/routing/route-service.ts` — nearest-neighbour from the shipping room, with anything the geocoder could not place put last for the manager to handle |
+| Whether a driver link opens | `src/lib/routing/route-links.ts` — hashed token, hashed PIN, five tries, and dead on completion or revocation |
+| Whether a box may change how it travels | `src/lib/routing/reroute.ts` — the fee is never re-priced, a bought label is cancelled first, and a box already gone refuses |
+| Whether a pickup box may be announced | `src/lib/pickup/pickup-service.ts` — packed *and* in stock, held for seven days, and the row says which of the two is missing |
+| Who gets told what, once | `src/lib/notifications/outbox.ts` — every customer message is a row with a unique dedupe key, so a second press is a no-op rather than a second text |
+| Who needs ringing | `src/lib/scheduling/follow-up.ts` — unpaid, unclaimed and undelivered on one list, one reason at a time |
 
 Order numbers are per season and gapless: the counter increments inside the same
 transaction that places the order, so a rollback puts the number back.

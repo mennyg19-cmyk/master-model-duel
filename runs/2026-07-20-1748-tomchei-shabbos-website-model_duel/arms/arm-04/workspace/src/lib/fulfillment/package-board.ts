@@ -132,6 +132,7 @@ export type PackageDetail = {
   version: number;
   stage: PackageStage;
   recipientName: string;
+  methodId: string;
   methodLabel: string;
   methodKind: FulfillmentKind;
   destination: string;
@@ -196,6 +197,7 @@ export async function readPackageDetail(
     version: box.version,
     stage: box.stage,
     recipientName: box.recipientName,
+    methodId: box.fulfillmentMethodId,
     methodLabel: box.fulfillmentMethod.label,
     methodKind: box.fulfillmentMethod.kind,
     destination: destinationLabel(box) ?? '—',

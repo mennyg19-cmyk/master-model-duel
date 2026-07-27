@@ -2,13 +2,14 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { advanceStageAction, editPackageAction } from '../../actions';
+import { switchMethodAction } from '../../../routes/actions';
 import { BackLink } from '@/components/admin/list-controls';
 import { CarriageCard } from '@/components/admin/carriage-card';
 import { OrderPrintLinks } from '@/components/admin/order-print-links';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Select } from '@/components/ui/field';
+import { Input, Label, Select } from '@/components/ui/field';
 import { FlashMessages } from '@/components/ui/flash';
 import { readActiveSeason } from '@/lib/admin/dashboard';
 import { requirePermission } from '@/lib/auth/staff';
@@ -57,6 +58,17 @@ export default async function PackageDetailPage({
   const nextStages = ALL_STAGES.filter(
     (stage) => checkPackageStage(box.stage, stage, box.methodKind).ok,
   );
+
+  // Only shipping and delivery swap here (UR-002). A pickup box is changed on
+  // the order, because it is a different conversation with the customer.
+  const switchTargets =
+    settled || (box.methodKind !== 'SHIPPING' && box.methodKind !== 'DELIVERY')
+      ? []
+      : await db.fulfillmentMethod.findMany({
+          where: { isActive: true, kind: { in: ['SHIPPING', 'DELIVERY'] }, id: { not: box.methodId } },
+          select: { id: true, label: true },
+          orderBy: { sortOrder: 'asc' },
+        });
 
   return (
     <div className="space-y-6">
@@ -162,6 +174,39 @@ export default async function PackageDetailPage({
       </div>
 
       {carriage ? <CarriageCard carriage={carriage} /> : null}
+
+      {switchTargets.length > 0 ? (
+        <Card data-testid="method-switch">
+          <CardTitle>How it travels</CardTitle>
+          <CardDescription>
+            Swapping between the carrier and a van cancels any label already bought, and needs a
+            reason for the refund trail. What the customer was charged does not change either way —
+            this is an operations decision made after they paid.
+          </CardDescription>
+
+          <form action={switchMethodAction} className="mt-3 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="packageId" value={box.id} />
+            <input type="hidden" name="version" value={box.version} />
+            <div>
+              <Label htmlFor="toMethodId">Send it by</Label>
+              <Select id="toMethodId" name="toMethodId" className="mt-1 w-52">
+                {switchTargets.map((method) => (
+                  <option key={method.id} value={method.id}>
+                    {method.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="grow">
+              <Label htmlFor="reason">Why</Label>
+              <Input id="reason" name="reason" placeholder="Volunteer is passing the door" />
+            </div>
+            <Button type="submit" variant="secondary" data-testid="switch-method">
+              Switch
+            </Button>
+          </form>
+        </Card>
+      ) : null}
 
       {box.greetingMessage ? (
         <Card data-testid="package-greeting">

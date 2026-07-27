@@ -92,6 +92,20 @@ model Package {
   /// picks one of the days the manager opened (UR-009, G-015).
   deliveryDay String?
 
+  /// The hours the office promised on a bulk-scheduled drop ("4pm to 7pm").
+  /// Free text beside `deliveryDay` for the same reason: it is read to a
+  /// customer over the phone, not computed with.
+  deliveryWindow String?
+
+  /// Pickup (UR-010, G-017, G-026). `pickupReadyAt` is set when the counter told
+  /// the customer the box is on the shelf — not when the stock arrived, because
+  /// the deadline runs from the promise, not from the warehouse. `pickupExpiresAt`
+  /// is that deadline, and `pickupExpiredAt` is the cron's stamp on a box nobody
+  /// came for.
+  pickupReadyAt   DateTime?
+  pickupExpiresAt DateTime?
+  pickupExpiredAt DateTime?
+
   /// What this package was actually charged for its fulfillment, frozen at
   /// checkout (G-028). Staff moving a box to another method later is an
   /// operations decision, not a re-price: without this snapshot the recount
@@ -125,6 +139,7 @@ model Package {
   shipmentBoxes     ShipmentBox[]
   shippingQuotes    ShippingQuote[]
   printItems        PrintBatchItem[]
+  routeStop         RouteStop?
 
   @@unique([orderId, groupingKey])
   @@index([stage])

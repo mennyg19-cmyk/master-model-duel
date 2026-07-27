@@ -26,3 +26,19 @@ export function humanizeStatus(value: string): string {
   const spaced = value.replace(/_/g, ' ').toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
+
+/**
+ * How an order is named on a screen, a printed sheet or a message to the
+ * customer. An order that has been placed has a number; a draft has only the
+ * reference the customer was given, and quoting a number it does not have yet
+ * is how somebody rings up asking about order #0.
+ *
+ * One casing everywhere, including mid-sentence: five call sites had grown
+ * "Order #12" and "order #12", which reads as two different things.
+ */
+export function formatOrderLabel(order: {
+  orderNumber: number | null;
+  draftReference: string;
+}): string {
+  return order.orderNumber === null ? order.draftReference : `Order #${order.orderNumber}`;
+}

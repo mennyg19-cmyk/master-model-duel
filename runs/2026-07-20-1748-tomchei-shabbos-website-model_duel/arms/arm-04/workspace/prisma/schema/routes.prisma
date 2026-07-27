@@ -1,0 +1,164 @@
+enum DeliveryRouteStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum RouteStopStatus {
+  PENDING
+  DELIVERED
+}
+
+/// A volunteer's run for one day (UR-004, R-074, R-075).
+///
+/// The route is a plan, not a stage: a box's own progress still lives on the
+/// package. What the route owns is the order the stops are driven in, who is
+/// driving, and when the driving started and finished.
+model DeliveryRoute {
+  id       String @id @default(uuid())
+  seasonId String
+
+  label String
+
+  /// The day the manager opened for volunteer delivery, in the org's own words
+  /// ("Sunday 12 Adar"). Free text for the same reason `Package.deliveryDay` is.
+  deliveryDay String?
+
+  driverStaffUserId String?
+
+  status      DeliveryRouteStatus @default(PLANNED)
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  /// Optimistic-concurrency stamp: two managers reassigning the same route from
+  /// two screens must not silently overwrite each other.
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  season      Season            @relation(fields: [seasonId], references: [id])
+  driver      StaffUser?        @relation("RouteDriver", fields: [driverStaffUserId], references: [id], onDelete: SetNull)
+  stops       RouteStop[]
+  driverLinks DriverRouteLink[]
+
+  @@index([seasonId, status])
+  @@index([driverStaffUserId, status])
+}
+
+/// One box on one route. A package can be on at most one route at a time, which
+/// is what `packageId @unique` says: two vans holding the same box is the bug
+/// that ends with a family getting nothing.
+model RouteStop {
+  id        String @id @default(uuid())
+  routeId   String
+  packageId String @unique
+
+  /// Driving order, from the geocoded plan. Unique per route so a reorder cannot
+  /// leave two stops claiming the same position.
+  sequence Int
+
+  status      RouteStopStatus @default(PENDING)
+  deliveredAt DateTime?
+
+  /// Which link marked it delivered, or null when the office did it from the
+  /// printed sheet. Kept here as well as in the audit row because the route
+  /// screen has to be able to say "the driver did this" without a join.
+  deliveredByLinkId String?
+
+  latitude  Float?
+  longitude Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  route   DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  package Package       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([routeId, sequence])
+  @@index([routeId, status])
+}
+
+/// The driver's way in (UR-004, UR-015, G-025).
+///
+/// A volunteer with a van is not a staff account: they get one unguessable URL
+/// that reaches one route and nothing else. Only the SHA-256 of the token is
+/// stored, so a stolen database row is not a working key, and the optional PIN
+/// is hashed with its own salt because four digits is guessable.
+model DriverRouteLink {
+  id      String @id @default(uuid())
+  routeId String
+
+  tokenHash String @unique
+
+  /// scrypt of the PIN the manager texts, with `pinSalt`. Null when the manager
+  /// chose not to set one.
+  pinHash String?
+  pinSalt String?
+
+  /// Wrong-PIN counter and the lockout it earns. Throttling is what makes a
+  /// four-digit PIN worth having at all.
+  failedPinAttempts Int       @default(0)
+  lockedUntil       DateTime?
+
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  createdAt         DateTime @default(now())
+  createdByStaffId  String?
+
+  route DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@index([routeId, expiresAt])
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+/// The outbox (G-021, G-026).
+///
+/// P9 has to prove that one email and one SMS go out per customer, and that a
+/// day-of notice cannot be sent twice — both are properties of the record, not
+/// of a mail server. So the row is written here with a `dedupeKey` that names
+/// the event it belongs to, and P11 adds the transport that drains it. Nothing
+/// in this table is a secret: the body is the same text the customer receives.
+model NotificationLog {
+  id      String              @id @default(uuid())
+  channel NotificationChannel
+  status  NotificationStatus  @default(QUEUED)
+
+  /// What happened, as a stable string: `pickup.ready`, `delivery.day_of`,
+  /// `delivery.bulk_scheduled`, `payment.reminder`.
+  kind String
+
+  /// Email address or E.164 number, whichever the channel needs.
+  destination String
+
+  subject String?
+  body    String
+
+  /// The event this message is: `delivery.day_of:{packageId}` and so on. Unique,
+  /// which is the whole idempotency mechanism — a second attempt collides
+  /// instead of sending twice.
+  dedupeKey String @unique
+
+  customerId String?
+  orderId    String?
+  packageId  String?
+  routeId    String?
+
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+
+  @@index([kind, createdAt])
+  @@index([orderId])
+  @@index([packageId])
+}

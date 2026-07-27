@@ -26,6 +26,8 @@ const HOSTED_OVERRIDES = {
   STRIPE_SECRET_KEY: 'provider-secret',
   SHIPPING_PROVIDER: 'shippo',
   SHIPPO_API_TOKEN: 'carrier-token',
+  MAPBOX_ACCESS_TOKEN: 'mapbox-token',
+  CRON_SECRET: 'Zx9Qw3Lm7Pv2Rt6Ys1Jd8Hn4',
 };
 
 function pathsRejectedBy(overrides: Record<string, string>): string[] {
@@ -107,6 +109,20 @@ test('the shipping stand-in is loopback-only and shippo needs its token', () => 
     'SHIPPO_API_TOKEN',
   ]);
   assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, SHIPPO_UPS_ACCOUNT_ID: '' }), []);
+});
+
+/**
+ * Both of P9's new secrets are optional on this machine and required anywhere
+ * else: the offline geocoder invents coordinates, and a missing cron secret is
+ * a deployment whose sweepers silently never run.
+ */
+test('route planning and the sweepers need their secrets off this machine', () => {
+  assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, MAPBOX_ACCESS_TOKEN: '' }), [
+    'MAPBOX_ACCESS_TOKEN',
+  ]);
+  assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, CRON_SECRET: '' }), ['CRON_SECRET']);
+  assert.deepEqual(pathsRejectedBy({ CRON_SECRET: 'too-short' }), ['CRON_SECRET']);
+  assert.deepEqual(pathsRejectedBy({ MAPBOX_ACCESS_TOKEN: '', CRON_SECRET: '' }), []);
 });
 
 test('clerk still requires its keys', () => {

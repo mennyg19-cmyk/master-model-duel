@@ -18,6 +18,7 @@ export const PERMISSIONS = {
   'staff.impersonate': 'Sign in as another staff member',
   'audit.view': 'Read the security audit trail',
   'settings.manage': 'Change store settings',
+  'routes.manage': 'Plan delivery routes, hand out driver links and reroute boxes',
   'routes.drive': 'Open assigned delivery routes',
 } as const;
 
@@ -31,11 +32,15 @@ const ROLE_DEFAULTS: Record<StaffRole, readonly Permission[]> = {
   // number is part of the same job as editing the order it is on (UR-014).
   // Packing is what most of the STAFF role does on the two nights that matter,
   // so the board and the printer are theirs by default (UR-005).
+  // Planning a route is packing-table work done by the same people on the same
+  // two nights, so it comes with the board. Driving is not: a route link is a
+  // credential handed to a volunteer, and `routes.drive` is what it grants.
   STAFF: [
     'dashboard.view',
     'orders.view',
     'orders.manage',
     'fulfillment.manage',
+    'routes.manage',
     'customers.view',
     'customers.manage',
   ],
