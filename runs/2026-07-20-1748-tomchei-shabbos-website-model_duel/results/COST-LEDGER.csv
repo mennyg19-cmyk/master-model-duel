@@ -457,3 +457,4 @@
 2026-07-27T07:16:51Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P12,review_aggregate,glm-5.2-high,af31532a-f7fe-4bdf-8a1b-cb482670c955,,,,,,,,P12 aggregate spawn; usage_missing
 2026-07-27T07:18:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-04,P12,fix,claude-opus-5-thinking-high,b7ac9e26-1465-447c-b9c5-0841a0f58de7,,,,,,,,P12 fix 6 majors + minors; usage_missing
 2026-07-27T07:50:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-04,self,self_review,claude-opus-5-thinking-high,b876f1fd-5b2a-4132-80a7-cd994805f369,,,,,,,,Test 5 self-review spawn; usage_missing
+2026-07-27T08:02:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-04,self,self_fix,claude-opus-5-thinking-high,451f1243-3e58-4e0c-8ef1-f222dc0b7cfd,,,,,,,,Test 5 self-fix spawn; usage_missing
