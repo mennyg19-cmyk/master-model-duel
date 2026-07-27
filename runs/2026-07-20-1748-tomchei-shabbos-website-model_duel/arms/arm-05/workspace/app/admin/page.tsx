@@ -18,6 +18,11 @@ export default function AdminPage() {
           <Link className="button secondary" href="/admin/pos">Open point of sale</Link>
         </section>
         <section className="card">
+          <h2>Packages & print</h2>
+          <p>Track grouped physical packages and build nightly slips, labels, and greeting cards.</p>
+          <Link className="button" href="/admin/packages">Open package board</Link>
+        </section>
+        <section className="card">
           <h2>Catalog & media</h2>
           <p>Add packages and add-ons, upload product photos, and spot missing imagery.</p>
           <Link className="button" href="/admin/catalog">Manage catalog</Link>

@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { materializeFinalizedOrder } from "@/lib/package-operations";
 
 const deliveryModes = ["SHIP", "PICKUP", "BULK_DELIVERY", "LOCAL_DELIVERY"] as const;
 const checkoutSchema = z.object({
@@ -298,6 +299,7 @@ export async function completeCheckout(sessionId: string, eventId: string) {
     });
     await transaction.season.update({ where: { id: session.order.seasonId }, data: { nextOrderNumber: { increment: 1 } } });
     await transaction.checkoutSession.update({ where: { id: session.id }, data: { status: "COMPLETED" } });
+    await materializeFinalizedOrder(transaction, session.orderId);
     await transaction.auditEvent.create({ data: { action: "checkout.completed", subjectId: session.orderId, details: { sessionId, paymentId: payment.id } } });
     return { replayed: false, refundNeeded: false };
   });

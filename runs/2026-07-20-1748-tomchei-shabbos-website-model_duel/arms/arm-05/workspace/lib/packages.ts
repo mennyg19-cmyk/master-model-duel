@@ -5,6 +5,18 @@ export type PackageCandidate = {
   greeting: string;
 };
 
+export function formatEnumLabel(value: string) {
+  return value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+export function packageItemCount(lines: readonly { quantity: number }[]) {
+  return lines.reduce((total, line) => total + line.quantity, 0);
+}
+
+export function formatOrderLabel(order: { orderNumber: number | null; draftReference: string }) {
+  return order.orderNumber === null ? order.draftReference : `#${order.orderNumber}`;
+}
+
 export function createPackageGroupingKey(candidate: PackageCandidate) {
   return JSON.stringify([
     candidate.recipientKey.trim().toLowerCase(),

@@ -43,6 +43,12 @@ enum PackageStatus {
   PICKED_UP
 }
 
+enum PrintArtifactKind {
+  PACKING_SLIP
+  LABEL
+  GREETING_CARD
+}
+
 enum PaymentMethod {
   STRIPE
   CASH
@@ -346,6 +352,7 @@ model Package {
   status              PackageStatus     @default(NEW)
   version             Int               @default(1)
   packageTypeId       String?
+  isActive            Boolean           @default(true)
   order               Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
   address             Address?          @relation("PackageAddress", fields: [addressId], references: [id], onDelete: SetNull)
   fulfillmentMethod   FulfillmentMethod @relation(fields: [fulfillmentMethodId], references: [id], onDelete: Restrict)
@@ -359,7 +366,7 @@ model Package {
   updatedAt           DateTime          @updatedAt
 
   @@index([orderId, groupingKey])
-  @@index([status])
+  @@index([isActive, status])
 }
 
 model PackageLine {
@@ -384,6 +391,26 @@ model PackageAudit {
   createdAt DateTime   @default(now())
 
   @@index([packageId, createdAt])
+}
+
+model PrintBatch {
+  id        String          @id @default(cuid())
+  batchKey  String          @unique
+  artifacts PrintArtifact[]
+  createdAt DateTime        @default(now())
+}
+
+model PrintArtifact {
+  id          String            @id @default(cuid())
+  batchId     String
+  filingGroup String
+  kind        PrintArtifactKind
+  packageIds  Json
+  batch       PrintBatch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+
+  @@unique([batchId, filingGroup, kind])
+  @@index([filingGroup, createdAt])
 }
 
 model Payment {

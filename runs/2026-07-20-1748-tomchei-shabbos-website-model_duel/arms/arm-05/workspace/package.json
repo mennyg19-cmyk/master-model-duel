@@ -21,7 +21,8 @@
     "smoke:p3": "tsx scripts/smoke-p3.ts",
     "smoke:p4": "tsx scripts/smoke-p4.ts",
     "smoke:p5": "tsx scripts/smoke-p5.ts",
-    "smoke:p6": "tsx scripts/smoke-p6.ts"
+    "smoke:p6": "tsx scripts/smoke-p6.ts",
+    "smoke:p7": "tsx scripts/smoke-p7.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "7.6.1",
