@@ -15,7 +15,7 @@ import { trimmedField } from '@/lib/forms/form-data';
 import { CHECKOUT_PATH, type BuilderParams } from '@/lib/orders/builder-href';
 import { resolveDraftOwner, type DraftOwner } from '@/lib/orders/draft-access';
 import { readSetting } from '@/lib/settings';
-import { requireOpenStore } from '@/lib/store-state';
+import { requireOpenStore } from '@/lib/http/store-gate';
 
 /**
  * Checkout answers the way the builder does — every card is its own form, and

@@ -11,9 +11,15 @@ import {
   type BulkReport,
 } from '../admin/bulk-report';
 import type { StaffContext } from '../auth/staff';
+import type { Result } from '../core/result';
 import { db } from '../db';
 import { cancelUnpaidOrder, ORDER_HOLDS_MONEY, transitionOrder } from './order-service';
-import { repeatOrderAtCounter, REPEAT_TILL_BUSY } from './repeat-order';
+import {
+  repeatLatestOrderForCustomer,
+  repeatOrderAtCounter,
+  REPEAT_TILL_BUSY,
+  type RepeatResult,
+} from './repeat-order';
 
 /**
  * Bulk actions on the order desk at crunch scale (G-024, R-052).
@@ -52,12 +58,7 @@ export async function bulkChangeStatus(
   for (const id of ids) {
     const order = orders.get(id);
     if (!order) {
-      records.push({
-        id,
-        label: labelOfMissing(id),
-        outcome: 'skipped',
-        detail: 'No longer exists.',
-      });
+      records.push(missingRecord(id));
       continue;
     }
 
@@ -110,37 +111,87 @@ export async function bulkRepeat(
   for (const id of ids) {
     const order = orders.get(id);
     if (!order) {
-      records.push({
-        id,
-        label: labelOfMissing(id),
-        outcome: 'skipped',
-        detail: 'No longer exists.',
-      });
+      records.push(missingRecord(id));
       continue;
     }
 
-    const repeated = await repeatOrderAtCounter(staff, id, seasonId, batchId);
-    if (!repeated.ok) {
-      records.push({
+    records.push(
+      recordRepeatOutcome(
         id,
-        label: labelOfOrder(order),
-        outcome: repeated.code === REPEAT_TILL_BUSY ? 'conflict' : 'skipped',
-        detail: repeated.publicMessage,
-      });
-      continue;
-    }
-
-    records.push({
-      id,
-      label: labelOfOrder(order),
-      outcome: 'applied',
-      detail: `${repeated.value.draftReference}: ${repeated.value.copiedLines} item${
-        repeated.value.copiedLines === 1 ? '' : 's'
-      }${repeated.value.skippedLines.length > 0 ? `, ${repeated.value.skippedLines.length} not on sale` : ''}`,
-    });
+        labelOfOrder(order),
+        await repeatOrderAtCounter(staff, id, seasonId, batchId),
+      ),
+    );
   }
 
   return bulkReport(batchId, 'repeat', records, droppedCount);
+}
+
+/**
+ * The same sweep starting from people rather than orders (R-058).
+ *
+ * The office's version of "call last year's list back": tick the customers,
+ * and each one's most recent order from an earlier season becomes a draft on
+ * the till. A customer who never ordered before is a skip with a reason, not a
+ * silent gap in the batch.
+ */
+export async function bulkRepeatCustomerHistory(
+  staff: StaffContext,
+  customerIds: string[],
+  seasonId: string,
+): Promise<BulkReport> {
+  const batchId = randomUUID();
+  const { ids, droppedCount } = boundedIds(customerIds);
+  const customers = new Map(
+    (
+      await db.customer.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true } })
+    ).map((customer) => [customer.id, customer.fullName]),
+  );
+  const records: BulkRecord[] = [];
+
+  for (const id of ids) {
+    const name = customers.get(id);
+    if (name === undefined) {
+      records.push(missingRecord(id));
+      continue;
+    }
+
+    records.push(
+      recordRepeatOutcome(id, name, await repeatLatestOrderForCustomer(staff, id, seasonId, batchId)),
+    );
+  }
+
+  return bulkReport(batchId, 'repeat-history', records, droppedCount);
+}
+
+/**
+ * One row of a repeat sweep, whether the batch started from orders or people.
+ * A till already holding a cart for that customer is a conflict somebody can
+ * clear; anything else the repeat refused is a skip with its own reason.
+ */
+function recordRepeatOutcome(id: string, label: string, repeated: Result<RepeatResult>): BulkRecord {
+  if (!repeated.ok) {
+    return {
+      id,
+      label,
+      outcome: repeated.code === REPEAT_TILL_BUSY ? 'conflict' : 'skipped',
+      detail: repeated.publicMessage,
+    };
+  }
+
+  return { id, label, outcome: 'applied', detail: describeRepeat(repeated.value) };
+}
+
+function describeRepeat(repeated: RepeatResult): string {
+  const skipped = repeated.skippedLines.length;
+
+  return `${repeated.draftReference}: ${repeated.copiedLines} item${
+    repeated.copiedLines === 1 ? '' : 's'
+  }${skipped > 0 ? `, ${skipped} not on sale` : ''}`;
+}
+
+function missingRecord(id: string): BulkRecord {
+  return { id, label: labelOfMissing(id), outcome: 'skipped', detail: 'No longer exists.' };
 }
 
 async function readOrders(ids: string[]): Promise<Map<string, Order>> {

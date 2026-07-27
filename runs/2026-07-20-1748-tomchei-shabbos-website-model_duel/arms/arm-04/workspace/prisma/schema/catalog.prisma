@@ -72,9 +72,13 @@ model Product {
   isActive        Boolean @default(true)
   sortOrder       Int     @default(0)
 
-  /// The item that takes this one's place next season. Repeat-order (P10) walks
-  /// this link to suggest a swap when last year's product is gone (R-148).
-  replacedByProductId String? @unique
+  /// The item that takes this one's place in a later season. Repeat-order walks
+  /// the whole chain — a 2024 box pointing at a 2025 box pointing at a 2026 box
+  /// resolves to the 2026 one (R-048, R-148, G-013).
+  ///
+  /// Not unique: trimming a catalogue routinely folds several retired boxes into
+  /// one survivor, and a unique index here would have made that unsayable.
+  replacedByProductId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -82,7 +86,7 @@ model Product {
   season       Season                    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   image        MediaAsset?               @relation(fields: [imageAssetId], references: [id], onDelete: SetNull)
   replacedBy   Product?                  @relation("SeasonReplacement", fields: [replacedByProductId], references: [id], onDelete: SetNull)
-  replaces     Product?                  @relation("SeasonReplacement")
+  replaces     Product[]                 @relation("SeasonReplacement")
   options      ProductOption[]
   addOnLimits  AddOnProductRestriction[]
   inventory    InventoryItem?
@@ -94,6 +98,7 @@ model Product {
   @@unique([seasonId, slug])
   @@index([seasonId, isActive])
   @@index([seasonId, category])
+  @@index([replacedByProductId])
 }
 
 /// A choice within a group ("Size: large"). The adjustment is added to the

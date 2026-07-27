@@ -23,8 +23,11 @@ export default async function AdminCatalogPage({
   if (seasons.length === 0) {
     return (
       <p className="text-[var(--color-ink-muted)]">
-        No season exists yet, so there is nothing to put a product in. Seasons are created by the
-        seed today and by the season wizard in a later phase.
+        No season exists yet, so there is nothing to put a product in.{' '}
+        <Link href="/admin/seasons/new" className="underline underline-offset-4">
+          Start one
+        </Link>
+        .
       </p>
     );
   }
@@ -63,6 +66,13 @@ export default async function AdminCatalogPage({
 
           <Link href="/admin/catalog/add-ons" className="pb-2 text-sm underline underline-offset-4">
             Add-ons
+          </Link>
+
+          <Link
+            href="/admin/catalog/replacements"
+            className="pb-2 text-sm underline underline-offset-4"
+          >
+            Replacements
           </Link>
         </div>
       </header>

@@ -17,7 +17,7 @@ import { formatCents } from '@/lib/core/money';
 import { getCurrentCustomer } from '@/lib/customers';
 import { BUILDER_PATH, type BuilderParams } from '@/lib/orders/builder-href';
 import { resolveDraftOwner } from '@/lib/orders/draft-access';
-import { requireOpenStore } from '@/lib/store-state';
+import { requireOpenStore } from '@/lib/http/store-gate';
 
 export const dynamic = 'force-dynamic';
 

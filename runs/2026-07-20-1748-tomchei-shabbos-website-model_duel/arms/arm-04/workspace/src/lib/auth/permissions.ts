@@ -18,6 +18,7 @@ export const PERMISSIONS = {
   'staff.impersonate': 'Sign in as another staff member',
   'audit.view': 'Read the security audit trail',
   'settings.manage': 'Change store settings',
+  'seasons.manage': 'Open and close seasons, schedule the flip and run the new-season wizard',
   'routes.manage': 'Plan delivery routes, hand out driver links and reroute boxes',
   'routes.drive': 'Open assigned delivery routes',
 } as const;
@@ -35,6 +36,8 @@ const ROLE_DEFAULTS: Record<StaffRole, readonly Permission[]> = {
   // Planning a route is packing-table work done by the same people on the same
   // two nights, so it comes with the board. Driving is not: a route link is a
   // credential handed to a volunteer, and `routes.drive` is what it grants.
+  // Neither is opening a season: that puts the shop live and rewrites what it
+  // sells, so `seasons.manage` stays with the manager (UR-008).
   STAFF: [
     'dashboard.view',
     'orders.view',

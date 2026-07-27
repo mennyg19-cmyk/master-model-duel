@@ -9,7 +9,7 @@ import { assignCartLine, unassignCartLine } from '@/lib/orders/assignment';
 import { addProductToCart, removeCartLine, setLineQuantity } from '@/lib/orders/cart-service';
 import { BUILDER_PATH, type BuilderParams } from '@/lib/orders/builder-href';
 import { resolveDraftOwner, resolveDraftOwnerForWrite } from '@/lib/orders/draft-access';
-import { requireOpenStore } from '@/lib/store-state';
+import { requireOpenStore } from '@/lib/http/store-gate';
 
 /**
  * The builder is one page with a form on every card and every cart line, so its

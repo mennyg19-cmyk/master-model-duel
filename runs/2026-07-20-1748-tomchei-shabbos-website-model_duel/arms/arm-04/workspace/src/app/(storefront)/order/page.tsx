@@ -29,7 +29,7 @@ import { db } from '@/lib/db';
 import { BUILDER_PATH, CHECKOUT_PATH, builderHref, type BuilderParams } from '@/lib/orders/builder-href';
 import { addOnsFor, readAddOnOffers, readCart, readProductAvailability } from '@/lib/orders/cart';
 import { readGuestOwner } from '@/lib/orders/draft-access';
-import { requireOpenStore } from '@/lib/store-state';
+import { requireOpenStore } from '@/lib/http/store-gate';
 
 export const dynamic = 'force-dynamic';
 

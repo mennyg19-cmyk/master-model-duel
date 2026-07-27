@@ -1,7 +1,7 @@
 # Tomchei Shabbos — Mishloach Manos platform
 
 Greenfield rebuild of the nonprofit Purim mishloach manos platform.
-This repository currently contains **phases P1 to P9**:
+This repository currently contains **phases P1 to P10**:
 
 - **P1** — foundation, identity, roles, permissions, staff tooling.
 - **P2** — the domain core as schema plus engine: seasons, catalog, customers and
@@ -18,10 +18,13 @@ This repository currently contains **phases P1 to P9**:
 - **P8** — carriage: carrier rates, the margin engine, labels and tracking.
 - **P9** — the van: delivery routes and driver links, the pickup counter, bulk
   scheduling, the follow-up list and the scheduled sweeps.
+- **P10** — next year: the season calendar and its wizard, replacement mappings,
+  and repeat orders for customers, the counter and the office.
 
-Repeat orders, the mail and SMS transport, and reporting land in later phases of
-`shared/MERGED-BUILD-PLAN.md`. P9 writes every customer message into a
-notification outbox; nothing is actually posted until that transport exists.
+The mail and SMS transport, the full year-one import pipeline and reporting land
+in later phases of `shared/MERGED-BUILD-PLAN.md`. Every customer message is
+written into a notification outbox; nothing is actually posted until that
+transport exists.
 
 ## Ports
 
@@ -76,6 +79,7 @@ entirely and just set `DATABASE_URL`.
 | `npm run smoke:p7` | P7 smoke: the package board, splitting, the nightly batch and the three artifacts |
 | `npm run smoke:p8` | P8 smoke: carrier rates, the margin, buying and cancelling a label, tracking |
 | `npm run smoke:p9` | P9 smoke: building a route, the driver link, rerouting, pickup, bulk scheduling and the crons |
+| `npm run smoke:p10` | P10 smoke: the repeat review page, staff and bulk repeat, the mappings screen, the wizard and the auto-flip |
 | `npm run fixtures:scale` | Generates 1,000 orders and 5,000 packages; `-- clear` takes them out again |
 
 `npm run smoke` needs `npm run dev` running and starts from an empty database
@@ -128,6 +132,13 @@ the only place that reads them: the season's own status and the `store.open`
 setting a manager can flip. Hiding buy buttons is a courtesy; `requireOpenStore`
 answers 403 on the ordering routes, which is the half that holds when someone types
 the URL.
+
+`requireOpenStore` lives in `src/lib/http/store-gate.ts`, not beside the reader in
+`store-state.ts`. Reading whether the store is open is a database question any
+service may ask; turning that answer into a 403 is something only a route can do,
+and mixing the two would drag `next/navigation` into every caller of
+`readStoreState`. The four ordering routes — `/order`, its actions, and the two
+checkout halves — import it from there.
 
 ## Media
 
@@ -234,10 +245,49 @@ food is on the shelf, the notice goes out once, and the door list prints what is
 waiting. `/admin/follow-up` is the call list — money owed, boxes nobody came for,
 deliveries promised and not out — filtered one reason at a time.
 
-Two scheduled jobs run behind `CRON_SECRET` as a bearer token: `/api/cron/pickup-expiry`
-stamps boxes nobody collected, and `/api/cron/payment-reminder` chases overdue
-orders once each. No secret configured means both endpoints refuse everybody, which
-is the safe reading of "not set up"; a hosted deployment must set it.
+Three scheduled jobs run behind `CRON_SECRET` as a bearer token:
+`/api/cron/pickup-expiry` stamps boxes nobody collected, `/api/cron/payment-reminder`
+chases overdue orders once each, and `/api/cron/season-flip` opens and closes seasons
+on the calendar below. No secret configured means all three endpoints refuse
+everybody, which is the safe reading of "not set up"; a hosted deployment must set it.
+
+## Next year: seasons, mappings and repeat orders
+
+`/admin/seasons` is the calendar. One season is open at a time — opening one closes
+whichever was open, whether a manager pressed the switch or the scheduled flip did
+it — and the dates are entered as the office's own wall clock rather than UTC.
+Leaving the dates empty means the switch is worked by hand. Closed does not mean
+dark: browsing and the archive stay up, only the order builder refuses (403).
+
+`/admin/seasons/new` copies a season forward: pick which of this year's products to
+take, whether to carry the add-ons, and whether to draw the replacement links as it
+goes. The new season arrives **closed with empty shelves** — nothing is on hand
+until somebody counts it in — so a copied catalogue can never sell stock that does
+not exist.
+
+`/admin/catalog/replacements` is where the office says what last year's item is
+called this year. Mappings are followed as a chain across seasons (2025's tray →
+2026's mini tray → 2027's box) with a depth limit and loop detection, and several
+retired items may fold onto one survivor. An item deliberately left unmapped is not
+silently dropped: the repeat has to ask.
+
+A customer repeating an order lands on a review page before anything is written.
+Each line says what it is now — the same item, a mapped replacement, or nothing —
+and an unmapped line must be picked or taken off before the page will build a cart.
+The default suggestion is the closest price inside the same category, but it starts
+blank so the choice is the customer's. Recipients whose addresses left the book are
+flagged the same way, greeting-card messages carry across, and both the swaps and
+the recipients need an explicit tick. Only then is one draft written, at this year's
+prices.
+
+The counter has the same thing without the page: staff repeat one order onto their
+own till, and `/admin/customers` bulk-repeats a stack of customers' histories,
+reporting by name the ones with nothing to repeat rather than opening empty carts.
+
+`src/lib/imports/prior-year-orders.ts` is the year-one hook the P12 pipeline will
+call: it lands an old order idempotently on `(season, importedOrderReference)`,
+fills the family's address book, and creates anything the catalogue is missing as an
+archived stub, so an imported order repeats like any other.
 
 ## Domain model
 
@@ -259,7 +309,7 @@ The engine that goes with it:
 | Where a quote comes from | `src/lib/shipping/quote-service.ts` — checkout and finalize both price through it, and both fall back to the settings rate when no carrier answers |
 | Buying and cancelling carriage | `src/lib/shipping/label-service.ts` — claimed here before the carrier is called, cancelled at the carrier if anything after that fails |
 | Cached payment totals | `src/lib/orders/payment-status.ts` — always recounted, never adjusted by a delta |
-| Whether the store takes orders | `src/lib/store-state.ts` — season status and the `store.open` setting, both required |
+| Whether the store takes orders | `src/lib/store-state.ts` — season status and the `store.open` setting, both required. `src/lib/http/store-gate.ts` is the route-side gate that turns a closed store into a 403 |
 | Where volunteers deliver | `src/lib/delivery-area.ts` — an explicit ZIP list with no override; an empty list means nobody |
 | Who a cart belongs to | `src/lib/orders/draft-access.ts` — a customer id or a hashed guest token. Every cart read and write goes through the same owner filter, so "not yours" and "does not exist" are one answer |
 | What is in the cart, and what it costs | `src/lib/orders/cart.ts` (read) and `cart-service.ts` (add, requantify, remove, claim) |
@@ -277,6 +327,11 @@ The engine that goes with it:
 | Whether a pickup box may be announced | `src/lib/pickup/pickup-service.ts` — packed *and* in stock, held for seven days, and the row says which of the two is missing |
 | Who gets told what, once | `src/lib/notifications/outbox.ts` — every customer message is a row with a unique dedupe key, so a second press is a no-op rather than a second text |
 | Who needs ringing | `src/lib/scheduling/follow-up.ts` — unpaid, unclaimed and undelivered on one list, one reason at a time |
+| What last year's item is called now | `src/lib/catalog/replacements.ts` — the mapping chain, followed across seasons with a depth limit, a loop guard and the same slug preferred over a stale link |
+| What a repeat would actually order | `src/lib/orders/repeat-plan.ts` — one plan the review page, the counter and the bulk sweep all read, so a customer and a staff member see the same answer. `repeat-recipients.ts` resolves who each line is going to; `repeat-apply.ts` is the write, and re-reads every chosen product inside its own transaction |
+| Which past orders may be repeated | `src/lib/orders/repeatable.ts` — one status set, so the history row, the order page and the `/repeat` URL cannot disagree |
+| Which season the storefront is in | `src/lib/seasons/management.ts` and `seasons/schedule.ts` — one open season, whether the switch was pressed or the clock reached it |
+| What a copied catalogue starts with | `src/lib/seasons/wizard.ts` — closed, nothing on hand, and the replacement links already drawn |
 
 Order numbers are per season and gapless: the counter increments inside the same
 transaction that places the order, so a rollback puts the number back.

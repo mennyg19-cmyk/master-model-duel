@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatCents } from '@/lib/core/money';
 import { readOrderDetail } from '@/lib/orders/customer-orders';
+import { isRepeatable } from '@/lib/orders/repeatable';
 
 export const dynamic = 'force-dynamic';
 
@@ -131,6 +132,14 @@ export default async function OrderDetailPage({
       {order.status === 'PLACED' && order.amountPaidCents < order.totalCents ? (
         <Link href={`/order/confirmation?order=${order.id}`}>
           <Button data-testid="detail-pay">Finish paying</Button>
+        </Link>
+      ) : null}
+
+      {isRepeatable(order.status) ? (
+        <Link href={`/account/orders/${order.id}/repeat`}>
+          <Button variant="secondary" data-testid="detail-repeat">
+            Order again
+          </Button>
         </Link>
       ) : null}
 

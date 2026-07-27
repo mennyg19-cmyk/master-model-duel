@@ -1,6 +1,5 @@
 import 'server-only';
 
-import { forbidden } from 'next/navigation';
 import type { Season } from '@prisma/client';
 
 import { db } from './db';
@@ -42,19 +41,6 @@ export async function readStoreState(): Promise<StoreState> {
     storeSwitchIsOn,
     announcement,
   };
-}
-
-export type OpenStore = StoreState & { isOpen: true; season: Season };
-
-/**
- * The server-side half of the closed-store rule (R-002). Hiding the buy buttons
- * is a courtesy; this is the part that holds when someone types the URL, so
- * every ordering route must call it before rendering anything.
- */
-export async function requireOpenStore(): Promise<OpenStore> {
-  const state = await readStoreState();
-  if (!state.isOpen || !state.season) forbidden();
-  return state as OpenStore;
 }
 
 export function closedStoreMessage(state: StoreState): string {

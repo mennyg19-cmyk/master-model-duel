@@ -57,6 +57,12 @@ model Order {
   /// over the phone (R-047).
   draftReference String @unique
 
+  /// The order number this row had in the old system, set only by the prior-year
+  /// import hook. Unique within its season so re-running the hook updates the
+  /// order it already wrote instead of duplicating somebody's history, and null
+  /// for everything the app itself took (R-186 groundwork).
+  importedOrderReference String?
+
   /// Order-level card message. A line may override it per recipient (UR-013).
   defaultGreeting String?
 
@@ -96,6 +102,7 @@ model Order {
   printItems     PrintBatchItem[]
 
   @@unique([seasonId, orderNumber])
+  @@unique([seasonId, importedOrderReference])
   @@index([seasonId, status])
   @@index([customerId, createdAt])
   /// The order desk pages placed orders newest-first inside one season, and the

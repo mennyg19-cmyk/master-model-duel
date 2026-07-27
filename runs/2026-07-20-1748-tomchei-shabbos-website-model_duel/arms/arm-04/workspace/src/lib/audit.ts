@@ -29,13 +29,25 @@ type AuditDetails = {
   /// a batch together (G-024).
   'order.status_changed': { from: OrderStatus; to: OrderStatus; batchId?: string };
   'order.draft_claimed': { draftReference: string };
-  /// R-057. Says what came across and what could not, because a repeat that
-  /// quietly dropped a discontinued box is the complaint nobody can explain.
+  /// R-057. Says what came across, what a replacement mapping swapped, and what
+  /// could not be stood in for at all — because a repeat that quietly dropped a
+  /// discontinued box is the complaint nobody can explain.
   'order.repeated': {
     sourceOrderId: string;
     copiedLines: number;
+    swappedLines: number;
     skippedLines: string[];
     batchId?: string;
+  };
+  /// UR-007. The customer decided the swaps and the recipients themselves on the
+  /// review page, so there is no member of staff on this row — only what they
+  /// chose, and whether the order they repeated came out of the old system.
+  'order.repeated_by_customer': {
+    sourceOrderId: string;
+    copiedLines: number;
+    swappedLines: number;
+    removedLines: number;
+    fromImport: boolean;
   };
   /// G-024. One summary row for the whole batch: a hundred separate rows would
   /// bury the individual edits staff make by hand, which are the interesting
@@ -184,6 +196,22 @@ type AuditDetails = {
   'staff.impersonation_stopped': never;
   'settings.store_open_changed': { open: boolean };
   'settings.changed': { key: string; summary: string };
+  /// UR-008. Opening a season puts the shop live and closing it stops the year,
+  /// so both are named rows rather than a settings edit. `scheduled` separates
+  /// the manager's own switch from the cron sweep acting on their calendar.
+  'season.status_changed': { year: number; to: 'OPEN' | 'CLOSED'; scheduled: boolean };
+  'season.schedule_changed': { year: number; opensAt: string | null; closesAt: string | null };
+  /// R-097. A new campaign year, and what the wizard carried into it.
+  'season.created': {
+    year: number;
+    copiedFromYear: number | null;
+    productCount: number;
+    addOnCount: number;
+    replacementLinkCount: number;
+  };
+  /// A prior-year order staged by the import hook so it can be repeated (S3).
+  /// The full pipeline is P12; this row is what says where the order came from.
+  'order.imported_prior_year': { reference: string; year: number; lineCount: number };
   'catalog.product_saved': { slug: string; seasonYear: number; created: boolean };
   'catalog.replacement_linked': { slug: string; replacedByProductId: string | null };
   'catalog.addon_saved': { slug: string; seasonYear: number; created: boolean };

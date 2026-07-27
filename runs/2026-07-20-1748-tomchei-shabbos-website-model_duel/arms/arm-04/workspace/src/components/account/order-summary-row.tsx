@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { formatCents } from '@/lib/core/money';
 import type { OrderSummary } from '@/lib/orders/customer-orders';
+import { isRepeatable } from '@/lib/orders/repeatable';
 
 const STATUS_TONE = {
   DRAFT: 'warning',
@@ -54,9 +55,20 @@ export function OrderSummaryRow({ order }: { order: OrderSummary }) {
         </p>
       </div>
 
-      <p className="font-medium" data-testid="order-total">
-        {formatCents(order.totalCents)}
-      </p>
+      <div className="text-right">
+        <p className="font-medium" data-testid="order-total">
+          {formatCents(order.totalCents)}
+        </p>
+        {isRepeatable(order.status) ? (
+          <Link
+            href={`/account/orders/${order.id}/repeat`}
+            className="text-sm underline underline-offset-4"
+            data-testid="order-repeat"
+          >
+            Order again
+          </Link>
+        ) : null}
+      </div>
     </li>
   );
 }

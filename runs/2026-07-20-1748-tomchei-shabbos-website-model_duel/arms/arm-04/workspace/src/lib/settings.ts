@@ -2,6 +2,7 @@ import 'server-only';
 
 import { z } from 'zod';
 
+import { DEFAULT_TIME_ZONE, isValidTimeZone } from './core/timezone';
 import { db } from './db';
 
 /**
@@ -13,6 +14,10 @@ const SETTING_SCHEMAS = {
   'setup.completed': z.boolean(),
   'store.open': z.boolean(),
   'brand.announcement': z.string(),
+  // The office's own clock (UR-008). A scheduled season flip is entered as a
+  // wall-clock time and stored as an instant, and this is what the two are
+  // converted through.
+  'store.timezone': z.string().refine(isValidTimeZone, 'That is not a timezone this server knows.'),
   'orders.followUpDays': z.number().int().min(0).max(90),
   // Five-digit ZIPs volunteer delivery covers. An empty list means nobody can
   // pick delivery, which is the safe reading of "not configured yet" (G-014).
@@ -47,6 +52,7 @@ const DEFAULTS: { [K in SettingKey]: SettingValue<K> } = {
   'setup.completed': false,
   'store.open': false,
   'brand.announcement': '',
+  'store.timezone': DEFAULT_TIME_ZONE,
   'orders.followUpDays': 3,
   'shipping.deliveryZips': [],
   'shipping.baseRateCents': 0,

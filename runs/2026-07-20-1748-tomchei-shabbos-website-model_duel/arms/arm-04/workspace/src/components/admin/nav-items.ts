@@ -13,6 +13,7 @@ export const ADMIN_NAV: { href: string; label: string; permission: Permission }[
   { href: '/admin/customers', label: 'Customers', permission: 'customers.view' },
   { href: '/admin/imports', label: 'Imports', permission: 'imports.manage' },
   { href: '/admin/catalog', label: 'Catalog', permission: 'catalog.manage' },
+  { href: '/admin/seasons', label: 'Seasons', permission: 'seasons.manage' },
   { href: '/admin/media', label: 'Media', permission: 'media.manage' },
   { href: '/admin/staff', label: 'Staff', permission: 'staff.manage' },
   { href: '/admin/audit', label: 'Audit log', permission: 'audit.view' },

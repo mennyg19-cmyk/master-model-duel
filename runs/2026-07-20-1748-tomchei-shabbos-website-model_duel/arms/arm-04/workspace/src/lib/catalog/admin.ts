@@ -116,9 +116,12 @@ export async function saveProduct(
 }
 
 /**
- * Points a retired product at the one that took its place (R-148). Repeat-order
- * (P10) walks this link, so it only ever points forward in time: a link into the
- * same season or backwards would make a suggestion loop.
+ * Points a retired product at the one that took its place (R-148, R-048).
+ *
+ * The link only ever points forward in time: a link into the same season or
+ * backwards would make the chain walk in circles. Several retired products may
+ * share one replacement — trimming a catalogue folds boxes together, and that
+ * has to be sayable.
  */
 export async function setReplacementLink(
   context: StaffContext,
@@ -145,29 +148,19 @@ export async function setReplacementLink(
     }
   }
 
-  try {
-    const updated = await db.product.update({
-      where: { id: product.id },
-      data: { replacedByProductId: input.replacedByProductId },
-    });
+  const updated = await db.product.update({
+    where: { id: product.id },
+    data: { replacedByProductId: input.replacedByProductId },
+  });
 
-    await recordAudit(context, {
-      action: 'catalog.replacement_linked',
-      entityType: 'Product',
-      entityId: updated.id,
-      detail: { slug: updated.slug, replacedByProductId: input.replacedByProductId },
-    });
+  await recordAudit(context, {
+    action: 'catalog.replacement_linked',
+    entityType: 'Product',
+    entityId: updated.id,
+    detail: { slug: updated.slug, replacedByProductId: input.replacedByProductId },
+  });
 
-    return ok(updated);
-  } catch (error) {
-    if (isUniqueViolation(error)) {
-      return failure(
-        INVALID_REPLACEMENT,
-        'That product is already the replacement for something else.',
-      );
-    }
-    throw error;
-  }
+  return ok(updated);
 }
 
 const addOnSchema = z.object({
