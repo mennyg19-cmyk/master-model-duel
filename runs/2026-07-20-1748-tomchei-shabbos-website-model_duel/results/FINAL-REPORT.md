@@ -39,7 +39,7 @@ Grill on. arm-02 led original codebase inventory recall; arm-04 tied 7/7 with in
 
 ## Cost
 
-See [COST-LEDGER.csv](./COST-LEDGER.csv). Usage backfill pending (`usage_missing` on many rows).
+See [COST-LEDGER.csv](./COST-LEDGER.csv). Backfilled from Cursor usage export (2026-07-27); `verify-cost-ledger -RequireUsage` → ok. Scoreboard Cost: arm-01 **$106.82** · arm-02 **$319.83** · arm-03 **$33.72** (reviewer-only; grok builder rows plan-`Included`) · arm-04 **$663.03**.
 
 ## Method notes / deviations
 
