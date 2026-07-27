@@ -25,7 +25,8 @@ export const CONSOLE_NOT_IN_TEST_MODE = 'console_not_in_test_mode';
 export const CONSOLE_NO_SEASON = 'console_no_season';
 
 export type SeedSummary = { ordersWritten: number; customersWritten: number };
-export type ClearSummary = { ordersDeleted: number; customersDeleted: number };
+export type ResetSummary = { ordersDeleted: number };
+export type WipeSummary = ResetSummary & { customersDeleted: number };
 
 const SEED_ITEMS = [
   { slug: 'demo-classic-box', name: 'Demo classic box', priceCents: 3600 },
@@ -95,7 +96,7 @@ export async function seedTestData(
 export async function resetSeason(
   staff: StaffContext,
   seasonYear: number,
-): Promise<Result<ClearSummary>> {
+): Promise<Result<ResetSummary>> {
   const guard = await requireTestMode();
   if (!guard.ok) return guard;
 
@@ -105,7 +106,7 @@ export async function resetSeason(
   const deleted = await db.order.deleteMany({ where: { seasonId: season.id } });
 
   await recordConsoleRun(staff, 'reset', seasonYear);
-  return ok({ ordersDeleted: deleted.count, customersDeleted: 0 });
+  return ok({ ordersDeleted: deleted.count });
 }
 
 /**
@@ -122,7 +123,7 @@ export async function resetSeason(
  * this deployment, not records of the rehearsal data, and a console button that
  * erased the audit trail would be the one hole in it.
  */
-export async function wipeTransactionalData(staff: StaffContext): Promise<Result<ClearSummary>> {
+export async function wipeTransactionalData(staff: StaffContext): Promise<Result<WipeSummary>> {
   const guard = await requireTestMode();
   if (!guard.ok) return guard;
 

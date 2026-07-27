@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 
 import { csvAmount, csvDate, csvRow, toCsv } from '../src/lib/reports/csv-write';
+import type { ExportDefinition } from '../src/lib/reports/datasets';
+import { csvExportResponse } from '../src/lib/reports/export-service';
 import { COUNTED_ORDER_STATUSES, readSeasonPerformance } from '../src/lib/reports/season-performance';
 import {
   createCustomer,
   createFulfillmentMethod,
   createProduct,
   createSeason,
+  createStaffContext,
   db,
 } from './fixtures';
 
@@ -53,6 +56,85 @@ test('money and dates are written in forms a spreadsheet adds up', () => {
 
   const file = toCsv(['Total'], [[csvAmount(123456)]]);
   assert.equal(file, 'Total\r\n1234.56\r\n', 'no thousands separator, or the column stops adding up');
+});
+
+/** A dataset of any size, and a count of how often it was asked for a page. */
+function countedExport(rowCount: number): {
+  definition: ExportDefinition;
+  pageCalls: () => number;
+} {
+  let calls = 0;
+
+  return {
+    pageCalls: () => calls,
+    definition: {
+      dataset: 'DELIVERIES',
+      label: 'Recipients',
+      description: 'A dataset that only produces rows when it is asked for them.',
+      fileSlug: 'recipients',
+      headers: ['Recipient'],
+      count: async () => rowCount,
+      page: async (_seasonId, skip, take) => {
+        calls += 1;
+        const remaining = Math.max(0, Math.min(take, rowCount - skip));
+        return Array.from({ length: remaining }, (_, index) => [`Recipient ${skip + index}`]);
+      },
+    },
+  };
+}
+
+test('an export is stamped complete only once the client has taken the rows', async () => {
+  const season = await createSeason();
+  const staff = await createStaffContext(['reports.view']);
+  const { definition, pageCalls } = countedExport(2);
+
+  const response = await csvExportResponse(
+    definition,
+    { id: season.id, label: season.label, year: season.year },
+    staff,
+  );
+
+  const logged = await db.exportLog.findFirstOrThrow({
+    where: { seasonId: season.id },
+    orderBy: { createdAt: 'desc' },
+  });
+  assert.equal(logged.completedAt, null, 'nothing has gone out yet');
+  assert.equal(pageCalls(), 0, 'no page is read before the client asks for one');
+  assert.equal(logged.staffUserId, staff.actor.id, 'the file is attributed to who signed in');
+
+  const body = await response.text();
+  assert.equal(body, 'Recipient\r\nRecipient 0\r\nRecipient 1\r\n');
+  assert.equal(pageCalls(), 1);
+
+  const finished = await db.exportLog.findUniqueOrThrow({ where: { id: logged.id } });
+  assert.ok(finished.completedAt, 'the whole file reached the client');
+  assert.equal(finished.rowCount, 2);
+  assert.equal(finished.byteCount, Buffer.byteLength(body));
+});
+
+test('an export the client abandons stops there and is not stamped complete', async () => {
+  const season = await createSeason();
+  const staff = await createStaffContext(['reports.view']);
+  const { definition, pageCalls } = countedExport(1200);
+
+  const response = await csvExportResponse(
+    definition,
+    { id: season.id, label: season.label, year: season.year },
+    staff,
+  );
+
+  const reader = response.body?.getReader();
+  assert.ok(reader);
+  await reader.read();
+  await reader.cancel();
+
+  const logged = await db.exportLog.findFirstOrThrow({
+    where: { seasonId: season.id },
+    orderBy: { createdAt: 'desc' },
+  });
+  assert.equal(logged.completedAt, null, 'a download that stopped part way says so');
+  assert.equal(pageCalls(), 1, 'the rest of the file was never read out of the database');
+  assert.equal(logged.rowCount, 500, 'one page went out, not twelve hundred rows');
 });
 
 test('a season counts placed orders and ignores drafts and cancellations', async () => {

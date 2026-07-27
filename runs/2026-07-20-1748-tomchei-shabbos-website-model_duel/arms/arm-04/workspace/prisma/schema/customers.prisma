@@ -16,13 +16,24 @@ model Customer {
   /// E.164 form of `phone`. Unique so "(555) 010-0000" and "5550100000" cannot
   /// become two customers during a POS entry or a legacy import (R-144).
   normalizedPhone String?  @unique
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
 
-  addresses CustomerAddress[]
-  orders    Order[]
+  /// Set when the cleanup queue merges this record into another (UR-014). The
+  /// row itself stays — past order lines still point at its archived addresses —
+  /// but it is no longer an account anybody can arrive at: every lookup that
+  /// resolves a person, sign-in included, is handed on to the survivor. Without
+  /// it the family keeps signing in to the shell the merge emptied.
+  mergedIntoCustomerId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  addresses  CustomerAddress[]
+  orders     Order[]
+  mergedInto Customer?         @relation("CustomerMerge", fields: [mergedIntoCustomerId], references: [id], onDelete: SetNull)
+  mergedFrom Customer[]        @relation("CustomerMerge")
 
   @@index([normalizedEmail])
+  @@index([mergedIntoCustomerId])
 }
 
 /// One address book per customer, shared by the website and the POS (UR-014).

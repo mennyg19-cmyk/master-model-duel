@@ -38,32 +38,43 @@ export async function csvExportResponse(
   const rowCount = await definition.count(season.id);
   const logId = await beginExport(definition, season, staff, rowCount);
   const encoder = new TextEncoder();
-  let byteCount = 0;
-  let sentRowCount = 0;
+  const sent = { rowCount: 0, byteCount: 0 };
+  let skip = 0;
 
+  const push = (controller: ReadableStreamDefaultController<Uint8Array>, text: string) => {
+    const bytes = encoder.encode(text);
+    sent.byteCount += bytes.byteLength;
+    controller.enqueue(bytes);
+  };
+
+  // One page per `pull`, so the next query only runs once the browser has taken
+  // the last one. Reading the whole export inside `start` would queue every page
+  // in memory before the client saw a byte, which is the copy the paging exists
+  // to avoid — and would stamp the row complete for a download nobody received.
   const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const push = (text: string) => {
-        const bytes = encoder.encode(text);
-        byteCount += bytes.byteLength;
-        controller.enqueue(bytes);
-      };
+    start(controller) {
+      push(controller, csvRow(definition.headers));
+    },
 
-      try {
-        push(csvRow(definition.headers));
+    async pull(controller) {
+      const rows = await definition.page(season.id, skip, PAGE_SIZE);
+      skip += rows.length;
 
-        for (let skip = 0; skip < rowCount; skip += PAGE_SIZE) {
-          const rows = await definition.page(season.id, skip, PAGE_SIZE);
-          if (rows.length === 0) break;
-          push(rows.map(csvRow).join(''));
-          sentRowCount += rows.length;
-        }
-
-        await finishExport(logId, sentRowCount, byteCount);
-        controller.close();
-      } catch (error) {
-        controller.error(error);
+      if (rows.length > 0) {
+        push(controller, rows.map(csvRow).join(''));
+        sent.rowCount += rows.length;
       }
+
+      if (rows.length < PAGE_SIZE) {
+        await stampExport(logId, sent, new Date());
+        controller.close();
+      }
+    },
+
+    // The reader walked away — a closed tab, a dropped connection. What went out
+    // is written down without a `completedAt`, which is the row saying so.
+    async cancel() {
+      await stampExport(logId, sent, null);
     },
   });
 
@@ -92,7 +103,7 @@ async function beginExport(
       seasonId: season.id,
       rowCount,
       byteCount: 0,
-      staffUserId: staff.acting.id,
+      staffUserId: staff.actor.id,
     },
   });
 
@@ -106,11 +117,12 @@ async function beginExport(
   return logged.id;
 }
 
-async function finishExport(logId: string, rowCount: number, byteCount: number): Promise<void> {
-  await db.exportLog.update({
-    where: { id: logId },
-    data: { rowCount, byteCount, completedAt: new Date() },
-  });
+async function stampExport(
+  logId: string,
+  sent: { rowCount: number; byteCount: number },
+  completedAt: Date | null,
+): Promise<void> {
+  await db.exportLog.update({ where: { id: logId }, data: { ...sent, completedAt } });
 }
 
 export function readExportHistory(take = 20) {

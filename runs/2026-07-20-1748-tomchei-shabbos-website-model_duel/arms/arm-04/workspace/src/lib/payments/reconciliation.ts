@@ -89,7 +89,7 @@ export async function reconcilePayments(input: {
 }
 
 async function collectFindings(): Promise<{ findings: Finding[]; checkedCount: number }> {
-  const [intents, stripePayments] = await Promise.all([
+  const [intents, stripePayments, attempts] = await Promise.all([
     db.stripePaymentIntent.findMany({
       where: { status: PAID_INTENT_STATUS },
       select: {
@@ -104,6 +104,14 @@ async function collectFindings(): Promise<{ findings: Finding[]; checkedCount: n
       where: { method: 'STRIPE', state: 'POSTED' },
       select: { id: true, orderId: true, reference: true, amountCents: true },
     }),
+    // "Is there an attempt on file?" is a different question from "did the
+    // gateway say it was paid?". An intent still reading `open` because the
+    // webhook's status update lost a race is an attempt on file, and reporting
+    // its payment as having none sends the office looking for nothing.
+    db.stripePaymentIntent.findMany({
+      where: { stripeIntentId: { not: null } },
+      select: { stripeIntentId: true },
+    }),
   ]);
 
   const paymentsByReference = new Map(
@@ -112,7 +120,7 @@ async function collectFindings(): Promise<{ findings: Finding[]; checkedCount: n
     ),
   );
   const intentIds = new Set(
-    intents.flatMap((intent) => (intent.stripeIntentId === null ? [] : [intent.stripeIntentId])),
+    attempts.flatMap((attempt) => (attempt.stripeIntentId === null ? [] : [attempt.stripeIntentId])),
   );
 
   const findings: Finding[] = [];
@@ -135,16 +143,19 @@ async function collectFindings(): Promise<{ findings: Finding[]; checkedCount: n
       continue;
     }
 
-    if (matched.amountCents !== intent.amountCents) {
+    // The payment and the attempt are written from one number in one
+    // transaction, so comparing them to each other can only ever agree. What
+    // can drift is the order: edited after it was paid, or captured in part.
+    if (matched.amountCents !== intent.order.totalCents) {
       findings.push({
         fingerprint: `amount_mismatch:${intent.stripeSessionId}`,
         kind: 'AMOUNT_MISMATCH',
         orderId: intent.orderId,
         stripeSessionId: intent.stripeSessionId,
         stripeIntentId: intent.stripeIntentId,
-        amountCents: intent.amountCents,
-        expectedCents: matched.amountCents,
-        note: 'The gateway and the recorded payment are for different amounts.',
+        amountCents: matched.amountCents,
+        expectedCents: intent.order.totalCents,
+        note: 'The payment on file is not for what this order costs.',
       });
     }
   }
@@ -152,10 +163,10 @@ async function collectFindings(): Promise<{ findings: Finding[]; checkedCount: n
   for (const payment of stripePayments) {
     if (payment.reference !== null && intentIds.has(payment.reference)) continue;
 
-    // The money on this finding is on the recorded side, not the gateway side:
-    // the payment is here and it is the checkout attempt that is missing. Filed
-    // the way the screen reads it, so "gateway 0, recorded 39" says which of the
-    // two is the one nobody can find.
+    // The money on this finding is on this side, not the gateway side: the
+    // payment is here and it is the checkout attempt that is missing. Filed the
+    // way the screen reads it, so "gateway 0, expected 39" says which of the two
+    // is the one nobody can find.
     findings.push({
       fingerprint: `missing_intent:${payment.id}`,
       kind: 'MISSING_INTENT',

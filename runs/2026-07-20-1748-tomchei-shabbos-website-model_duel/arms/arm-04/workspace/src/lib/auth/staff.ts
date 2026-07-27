@@ -10,8 +10,23 @@ import { effectivePermissions, hasPermission, type Permission } from './permissi
 
 export type StaffWithOverrides = StaffUser & { permissionOverrides: PermissionOverride[] };
 
+/**
+ * One rule for "who did this", because two would be worse than either.
+ *
+ * Every column that records who performed an action — `recordedByStaffUserId`,
+ * `stagedByStaffUserId`, `uploadedByStaffUserId`, `ExportLog.staffUserId` and
+ * the rest — is written from `actor`, the same person `recordAudit` names.
+ * Money taken at the counter and a file of every donor's address have to be
+ * attributable to the human who was really there, and an impersonated session
+ * would otherwise file both under somebody who was not.
+ *
+ * `acting` is for two things only: which permissions apply, and ownership keys
+ * that scope a screen to a workstation — the POS till's drafts, the driver's
+ * runs. Those follow the seat, not the person, which is the whole point of
+ * impersonating one.
+ */
 export type StaffContext = {
-  /** The human who actually signed in. Audit rows always name this person. */
+  /** The human who actually signed in. Audit rows and attribution name this person. */
   actor: StaffWithOverrides;
   /** Whose permissions apply right now — the impersonated staff member, or the actor. */
   acting: StaffWithOverrides;

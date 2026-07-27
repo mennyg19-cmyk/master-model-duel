@@ -71,7 +71,7 @@ export async function stageImport(
       kind: input.kind,
       fileName: input.fileName.slice(0, 200),
       seasonId: input.seasonId,
-      stagedByStaffUserId: staff.acting.id,
+      stagedByStaffUserId: staff.actor.id,
       rowCount: rows.length,
       ...counts,
       rows: {

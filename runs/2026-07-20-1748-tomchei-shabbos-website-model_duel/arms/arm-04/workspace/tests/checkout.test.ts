@@ -11,7 +11,7 @@ import {
   setRecipientGreeting,
 } from '../src/lib/checkout/greetings';
 import { findCheckoutConflicts } from '../src/lib/checkout/validation';
-import type { DraftOwner } from '../src/lib/orders/draft-access';
+import { hashGuestToken, type DraftOwner } from '../src/lib/orders/draft-access';
 import { writeSetting } from '../src/lib/settings';
 import {
   createCustomer,
@@ -187,6 +187,45 @@ test('a total that does not match the page is refused, and nothing is placed', a
   const order = await db.order.findFirstOrThrow({ where: { customerId: customer.id } });
   assert.equal(order.status, 'DRAFT', 'a refused checkout leaves the cart alone');
   assert.equal(order.orderNumber, null, 'and burns no order number');
+});
+
+test('a guest checkout that cannot be placed leaves nobody holding the cart', async () => {
+  const season = await createSeason();
+  const product = await createProduct(season, { priceCents: 2500 });
+  const pickup = await createFulfillmentMethod('PICKUP', 0, 'NONE');
+
+  // Built as an account order, then handed to a browser: the fixture assigns the
+  // line, and a guest draft is the same row owned by a token instead.
+  const placeholder = await createCustomer();
+  const draft = await createDraftOrder({
+    season,
+    customer: placeholder,
+    lines: [{ product, fulfillmentMethodId: pickup.id }],
+  });
+  await db.order.update({
+    where: { id: draft.id },
+    data: { customerId: null, guestTokenHash: hashGuestToken(`guest-${draft.id}`) },
+  });
+
+  // The season shutting while the guest was filling in their name: the same lost
+  // race as a sold-out box, and the one thing that fails after they are claimed.
+  await db.season.update({ where: { id: season.id }, data: { status: 'CLOSED' } });
+
+  const guest: DraftOwner = { kind: 'guest', tokenHash: hashGuestToken(`guest-${draft.id}`) };
+  const refused = await startCheckout(guest, season.id, {
+    expectedTotalCents: 2500,
+    contact: { fullName: 'Shternie Guest', email: `guest-${draft.id}@example.test`, phone: '' },
+  });
+
+  assert.equal(refused.ok, false);
+
+  const after = await db.order.findUniqueOrThrow({ where: { id: draft.id } });
+  assert.equal(after.status, 'DRAFT');
+  assert.equal(
+    after.customerId,
+    null,
+    'an order that was never placed is not waiting in that account when they sign in',
+  );
 });
 
 test('checkout reports a re-price and a sold-out shelf, and refuses to charge', async () => {

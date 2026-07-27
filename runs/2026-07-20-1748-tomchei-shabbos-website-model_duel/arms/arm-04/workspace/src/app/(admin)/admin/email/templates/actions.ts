@@ -44,8 +44,8 @@ export async function saveTemplateAction(formData: FormData) {
 
   await db.emailTemplate.upsert({
     where: { key },
-    create: { key, subject, body, isEnabled, updatedByStaffUserId: context.acting.id },
-    update: { subject, body, isEnabled, updatedByStaffUserId: context.acting.id },
+    create: { key, subject, body, isEnabled, updatedByStaffUserId: context.actor.id },
+    update: { subject, body, isEnabled, updatedByStaffUserId: context.actor.id },
   });
 
   await recordAudit(context, {

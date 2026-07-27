@@ -62,6 +62,15 @@ test('a long but low-variety session secret is rejected', () => {
   ]);
 });
 
+test('a placeholder long enough to pass the length floor is rejected on every bearer secret', () => {
+  const placeholder = 'changeme-changeme-changeme';
+
+  assert.deepEqual(pathsRejectedBy({ STRIPE_WEBHOOK_SECRET: placeholder }), [
+    'STRIPE_WEBHOOK_SECRET',
+  ]);
+  assert.deepEqual(pathsRejectedBy({ CRON_SECRET: placeholder }), ['CRON_SECRET']);
+});
+
 test('the passwordless local provider is refused off this machine', () => {
   // Media storage and the payment stand-in follow the same loopback rule, so
   // both are switched over here to leave the auth rule as the only thing under

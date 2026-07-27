@@ -14,7 +14,7 @@ const PAYMENTS_PATH = '/admin/reports/payments';
 export async function reconcilePaymentsAction(): Promise<void> {
   const staff = await requirePermission('reports.view');
 
-  const summary = await reconcilePayments({ source: 'manual', staffUserId: staff.acting.id });
+  const summary = await reconcilePayments({ source: 'manual', staffUserId: staff.actor.id });
 
   redirectWithFlash(PAYMENTS_PATH, {
     notice: `Checked ${summary.checkedCount}. ${summary.flaggedCount} need looking at (${summary.newFlagCount} new), ${summary.resolvedCount} closed.`,

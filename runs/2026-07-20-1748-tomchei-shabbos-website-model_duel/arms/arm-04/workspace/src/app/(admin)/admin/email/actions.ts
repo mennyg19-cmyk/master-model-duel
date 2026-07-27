@@ -37,7 +37,7 @@ export async function saveCampaignAction(formData: FormData) {
   const context = await requirePermission('email.manage');
   const form = campaignFormSchema.parse(Object.fromEntries(formData));
 
-  const saved = await saveCampaign(form.campaignId || null, form, context.acting.id);
+  const saved = await saveCampaign(form.campaignId || null, form, context.actor.id);
   if (!saved.ok) rejectWith(form.campaignId ? campaignPath(form.campaignId) : HUB_PATH, saved.publicMessage);
 
   revalidatePath(HUB_PATH);

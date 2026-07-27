@@ -7,6 +7,7 @@ import { recordAudit } from '../audit';
 import { normalizeEmail } from '../core/normalize';
 import { normalizePhone } from '../core/phone';
 import { failure, ok, type Result } from '../core/result';
+import { survivorOf } from '../customers';
 import { db } from '../db';
 import { queuePaymentLink } from '../email/transactional';
 import { env } from '../env';
@@ -76,7 +77,17 @@ export async function startCheckout(
   }
 
   const placed = await finalizeOrder(summary.orderId, null);
-  if (!placed.ok) return placed;
+
+  // The claim above made this draft match that account's own owner filter, so a
+  // placement that failed — closed season, sold-out box, lost race — would leave
+  // the abandoned basket, recipients and greetings included, waiting for whoever
+  // next signs in with that address.
+  if (!placed.ok) {
+    if (summary.isGuest) {
+      await db.order.update({ where: { id: summary.orderId }, data: { customerId: null } });
+    }
+    return placed;
+  }
 
   // Finalize prices the packages with the same fee engine the summary quoted
   // with, so a difference here is a bug, not a customer's stale page. The order
@@ -182,7 +193,7 @@ async function attachGuestCustomer(
   if (!parsed.success) return failure(CHECKOUT_CONTACT_REQUIRED, parsed.error.issues[0].message);
 
   const normalizedEmail = normalizeEmail(parsed.data.email);
-  const existing = await db.customer.findUnique({ where: { normalizedEmail } });
+  const existing = await survivorOf(await db.customer.findUnique({ where: { normalizedEmail } }));
 
   const customer =
     existing ??

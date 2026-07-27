@@ -14,6 +14,13 @@ export type EnvVariableSpec = {
 /** Shipped in `.env.example` and rejected by validation, so nobody can boot on it. */
 const PLACEHOLDER_SESSION_SECRET = 'change-me-to-a-32-character-random-string';
 
+/**
+ * The same idea for the signing secret, which is required in both modes: an
+ * empty example generates a file that cannot boot and does not say why.
+ */
+const PLACEHOLDER_WEBHOOK_SECRET = 'change-me-to-the-signing-secret-from-your-provider';
+
+const MIN_SESSION_SECRET_LENGTH = 32;
 const MIN_DISTINCT_SECRET_CHARACTERS = 12;
 const MIN_WEBHOOK_SECRET_LENGTH = 24;
 const MIN_CRON_SECRET_LENGTH = 24;
@@ -29,6 +36,31 @@ function isWeakSecret(secret: string): boolean {
   if (secret === PLACEHOLDER_SESSION_SECRET) return true;
   if (WEAK_SECRET_PATTERN.test(secret)) return true;
   return new Set(secret).size < MIN_DISTINCT_SECRET_CHARACTERS;
+}
+
+/**
+ * All three bearer secrets get the same question, because a length floor is not
+ * a secrecy test: `changeme-changeme-changeme` clears twenty-four characters and
+ * guards a public endpoint no better than the session key it is rejected for.
+ *
+ * Only asked once the length is out of the way, so one bad value is one message
+ * rather than two saying different things about it.
+ */
+function checkSecretStrength(
+  ctx: z.RefinementCtx,
+  key: 'AUTH_SESSION_SECRET' | 'STRIPE_WEBHOOK_SECRET' | 'CRON_SECRET',
+  secret: string,
+  minLength: number,
+): void {
+  if (secret.length < minLength || !isWeakSecret(secret)) return;
+
+  ctx.addIssue({
+    code: 'custom',
+    path: [key],
+    message:
+      `${key} is a known placeholder or has too little variety to be a real key. ` +
+      'Generate one with `openssl rand -base64 48`',
+  });
 }
 
 /** The passwordless local provider is only defensible when the app is this machine. */
@@ -121,8 +153,9 @@ export const ENV_VARIABLES: EnvVariableSpec[] = [
     description:
       'Signing secret for the /api/webhooks/stripe endpoint. Required in both modes: it is what ' +
       'makes a webhook authentic, and the loopback provider signs with it too so the verification ' +
-      'path is never skipped in development.',
-    example: '',
+      'path is never skipped in development. At least 24 characters; the placeholder below is ' +
+      'rejected on purpose.',
+    example: PLACEHOLDER_WEBHOOK_SECRET,
     secret: true,
   },
   {
@@ -253,15 +286,13 @@ const baseSchema = z.object({
 });
 
 export const envSchema = baseSchema.superRefine((env, ctx) => {
-  if (isWeakSecret(env.AUTH_SESSION_SECRET)) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['AUTH_SESSION_SECRET'],
-      message:
-        'AUTH_SESSION_SECRET is a known placeholder or has too little variety to be a real key. ' +
-        'Generate one with `openssl rand -base64 48`',
-    });
-  }
+  checkSecretStrength(ctx, 'AUTH_SESSION_SECRET', env.AUTH_SESSION_SECRET, MIN_SESSION_SECRET_LENGTH);
+  checkSecretStrength(
+    ctx,
+    'STRIPE_WEBHOOK_SECRET',
+    env.STRIPE_WEBHOOK_SECRET,
+    MIN_WEBHOOK_SECRET_LENGTH,
+  );
 
   if (env.MEDIA_STORAGE === 'blob' && !env.BLOB_READ_WRITE_TOKEN) {
     ctx.addIssue({
@@ -373,12 +404,16 @@ export const envSchema = baseSchema.superRefine((env, ctx) => {
     }
   }
 
-  if (env.CRON_SECRET !== undefined && env.CRON_SECRET !== '' && env.CRON_SECRET.length < MIN_CRON_SECRET_LENGTH) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['CRON_SECRET'],
-      message: `CRON_SECRET must be at least ${MIN_CRON_SECRET_LENGTH} characters when it is set`,
-    });
+  if (env.CRON_SECRET) {
+    if (env.CRON_SECRET.length < MIN_CRON_SECRET_LENGTH) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CRON_SECRET'],
+        message: `CRON_SECRET must be at least ${MIN_CRON_SECRET_LENGTH} characters when it is set`,
+      });
+    }
+
+    checkSecretStrength(ctx, 'CRON_SECRET', env.CRON_SECRET, MIN_CRON_SECRET_LENGTH);
   }
 
   // A deployment with no cron secret has no working sweepers: pickups never

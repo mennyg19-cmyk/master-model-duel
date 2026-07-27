@@ -146,7 +146,7 @@ export async function resolveCleanupFlag(
       data: {
         status: input.decision,
         resolvedAt: new Date(),
-        resolvedByStaffUserId: staff.acting.id,
+        resolvedByStaffUserId: staff.actor.id,
       },
     });
   });
@@ -187,6 +187,11 @@ async function mergeAddress(
  * itself stays. Deleting it would cascade through the addresses that past order
  * lines still point at, and an empty shell of a customer is a much smaller
  * problem than an order whose recipient rows have gone.
+ *
+ * The identity moves too, which is the part that makes the merge hold: the
+ * duplicate's login is released and the row is pointed at the survivor, so the
+ * family signing in with either address lands on the account that has their
+ * history instead of on the shell this just emptied.
  */
 async function mergeCustomer(
   tx: Prisma.TransactionClient,
@@ -194,6 +199,7 @@ async function mergeCustomer(
   survivorId: string,
 ): Promise<void> {
   await tx.order.updateMany({ where: { customerId: duplicateId }, data: { customerId: survivorId } });
+  await moveIdentity(tx, duplicateId, survivorId);
 
   const [moving, existing] = await Promise.all([
     tx.customerAddress.findMany({
@@ -216,6 +222,39 @@ async function mergeCustomer(
       data: held.has(address.addressKey)
         ? { isArchived: true }
         : { customerId: survivorId },
+    });
+  }
+}
+
+/**
+ * The duplicate's provider login goes to the survivor when the survivor has
+ * none, and is released either way — leaving it in place would let the same
+ * sign-in keep resolving to the emptied record, and would collide with the
+ * survivor's own login on the unique index the moment anything tried to relink.
+ *
+ * A pointer is always one hop: a finding names the earliest record in an email
+ * group as the survivor, so the record something merges into is never itself a
+ * record that merged away.
+ */
+async function moveIdentity(
+  tx: Prisma.TransactionClient,
+  duplicateId: string,
+  survivorId: string,
+): Promise<void> {
+  const [duplicate, survivor] = await Promise.all([
+    tx.customer.findUniqueOrThrow({ where: { id: duplicateId }, select: { externalAuthId: true } }),
+    tx.customer.findUniqueOrThrow({ where: { id: survivorId }, select: { externalAuthId: true } }),
+  ]);
+
+  await tx.customer.update({
+    where: { id: duplicateId },
+    data: { externalAuthId: null, mergedIntoCustomerId: survivorId },
+  });
+
+  if (survivor.externalAuthId === null && duplicate.externalAuthId !== null) {
+    await tx.customer.update({
+      where: { id: survivorId },
+      data: { externalAuthId: duplicate.externalAuthId },
     });
   }
 }

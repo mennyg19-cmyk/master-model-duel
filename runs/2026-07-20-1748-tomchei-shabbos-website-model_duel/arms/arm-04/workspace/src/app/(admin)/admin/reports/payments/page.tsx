@@ -78,7 +78,7 @@ export default async function PaymentReconciliationPage({
               <th>Order</th>
               <th>What it says</th>
               <th className="text-right">Gateway</th>
-              <th className="text-right">Recorded</th>
+              <th className="text-right">Expected</th>
               <th>First seen</th>
               <th>Status</th>
             </tr>

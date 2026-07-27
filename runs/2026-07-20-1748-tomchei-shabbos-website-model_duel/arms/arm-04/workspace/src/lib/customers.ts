@@ -48,11 +48,27 @@ export async function linkCustomerIdentity(identity: ExternalIdentity): Promise<
 /** The external id is the strong key; the normalized email is the fallback match. */
 async function findCustomer(externalId: string, normalizedEmail: string): Promise<Customer | null> {
   const byExternalId = await db.customer.findUnique({ where: { externalAuthId: externalId } });
-  return byExternalId ?? (await db.customer.findUnique({ where: { normalizedEmail } }));
+  return survivorOf(byExternalId ?? (await db.customer.findUnique({ where: { normalizedEmail } })));
 }
 
+/**
+ * A record the office merged away is not an account any more, so every lookup
+ * that resolves a person hands on to the account that absorbed it (UR-014).
+ * Skip this and the household signs back in to the shell the merge emptied and
+ * finds no orders, no address book and no "same as last year".
+ */
+export async function survivorOf(customer: Customer | null): Promise<Customer | null> {
+  if (!customer?.mergedIntoCustomerId) return customer;
+  return db.customer.findUnique({ where: { id: customer.mergedIntoCustomerId } });
+}
+
+/**
+ * The link is filled in once and left alone. A second provider account for the
+ * same household — the usual reason two records were merged — resolves by email
+ * instead, rather than taking the column off the login already recorded there.
+ */
 async function attachExternalId(customer: Customer, externalId: string): Promise<Customer> {
-  if (customer.externalAuthId === externalId) return customer;
+  if (customer.externalAuthId !== null) return customer;
   return db.customer.update({ where: { id: customer.id }, data: { externalAuthId: externalId } });
 }
 
@@ -88,7 +104,7 @@ export async function findOrCreateLocalCustomer(input: {
   if (!parsed.success) return failure(INVALID_CUSTOMER_INPUT, parsed.error.issues[0].message);
 
   const normalizedEmail = normalizeEmail(parsed.data.email);
-  const existing = await db.customer.findUnique({ where: { normalizedEmail } });
+  const existing = await survivorOf(await db.customer.findUnique({ where: { normalizedEmail } }));
   if (existing) return ok(existing);
 
   return ok(
@@ -168,7 +184,13 @@ export async function lookupCustomersForCounter(query: string): Promise<Customer
   const where = query.trim().length < COUNTER_MIN_QUERY ? undefined : customerSearchWhere(query);
   if (!where) return [];
 
-  return db.customer.findMany({ where, orderBy: { fullName: 'asc' }, take: COUNTER_MATCH_LIMIT });
+  // A merged-away record is not somebody the counter can ring an order up
+  // against: it has no history and its household is on the survivor.
+  return db.customer.findMany({
+    where: { ...where, mergedIntoCustomerId: null },
+    orderBy: { fullName: 'asc' },
+    take: COUNTER_MATCH_LIMIT,
+  });
 }
 
 const COUNTER_MIN_QUERY = 2;
@@ -207,9 +229,10 @@ export async function findOrCreateCustomerAtCounter(
   const normalizedEmail = normalizeEmail(parsed.data.email);
   const normalizedPhone = parsed.data.phone === null ? null : normalizePhone(parsed.data.phone);
 
-  const existing =
+  const existing = await survivorOf(
     (await db.customer.findUnique({ where: { normalizedEmail } })) ??
-    (normalizedPhone ? await db.customer.findUnique({ where: { normalizedPhone } }) : null);
+      (normalizedPhone ? await db.customer.findUnique({ where: { normalizedPhone } }) : null),
+  );
 
   if (existing) return ok({ customer: await fillBlanks(existing, parsed.data), created: false });
 

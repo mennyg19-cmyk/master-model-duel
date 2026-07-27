@@ -20,6 +20,21 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   DISCARDED: [],
 };
 
+/**
+ * The stages at which an order can still take money (R-127, R-169).
+ *
+ * Being packed is not the same as being paid for: the counter posts cash
+ * against an order already in the queue, and a card webhook delayed or retried
+ * by the provider lands after staff have moved the order on. Payability is
+ * about the order still being open, never about which stage it reached — every
+ * caller that takes or checks money reads this list so the two cannot drift.
+ */
+const PAYABLE_STATUSES: readonly OrderStatus[] = ['PLACED', 'IN_FULFILLMENT'];
+
+export function isPayableOrderStatus(status: OrderStatus): boolean {
+  return PAYABLE_STATUSES.includes(status);
+}
+
 const READABLE_STATUS: Record<OrderStatus, string> = {
   DRAFT: 'still a draft',
   PLACED: 'placed',

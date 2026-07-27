@@ -31,7 +31,7 @@ export function withinRateLimit(bucket: string, caller: string, rule: RateLimitR
   const existing = windows.get(key);
 
   if (!existing || now - existing.startedAt > rule.windowMs) {
-    if (windows.size >= MAX_TRACKED_KEYS) dropExpired(now, rule.windowMs);
+    if (windows.size >= MAX_TRACKED_KEYS) makeRoom(now, rule.windowMs);
     windows.set(key, { startedAt: now, count: 1 });
     return true;
   }
@@ -40,10 +40,29 @@ export function withinRateLimit(bucket: string, caller: string, rule: RateLimitR
   return existing.count <= rule.limit;
 }
 
-function dropExpired(now: number, windowMs: number): void {
+/**
+ * Lapsed windows first, because they are free to lose. If a burst of distinct
+ * live keys fills the map anyway, the oldest live window goes: the cap is what
+ * makes it a cap, and forgetting the longest-standing allowance costs one caller
+ * a fresh window rather than costing the process its memory.
+ */
+function makeRoom(now: number, windowMs: number): void {
   for (const [key, window] of windows) {
     if (now - window.startedAt > windowMs) windows.delete(key);
   }
+
+  if (windows.size < MAX_TRACKED_KEYS) return;
+
+  let oldestKey: string | null = null;
+  let oldestStartedAt = Number.POSITIVE_INFINITY;
+
+  for (const [key, window] of windows) {
+    if (window.startedAt >= oldestStartedAt) continue;
+    oldestKey = key;
+    oldestStartedAt = window.startedAt;
+  }
+
+  if (oldestKey !== null) windows.delete(oldestKey);
 }
 
 /**

@@ -12,6 +12,7 @@ import { failure, ok, type Result } from '../core/result';
 import { db } from '../db';
 import { queueRefundNotice } from '../email/transactional';
 import { recomputeOrderPaymentStatus } from '../orders/payment-status';
+import { isPayableOrderStatus } from '../orders/state-machine';
 import { abort, runInTransaction } from '../transaction';
 import { getPaymentGateway } from './gateway';
 
@@ -66,7 +67,7 @@ export async function postOfflinePayment(
   // A cancelled order has handed its stock back and a completed one is finished
   // with. Cash booked against either flips the cached status back to paid with
   // nothing behind it, and no screen would ever show the mistake.
-  if (order.status !== 'PLACED' && order.status !== 'IN_FULFILLMENT') {
+  if (!isPayableOrderStatus(order.status)) {
     return failure(ORDER_NOT_PAYABLE, 'That order is closed, so it cannot take a payment.');
   }
 
@@ -87,7 +88,7 @@ export async function postOfflinePayment(
         method: parsed.data.method,
         amountCents: parsed.data.amountCents,
         reference: parsed.data.reference || null,
-        recordedByStaffUserId: staff.acting.id,
+        recordedByStaffUserId: staff.actor.id,
       },
     });
 
@@ -199,7 +200,7 @@ export async function refundPayment(
         amountCents: input.amountCents,
         reference,
         reason,
-        recordedByStaffUserId: staff.acting.id,
+        recordedByStaffUserId: staff.actor.id,
       },
     });
 

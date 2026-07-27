@@ -60,7 +60,7 @@ export async function uploadImage(
       contentType: validation.contentType,
       sizeBytes: bytes.byteLength,
       altText: input.altText.trim(),
-      uploadedByStaffUserId: context.acting.id,
+      uploadedByStaffUserId: context.actor.id,
     },
   });
 

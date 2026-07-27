@@ -202,6 +202,10 @@ type AuditDetails = {
   /// arrives nowhere.
   'email.test_sent': { destination: string; provider: string };
   'email.list_changed': { slug: string; change: 'created' | 'joined' | 'left' };
+  /// The one row written before any staff user exists, so nobody is named as
+  /// having done it. It is the account every later permission descends from,
+  /// which is why the trail has to start here rather than at the first sign-in.
+  'setup.first_manager_created': { email: string };
   'staff.invited': { email: string; role: StaffRole };
   'staff.role_changed': { from: StaffRole; to: StaffRole };
   'staff.confirmed': never;

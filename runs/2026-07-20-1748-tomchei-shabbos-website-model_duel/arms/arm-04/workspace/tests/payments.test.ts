@@ -13,6 +13,7 @@ import {
   refundPayment,
   voidPayment,
 } from '../src/lib/payments/offline-payments';
+import { reconcilePayments } from '../src/lib/payments/reconciliation';
 import { signStripePayload, verifyStripeSignature } from '../src/lib/payments/stripe-signature';
 import { applyStripeEvent, parseStripeEvent } from '../src/lib/payments/webhook-service';
 import type { DraftOwner } from '../src/lib/orders/draft-access';
@@ -180,6 +181,43 @@ test('a charge for the wrong amount is recorded, handed straight back, and the o
   assert.ok(audited, 'the refund is in the audit trail');
 });
 
+test('a correct charge is kept when the order has already gone to packing', async () => {
+  const { order, sessionId } = await placedOrderAwaitingPayment(4200);
+
+  const packing = await transitionOrder(order.id, 'IN_FULFILLMENT', null);
+  assert.equal(packing.ok, true);
+
+  const outcome = await apply(
+    completedSession({ id: sessionId, intentId: nextIntentId('late'), amountCents: 4200 }),
+  );
+  assert.equal(outcome, 'payment_posted', 'a retried webhook is not a reason to refund');
+
+  const paid = await db.order.findUniqueOrThrow({ where: { id: order.id } });
+  assert.equal(paid.status, 'IN_FULFILLMENT', 'the order stays in the packing queue');
+  assert.equal(paid.paymentStatus, 'PAID');
+  assert.equal(
+    await db.paymentRefund.count({ where: { payment: { orderId: order.id } } }),
+    0,
+    'the customer keeps neither a refund nor an unpaid box',
+  );
+});
+
+test('a wrong amount is still handed back once packing has started', async () => {
+  const { order, sessionId } = await placedOrderAwaitingPayment(4200);
+
+  const packing = await transitionOrder(order.id, 'IN_FULFILLMENT', null);
+  assert.equal(packing.ok, true);
+
+  const outcome = await apply(
+    completedSession({ id: sessionId, intentId: nextIntentId('lateshort'), amountCents: 100 }),
+  );
+  assert.equal(outcome, 'auto_refunded');
+
+  const cancelled = await db.order.findUniqueOrThrow({ where: { id: order.id } });
+  assert.equal(cancelled.status, 'CANCELLED', 'the stage widened, the amount check did not');
+  assert.equal(cancelled.amountPaidCents, 0);
+});
+
 test('a session that completes without money posts nothing', async () => {
   const { order, sessionId } = await placedOrderAwaitingPayment();
 
@@ -245,6 +283,23 @@ test('a refund issued at the provider is synced once, then only the difference',
   const emptied = await db.order.findUniqueOrThrow({ where: { id: order.id } });
   assert.equal(emptied.amountPaidCents, 0);
   assert.equal(emptied.paymentStatus, 'UNPAID');
+});
+
+test('an order edited after it was paid shows up as an amount mismatch', async () => {
+  const { order, sessionId } = await placedOrderAwaitingPayment(3600);
+  await apply(completedSession({ id: sessionId, intentId: nextIntentId('edited'), amountCents: 3600 }));
+
+  await db.order.update({ where: { id: order.id }, data: { totalCents: 4200 } });
+  await reconcilePayments({ source: 'manual' });
+
+  const flag = await db.paymentReconciliationFlag.findUnique({
+    where: { fingerprint: `amount_mismatch:${sessionId}` },
+  });
+
+  assert.ok(flag, 'the sweep is what catches a payment the order has grown past');
+  assert.equal(flag.kind, 'AMOUNT_MISMATCH');
+  assert.equal(flag.amountCents, 3600, 'what was taken');
+  assert.equal(flag.expectedCents, 4200, 'what the order now costs');
 });
 
 test('an event for a session we never opened changes nothing', async () => {

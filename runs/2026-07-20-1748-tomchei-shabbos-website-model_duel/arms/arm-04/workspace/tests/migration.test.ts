@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 
-import { scanAddressBook } from '../src/lib/migration/address-cleanup';
+import { linkCustomerIdentity } from '../src/lib/customers';
+import { resolveCleanupFlag, scanAddressBook } from '../src/lib/migration/address-cleanup';
 import { dryRunLegacyImport } from '../src/lib/migration/legacy-import';
 import { readLegacyRow, repairOrderReference } from '../src/lib/migration/legacy-rows';
 import { ORDERS_PER_CHUNK } from '../src/lib/migration/legacy-verdicts';
@@ -167,6 +168,51 @@ test('two spellings of one mailbox are found as one household', async () => {
   assert.ok(flag, 'a dot and a +tag are the same mailbox');
   assert.equal(flag.duplicateOfCustomerId, first.id, 'the older account is the survivor');
   assert.equal(flag.customerId, alias.id);
+});
+
+test('merging two accounts sends the household to the one that has the history', async () => {
+  const mailbox = `berman${Date.now().toString(36)}`;
+  const login = `local:${mailbox}+box@example.test`;
+
+  const survivor = await db.customer.create({
+    data: {
+      email: `${mailbox}@example.test`,
+      normalizedEmail: `${mailbox}@example.test`,
+      fullName: 'Rivka Berman',
+    },
+  });
+  const duplicate = await db.customer.create({
+    data: {
+      email: `${mailbox}+box@example.test`,
+      normalizedEmail: `${mailbox}+box@example.test`,
+      fullName: 'Rivka Berman',
+      externalAuthId: login,
+    },
+  });
+
+  const staff = await createStaffContext(['migration.manage']);
+  await scanAddressBook(staff);
+
+  const flag = await db.addressCleanupFlag.findUniqueOrThrow({
+    where: { fingerprint: `DUPLICATE_CUSTOMER:${survivor.id}:${duplicate.id}` },
+  });
+
+  const merged = await resolveCleanupFlag(staff, { flagId: flag.id, decision: 'MERGED' });
+  assert.equal(merged.ok, true);
+
+  const emptied = await db.customer.findUniqueOrThrow({ where: { id: duplicate.id } });
+  assert.equal(emptied.externalAuthId, null, 'the login does not stay on the record we just emptied');
+  assert.equal(emptied.mergedIntoCustomerId, survivor.id);
+
+  const kept = await db.customer.findUniqueOrThrow({ where: { id: survivor.id } });
+  assert.equal(kept.externalAuthId, login, 'the household signs in with the same account it always did');
+
+  const signedIn = await linkCustomerIdentity({
+    externalId: login,
+    email: `${mailbox}+box@example.test`,
+    fullName: 'Rivka Berman',
+  });
+  assert.equal(signedIn.id, survivor.id, 'and lands on the orders and address book, not an empty shell');
 });
 
 test('a chunk is always a whole number of orders', async () => {

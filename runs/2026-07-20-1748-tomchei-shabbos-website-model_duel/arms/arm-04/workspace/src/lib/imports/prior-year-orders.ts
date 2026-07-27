@@ -142,11 +142,18 @@ export async function writePriorYearOrder(
 
   for (const line of input.lines) {
     const address = addresses.get(addressKeyOf(line));
+    const productId = products.get(line.productSlug);
+
+    if (productId === undefined) {
+      throw new Error(
+        `No archive product exists for "${line.productSlug}", which should have been created with the rest of this order's products.`,
+      );
+    }
 
     await tx.orderLine.create({
       data: {
         orderId: order.id,
-        productId: products.get(line.productSlug) ?? '',
+        productId,
         quantity: line.quantity,
         productNameSnapshot: line.productName,
         unitPriceCents: line.unitPriceCents,

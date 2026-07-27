@@ -3,6 +3,7 @@ import 'server-only';
 import { Prisma, type StaffUser } from '@prisma/client';
 
 import { db } from './db';
+import { recordAudit } from './audit';
 import { normalizeEmail } from './core/normalize';
 import { failure, ok, type Result } from './core/result';
 
@@ -57,15 +58,16 @@ export async function bootstrapFirstManager(input: {
         },
       });
 
-      await tx.auditEvent.create({
-        data: {
+      await recordAudit(
+        null,
+        {
           action: 'setup.first_manager_created',
           entityType: 'StaffUser',
           entityId: created.id,
-          actorLabel: 'first-run setup',
           detail: { email },
         },
-      });
+        tx,
+      );
 
       return created;
     });

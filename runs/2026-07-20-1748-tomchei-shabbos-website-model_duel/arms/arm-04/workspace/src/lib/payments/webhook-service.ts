@@ -9,6 +9,7 @@ import { db } from '../db';
 import { queueRefundNotice } from '../email/transactional';
 import { transitionOrder } from '../orders/order-service';
 import { recomputeOrderPaymentStatus } from '../orders/payment-status';
+import { isPayableOrderStatus } from '../orders/state-machine';
 import { getPaymentGateway } from './gateway';
 
 /**
@@ -133,7 +134,13 @@ async function completeCheckout(event: StripeEvent): Promise<WebhookOutcome> {
   });
 
   const order = await db.order.findUniqueOrThrow({ where: { id: attempt.orderId } });
-  const unsafe = order.status !== 'PLACED' || chargedCents !== order.totalCents;
+
+  // The order being past PLACED is not a reason to hand money back: a webhook
+  // the provider retried, or one that arrived after staff started packing,
+  // lands on an order that is still perfectly entitled to the payment. Only a
+  // closed order or the wrong amount is unsafe.
+  const orderIsOpen = isPayableOrderStatus(order.status);
+  const unsafe = !orderIsOpen || chargedCents !== order.totalCents;
   if (!unsafe) return 'payment_posted';
 
   await handBackUnsafeCharge({
@@ -143,7 +150,7 @@ async function completeCheckout(event: StripeEvent): Promise<WebhookOutcome> {
     paymentIntentId: session.data.payment_intent,
     chargedCents,
     expectedCents: order.totalCents,
-    orderIsPlaced: order.status === 'PLACED',
+    orderIsOpen,
   });
 
   return 'auto_refunded';
@@ -220,14 +227,14 @@ async function handBackUnsafeCharge(unsafe: {
   paymentIntentId: string;
   chargedCents: number;
   expectedCents: number;
-  orderIsPlaced: boolean;
+  orderIsOpen: boolean;
 }): Promise<void> {
   const reason =
-    unsafe.orderIsPlaced
+    unsafe.orderIsOpen
       ? `Charged ${unsafe.chargedCents} cents for an order that costs ${unsafe.expectedCents}`
       : 'Charged for an order that is no longer open';
 
-  if (unsafe.orderIsPlaced) {
+  if (unsafe.orderIsOpen) {
     const cancelled = await transitionOrder(unsafe.orderId, 'CANCELLED', null);
     if (!cancelled.ok) {
       throw new Error(

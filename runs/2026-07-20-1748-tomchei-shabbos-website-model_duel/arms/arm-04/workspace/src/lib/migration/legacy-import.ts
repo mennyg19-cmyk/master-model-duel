@@ -63,7 +63,7 @@ export async function dryRunLegacyImport(
       ...counts,
       chunkCount: new Set(chunkByReference.values()).size,
       sourceTotalCents: sourceTotal(verdicts),
-      stagedByStaffUserId: staff.acting.id,
+      stagedByStaffUserId: staff.actor.id,
       rows: {
         create: verdicts.map((verdict) => ({
           lineNumber: verdict.lineNumber,
