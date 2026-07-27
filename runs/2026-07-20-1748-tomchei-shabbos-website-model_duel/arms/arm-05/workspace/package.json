@@ -16,7 +16,8 @@
     "db:stop": "tsx scripts/db.ts stop",
     "db:migrate": "tsx scripts/db.ts migrate",
     "db:seed": "tsx scripts/db.ts seed",
-    "smoke:p1": "tsx scripts/smoke-p1.ts"
+    "smoke:p1": "tsx scripts/smoke-p1.ts",
+    "smoke:p2": "tsx scripts/smoke-p2.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "7.6.1",

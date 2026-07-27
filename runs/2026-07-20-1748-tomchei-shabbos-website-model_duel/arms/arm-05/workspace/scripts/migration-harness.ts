@@ -1,11 +1,9 @@
-import { readFile } from "node:fs/promises";
+import { runWithLocalDatabase } from "./local-db";
 
-async function verifySchema() {
-  const schema = await readFile(new URL("../prisma/schema.prisma", import.meta.url), "utf8");
-  if (!schema.includes('provider = "postgresql"') || !schema.includes("model StaffUser")) {
-    throw new Error("Migration harness requires the PostgreSQL staff schema.");
-  }
-  console.log("Migration harness: schema is ready for an isolated PostgreSQL database.");
+async function verifyMigrations() {
+  await runWithLocalDatabase("prisma", ["migrate", "deploy"]);
+  await runWithLocalDatabase("prisma", ["migrate", "status"]);
+  console.log("Migration harness: migrations deployed and status checked against embedded PostgreSQL.");
 }
 
-void verifySchema();
+void verifyMigrations();
