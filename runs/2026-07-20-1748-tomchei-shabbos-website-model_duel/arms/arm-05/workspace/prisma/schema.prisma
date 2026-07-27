@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  MANAGER
+  STAFF
+  DRIVER
+}
+
+enum PermissionEffect {
+  GRANT
+  DENY
+}
+
+model StaffUser {
+  id          String               @id @default(cuid())
+  clerkUserId String               @unique
+  email       String               @unique
+  displayName String
+  role        StaffRole
+  revokedAt   DateTime?
+  version     Int                  @default(1)
+  overrides   PermissionOverride[]
+  loginStamps SessionLoginStamp[]
+  auditEvents AuditEvent[]         @relation("AuditActor")
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+}
+
+model PermissionOverride {
+  id        String           @id @default(cuid())
+  staffId   String
+  permission String
+  effect    PermissionEffect
+  staff     StaffUser        @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, permission])
+}
+
+model CustomerIdentity {
+  id          String   @id @default(cuid())
+  clerkUserId String   @unique
+  email       String   @unique
+  createdAt   DateTime @default(now())
+}
+
+model AuditEvent {
+  id         String    @id @default(cuid())
+  actorId    String?
+  actor      StaffUser? @relation("AuditActor", fields: [actorId], references: [id])
+  action     String
+  subjectId  String?
+  details    Json
+  createdAt  DateTime  @default(now())
+}
+
+model SessionLoginStamp {
+  id        String    @id @default(cuid())
+  staffId   String
+  sessionId String    @unique
+  createdAt DateTime  @default(now())
+  staff     StaffUser @relation(fields: [staffId], references: [id], onDelete: Cascade)
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

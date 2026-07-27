@@ -67,3 +67,12 @@ late_joins:
     joined_utc: 2026-07-26T10:09:25.6481873Z
     test6: rerun_same_seeds
     test6_note: arm-04 only; clone arm-02 winner; B1-B5 from .scratch/BUG-LEDGER.md; arm-01/02/03 scores frozen
+  - arm_id: arm-05
+    model: gpt-5.6-terra-high
+    family: gpt-terra
+    pack_id: default
+    web_port: 3105
+    db_port: 4105
+    joined_utc: 2026-07-27T16:11:32.6055869Z
+    tests: "4,5"
+    tests_note: user requested Test 4+5 only; skip 1a/1b/2/6; build from frozen MERGED-BUILD-PLAN

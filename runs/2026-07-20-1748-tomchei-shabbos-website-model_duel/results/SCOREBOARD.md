@@ -8,6 +8,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 | arm-02 | 7 | 8 | 14 | | 18.0 | 12.5 | **15.0** | **74.5** | — | no |
 | arm-03 | **6** | **8** | **15** | | **18.0** | **11.0** | **11.0** | **69.0** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
 | arm-04 | **7** | **8** | **15** | | **18.0** | **14.0** | **11.0** | **73.0** | inv_novel=6; bonus_plan | **yes** (join after Test 6; Opus 5 high; T6 rerun) |
+| arm-05 | — | — | — | | **1.5** | … | — | … | — | **yes** (Terra high; T4+T5 only) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -81,6 +82,7 @@ Backfilled 2026-07-27 from Cursor usage export (`usage-events-2026-07-27.csv`). 
 - **P10 arm-04:** **1.5/20** → **15.0/20** ([fix notes](arms/arm-04/results/P10-FIX-NOTES.md); 10 majors + 9 minors; smoke 21/21, tests 206/206)
 - **P11 arm-04:** **1.5/20** → **16.5/20** ([fix notes](arms/arm-04/results/P11-FIX-NOTES.md); 8 majors + 11 minors; smoke 27/27, tests 217/217, ladder 275/275)
 - **P12 arm-04:** **1.5/20** → **18.0/20** ([fix notes](arms/arm-04/results/P12-FIX-NOTES.md); 6 majors + 10 minors; smoke 28/28, tests 226/226) — **Test 4 complete**
+- **P1 arm-05:** **1.5/20** → **1.5/20** ([fix notes](arms/arm-05/results/P1-FIX-NOTES.md); B2–B9 + majors; smoke S1–S5 pass after embedded PG)
 - **Test 6 winner:** tie **15.0/15** both arms (detect 8/8 · vague fix 7/7)
 
 ## Test 6 notes

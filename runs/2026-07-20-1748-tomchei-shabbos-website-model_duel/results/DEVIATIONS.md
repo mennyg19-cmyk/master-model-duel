@@ -23,3 +23,14 @@
 **What happened:** Added contestant mid-run after user rolled back first attempt. Model: **`claude-opus-5-thinking-high`** (`claude-opus`), ports 3104/4104. Test 6: **rerun_same_seeds** (clone arm-02; B1–B5). Live grill for Test 1b (no frozen replay).
 **Rule:** Shared freezes unchanged; see protocol/LATE-JOIN.md. Grade vs frozen RECONCILED-INVENTORY + MERGED-BUILD-PLAN; bonus_inventory_novel / bonus_plan allowed.
 **Status:** DECIDED — Test 1a focused specialists running.
+
+## [2026-07-27T16:11:32.6055869Z] Late join arm-05
+**What happened:** Added **`gpt-5.6-terra-high`** (`gpt-terra`), ports 3105/4105. User requested **Test 4 + Test 5 only** (skip 1a/1b/2/6). Build from frozen `MERGED-BUILD-PLAN` + phase cuts; self_review_mode remains `single`.
+**Rule:** Shared freezes unchanged; see protocol/LATE-JOIN.md. No rewrite of reconciled inventory / merged plan.
+**Status:** DECIDED — Test 4 P1 starting.
+
+## [2026-07-27T16:53:00Z] arm-05 P1 smoke infra
+**What happened:** Post-fix live S2–S5 returned honest 503 (no Docker/system Postgres/Clerk on host). Earlier duel arms used **embedded Postgres** on the arm db port for smoke. Orchestrator resumed builder to add embedded PG on 4105 + documented dev-auth; phase not gated until S1–S5 pass.
+**Update:** Port 4105 cleared; re-smoke **S1–S5 pass**. P1 gated **1.5/20**.
+**Status:** DONE — P1 gated; P2 starting
+
