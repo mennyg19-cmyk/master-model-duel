@@ -14,19 +14,33 @@ type Account = {
 
 export function AccountDashboard() {
   const [account, setAccount] = useState<Account | null>(null);
+  const [openSeasonId, setOpenSeasonId] = useState<string | null>(null);
   const [message, setMessage] = useState("Loading your account…");
 
   useEffect(() => {
     void fetch("/api/account").then(async (response) => {
-      const body = await response.json() as { account?: Account; error?: string };
+      const body = await response.json() as { account?: Account; openSeason?: { id: string } | null; error?: string };
       if (!response.ok || !body.account) {
         setMessage(body.error ?? "Unable to load your account.");
         return;
       }
       setAccount(body.account);
+      setOpenSeasonId(body.openSeason?.id ?? null);
       setMessage("");
     });
   }, []);
+
+  async function repeatOrder(sourceOrderId: string) {
+    if (!openSeasonId) return setMessage("Repeat ordering is unavailable while the store is closed.");
+    const response = await fetch("/api/repeat", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: window.location.origin },
+      body: JSON.stringify({ sourceOrderId, targetSeasonId: openSeasonId }),
+    });
+    const body = await response.json() as { draftId?: string; error?: string };
+    if (!response.ok || !body.draftId) return setMessage(body.error ?? "Unable to prepare that repeat order.");
+    window.location.assign(`/repeat/${body.draftId}`);
+  }
 
   if (!account) return <p className="notice">{message}</p>;
   return (
@@ -49,7 +63,7 @@ export function AccountDashboard() {
         {account.orders.length === 0 ? <p>No orders yet. <Link href="/order">Start an order</Link>.</p> : account.orders.map((order) => (
           <article className="order-history" key={order.id}>
             <div><strong>{order.draftReference}</strong><br />{order.lines.reduce((total, line) => total + line.quantity, 0)} gifts · {formatMoney(order.totalCents)}</div>
-            <div><span>{order.status}</span>{order.status === "DRAFT" && <Link className="button secondary" href="/order">Continue or cancel</Link>}</div>
+            <div><span>{order.status}</span>{order.status === "DRAFT" && <Link className="button secondary" href="/order">Continue or cancel</Link>}{order.status === "FINALIZED" && <button className="button secondary" disabled={!openSeasonId} onClick={() => void repeatOrder(order.id)} type="button">Repeat this order</button>}</div>
           </article>
         ))}
       </section>

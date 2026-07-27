@@ -1,0 +1,43 @@
+# P10 Clean-Code Review — arm-05 (blind)
+
+Scope: P10 delta in `arms/arm-05/workspace/` — seasons management, repeat orders, replacement mappings, scheduled auto-flip. New files: `lib/repeat-orders.ts`, `lib/seasons.ts`, `app/admin/seasons/page.tsx`, `app/api/admin/seasons/route.ts`, `app/api/admin/repeat/route.ts`, `app/api/cron/season-auto-flip/route.ts`, `app/api/repeat/route.ts`, `app/api/repeat/[draftId]/route.ts`, `app/repeat/[draftId]/page.tsx`, `app/components/repeat-order-review.tsx`, `scripts/smoke-p10.ts`; plus P10 edits to `app/admin/layout.tsx`, `app/api/account/route.ts`, `app/components/account-dashboard.tsx`, `package.json`.
+Findings only — no fixes. No model names; arm id only.
+
+## Summary
+
+- Major: 4
+- Minor: 6
+
+## Major
+
+### M1 — `RepeatLine` shape duplicated between lib and component
+`lib/repeat-orders.ts:5-14` defines `type RepeatLine` (8 fields: `sourceLineId`, `sourceProductId`, `sourceName`, `sourcePriceCents`, `quantity`, `recipient`, `candidates`, `suggestedProductId`). The type is not exported. `app/components/repeat-order-review.tsx:6-14` redefines the same shape as `type ReviewLine` with identical fields. `clean-code.mdc` names "type/schema drift — centralize types, single source of truth." If the lib changes `RepeatLine` (e.g. adds an `addOns` field), the component's `ReviewLine` silently desynchronises and the `GET /api/repeat/[draftId]` payload is read with the wrong shape. Rule of 2: 2 call sites (lib writes, component reads). Export `RepeatLine` from the lib and import it.
+
+### M2 — `Address` type redefined in a 4th component file
+`app/components/repeat-order-review.tsx:15` adds `type Address = { id: string; recipientName: string; line1: string; city: string; state: string; postalCode: string }`. The same shape already exists at `app/components/checkout-flow.tsx:6` (with optional `greetingPreference`), `app/components/order-builder.tsx:7`, and inline at `app/components/account-dashboard.tsx:11`. Four copies of the customer-address shape across the storefront, none shared. P10 perpetuates the existing drift instead of consolidating. `clean-code.mdc`: "type/schema drift — centralize types, single source of truth"; "No `types.ts` grab-bags — colocate by concern" points to a single address-module type, not four re-definitions.
+
+### M3 — Season management logic split between `lib/seasons.ts` and the route handler
+`lib/seasons.ts` is 14 lines and exports only `autoOpenScheduledSeasons` (the cron helper). All other season domain logic — create, status toggle, scheduled-open update, replacement mapping upsert, year-ordering validation — lives inline in `app/api/admin/seasons/route.ts:38-78` inside the `POST` handler. By contrast `lib/repeat-orders.ts` owns the entire repeat domain (chain resolution, draft create, draft read, draft confirm) and the route handlers are thin. Two P10 features, two patterns for "where does domain logic live": repeat has a lib module, seasons inlines CRUD in the route. `clean-code.mdc`: "One data-fetching pattern per project." A `lib/seasons/` module (mirroring `lib/repeat-orders.ts`) would give season CRUD + the cron helper one home and keep the route handler on auth/validation/parse.
+
+### M4 — `replacementCandidates` exceeds the 3-level nesting rule
+`lib/repeat-orders.ts:20-46`. `clean-code.mdc`: "If a function has more than 3 levels of nesting, refactor it." The BFS reaches 4: function body → `while (frontier.length > 0)` → `for (const mapping of mappings)` → `if (target.seasonId === targetSeasonId && target.isActive)` (and the sibling `if (!visited.has(target.id))`). The per-mapping body does three things (candidate collect, visited check, frontier push) that read as a pattern match. Extracting `recordMapping(mapping, targetSeasonId, candidates)` and `enqueueUnvisited(target, visited, frontier)` would flatten the loop to 2 levels and make the BFS structure readable.
+
+## Minor
+
+### m1 — `post(body: unknown)` defeats type-checking on the admin seasons form
+`app/admin/seasons/page.tsx:29` declares `async function post(body: unknown)`. Call sites at `:43-48` pass `{ action: "create", name: form.get("name"), year: Number(form.get("year")), opensAt: ... }`. `form.get("name")` returns `FormDataEntryValue | null` (`string | File | null`), but the API schema at `app/api/admin/seasons/route.ts:8` expects `z.string().trim().min(3)`. The `unknown` parameter accepts the mismatched type silently; the error only surfaces at runtime as a 400. `clean-code.mdc` anti-AI-tics: "No redundant type assertions the compiler already guarantees" — here the compiler is being prevented from guaranteeing anything. Typing `post` against the discriminated union (or exporting the schema) would let TypeScript catch the `FormDataEntryValue | null` hole.
+
+### m2 — `confirmRepeatDraft` uses a non-null assertion on `customerId`
+`lib/repeat-orders.ts:143`: `where: { id: { in: persistedLines.map((line) => line.addressId) }, customerId: repeatDraft.draft.customerId! }`. The `!` asserts `customerId` is non-null, but `readRepeatDraft` returns a draft from `prisma.order.findFirst` whose `customerId` is nullable in the schema. The assertion is safe only because `readRepeatDraft` was called with a `customerId` filter — but that invariant lives in the caller, not in `readRepeatDraft`'s return type. If a future caller passes no `customerId`, the `!` lies and prisma receives `undefined` (no filter), counting addresses belonging to any customer. `clean-code.mdc` anti-AI-tics: "No redundant type assertions the compiler already guarantees" — this assertion is not redundant, it is unverified. Narrow explicitly (throw if `customerId` is null before the query) or have `readRepeatDraft` return a narrowed type when called with a customer.
+
+### m3 — Customer repeat/confirm path creates no audit event; staff path does
+`app/api/admin/repeat/route.ts:20` and `:31` create `auditEvent` rows for `order.repeated_by_staff` and `orders.bulk_repeated`. `app/api/repeat/[draftId]/route.ts:39` calls `confirmRepeatDraft` and returns — no `auditEvent`. `confirmRepeatDraft` itself (`lib/repeat-orders.ts:120-183`) writes `confirmedAt` into `wireFormat` but creates no audit row. The same P10 feature audits staff-triggered drafts but not customer-triggered drafts or customer confirmations. `clean-code.mdc`: "One error-handling approach per project" — by analogy, one audit approach per domain action. Either customer repeat/confirm is intentionally unaudited (document why) or the audit pattern is inconsistent.
+
+### m4 — `origin` header set explicitly on customer fetches, omitted on admin fetches
+`app/components/repeat-order-review.tsx:45` and `app/components/account-dashboard.tsx:36` set `headers: { "content-type": "application/json", origin: window.location.origin }`. `app/admin/seasons/page.tsx:30-34` and `:55` set only `headers: { "content-type": "application/json" }`. Both admin and customer APIs call `hasSameOrigin(request)` (`app/api/admin/seasons/route.ts:41`, `app/api/admin/repeat/route.ts:14`, `app/api/repeat/route.ts:13`, `app/api/repeat/[draftId]/route.ts:32`). The customer pages defend the header manually; the admin page relies on the browser. Same `hasSameOrigin` gate, two patterns. Pick one and apply to all four P10 fetch sites.
+
+### m5 — Admin seasons GET over-fetches `replacementFrom` the client never reads
+`app/api/admin/seasons/route.ts:30-33` includes `replacementFrom: { include: { targetProduct: { include: { season: true } } } }` on every product. The client at `app/admin/seasons/page.tsx:84-86` reads only `product.id`, `product.name`, `product.isActive`, `product.season.year`. The `replacementFrom` join is unused by the P10 UI. Either the mapping list was meant to show existing mappings (it does not — the page only creates new ones) or the include is leftover. `clean-code.mdc`: "No 'just in case' code — every line must have a reason."
+
+### m6 — `createRepeatDraft` does not require the source order to be `FINALIZED`
+`lib/repeat-orders.ts:57-67`: `prisma.order.findFirst({ where: { id: sourceOrderId, ...(expectedCustomerId ? { customerId } : {}) } })` — no `status` filter. A `DRAFT` order can be repeated into another `DRAFT`. The plan (`shared/MERGED-BUILD-PLAN.md` § P10) frames repeat as "copy prior year to draft," implying a prior finalized order; the bulk path at `app/api/admin/repeat/route.ts:24` correctly filters `status: "FINALIZED"`, but the shared `createRepeatDraft` does not, so the customer single-repeat path (`app/api/repeat/route.ts:19`) accepts a draft source. Two entry points, one validates status and one does not. Either filter `status: "FINALIZED"` in `createRepeatDraft` (single source) or document that drafts are intentionally repeatable.
