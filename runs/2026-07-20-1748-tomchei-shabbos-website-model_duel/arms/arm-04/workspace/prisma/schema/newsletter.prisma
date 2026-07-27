@@ -27,5 +27,8 @@ model NewsletterSubscriber {
   unsubscribedAt DateTime?
   updatedAt      DateTime  @updatedAt
 
+  listMemberships SubscriberListMember[]
+  campaignSends   EmailCampaignSend[]
+
   @@index([status])
 }

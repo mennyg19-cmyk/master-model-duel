@@ -3,6 +3,7 @@ import 'server-only';
 import type { NotificationChannel } from '@prisma/client';
 
 import type { DbClient } from '../core/db-client';
+import { isUniqueViolation } from '../core/prisma';
 import { db } from '../db';
 
 /**
@@ -11,11 +12,12 @@ import { db } from '../db';
  * P9 has to be able to say "one email and one SMS went to this customer" and
  * "the day-of notice cannot go twice", and both are properties of a record
  * rather than of a mail server. So a message is written here, keyed by the event
- * it belongs to, and P11 adds the transport that drains the table.
+ * it belongs to. The sweeper in `dispatch.ts` drains the table over both
+ * channels, so nothing here knows or cares which provider is configured.
  *
  * Writing is idempotent by construction: `dedupeKey` is unique, and a collision
- * is the answer "already sent", not an error. Callers get back what happened so
- * a screen can say "3 sent, 2 already had one".
+ * is the answer "already queued", not an error. Callers get back what happened
+ * so a screen can say "3 queued, 2 already had one".
  */
 export type OutboxMessage = {
   channel: NotificationChannel;
@@ -145,20 +147,16 @@ export function addResults(...results: OutboxResult[]): OutboxResult {
   );
 }
 
-/** "2 sent, 1 already had one, 1 had nowhere to send" — what staff need to read. */
+/**
+ * "2 queued, 1 already had one, 1 had nowhere to send" — what staff need to
+ * read. It says queued rather than sent because the sweeper does the sending a
+ * minute or so later, and a screen that claims delivery it has not seen is a
+ * screen staff learn to distrust.
+ */
 export function describeOutbox(result: OutboxResult): string {
-  const parts = [`${result.queued} sent`];
+  const parts = [`${result.queued} queued`];
   if (result.alreadySent > 0) parts.push(`${result.alreadySent} already had one`);
   if (result.skipped > 0) parts.push(`${result.skipped} had no address or number on file`);
 
   return parts.join(', ');
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: string }).code === 'P2002'
-  );
 }

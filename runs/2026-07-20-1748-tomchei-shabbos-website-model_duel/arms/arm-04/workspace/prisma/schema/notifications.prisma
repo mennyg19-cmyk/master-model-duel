@@ -1,0 +1,131 @@
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+enum MessageAttemptOutcome {
+  SENT
+  FAILED
+}
+
+/// The outbox (G-021, G-026, R-088).
+///
+/// P9 wrote the rows and P11 drains them. Everything a delivery needs is on the
+/// row rather than in a mail server: `dedupeKey` is unique, so a second attempt
+/// at the same event collides instead of sending twice, and the retry columns
+/// are what let a provider outage end in one delivery rather than none or four.
+/// Nothing here is a secret — the body is the same text the customer receives.
+model NotificationLog {
+  id      String              @id @default(uuid())
+  channel NotificationChannel
+  status  NotificationStatus  @default(QUEUED)
+
+  /// What happened, as a stable string: `pickup.ready`, `delivery.day_of`,
+  /// `order.confirmation`, `campaign.send`.
+  kind String
+
+  /// Email address or E.164 number, whichever the channel needs.
+  destination String
+
+  subject String?
+  body    String
+
+  /// The event this message is: `delivery.day_of:{packageId}` and so on. Unique,
+  /// which is the whole idempotency mechanism — a second attempt collides
+  /// instead of sending twice.
+  dedupeKey String @unique
+
+  customerId String?
+  orderId    String?
+  packageId  String?
+  routeId    String?
+
+  /// How many times a sweep has picked this message up. The count is what the
+  /// give-up rule reads, so it is on the row rather than counted from the
+  /// attempt trail, which a purge is allowed to thin.
+  attempts Int @default(0)
+
+  /// When the message is next allowed to be tried. Null means "now". A failing
+  /// provider pushes it into the future, which is what stops the sweep from
+  /// spending its whole run on the same dead address.
+  nextAttemptAt DateTime?
+
+  /// Set while a sweep holds the message. Two sweeps overlapping is normal —
+  /// a cron that fires again before the last run finished — and this is what
+  /// makes the second one skip a message the first is already sending.
+  claimedAt DateTime?
+
+  /// The provider's own id for the delivery, kept so a bounce report can be
+  /// traced back to the row that sent it.
+  providerReference String?
+
+  /// The last failure in plain words, for the screen. The full trail is in
+  /// `NotificationAttempt`.
+  lastError String?
+
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+  failedAt  DateTime?
+
+  attemptTrail NotificationAttempt[]
+  campaignSend EmailCampaignSend?
+
+  @@index([kind, createdAt])
+  @@index([orderId])
+  @@index([packageId])
+  @@index([status, nextAttemptAt])
+  @@index([status, sentAt])
+}
+
+/// One try at handing a message to a provider (R-088, R-181).
+///
+/// The trail is what makes a failure auditable: "it went in the end" is not an
+/// answer to "what happened on Tuesday night". A row per attempt says which try
+/// it was, what the provider said, and when.
+model NotificationAttempt {
+  id        String                @id @default(uuid())
+  messageId String
+  attempt   Int
+  outcome   MessageAttemptOutcome
+
+  /// The provider's message id on success, and its refusal in plain words on
+  /// failure. Truncated by the sender: a provider that quotes the whole request
+  /// back would put the customer's address in here.
+  providerReference String?
+  error             String?
+
+  attemptedAt DateTime @default(now())
+
+  message NotificationLog @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, attempt])
+  @@index([messageId])
+}
+
+/// What test mode caught instead of sending (R-178, R-014).
+///
+/// The capture providers write here rather than calling Resend or the SMS
+/// carrier, so a development machine, CI and the settings test sender all
+/// exercise the real queue, the real templates and the real sweeper without a
+/// single message leaving the building.
+model CapturedMessage {
+  id      String              @id @default(uuid())
+  channel NotificationChannel
+
+  destination String
+  subject     String?
+  body        String
+
+  /// Which part of the app asked for it: `outbox`, `settings-test` or `campaign-test`.
+  source String
+
+  capturedAt DateTime @default(now())
+
+  @@index([capturedAt])
+}

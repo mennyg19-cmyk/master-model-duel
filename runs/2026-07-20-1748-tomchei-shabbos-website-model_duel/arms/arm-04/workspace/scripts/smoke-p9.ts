@@ -191,9 +191,12 @@ async function main() {
   });
 
   expect('S4a', 'Starting the route tells every recipient once, and pressing it again tells nobody twice',
+    // P11 gave the outbox a sweeper, so the office is told what was queued
+    // rather than what was sent — the screen no longer claims a delivery it
+    // has not watched happen.
     dayOf.length === 3 &&
-      started.includes('3 sent') &&
-      startedAgain.includes('0 sent') &&
+      started.includes('3 queued') &&
+      startedAgain.includes('0 queued') &&
       startedAgain.includes('3 already had one'),
     `G-023: "${started}" then "${startedAgain}" — ${dayOf.length} day-of notices, one per box, keyed on the box so a second tap is a no-op`);
 
@@ -394,8 +397,8 @@ async function main() {
 
   expect('S5b', 'A packed box in stock is announced exactly once, with a deadline on the shelf',
     notices === 1 &&
-      told.includes('1 sent') &&
-      toldTwice.includes('0 sent') &&
+      told.includes('1 queued') &&
+      toldTwice.includes('0 queued') &&
       readyBox.pickupReadyAt !== null &&
       readyBox.pickupExpiresAt !== null,
     `G-026: "${told}" then "${toldTwice}" — one notice on file, holding until ${readyBox.pickupExpiresAt?.toDateString()}`);

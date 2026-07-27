@@ -1,8 +1,9 @@
 import { saveShippingSettingsAction } from '../actions';
-import { SettingsError, SettingsTabs } from '../settings-tabs';
+import { SettingsTabs } from '../settings-tabs';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/field';
+import { FlashMessages } from '@/components/ui/flash';
 import { requirePermission } from '@/lib/auth/staff';
 import { readSetting } from '@/lib/settings';
 
@@ -11,10 +12,10 @@ export const dynamic = 'force-dynamic';
 export default async function ShippingSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ problem?: string }>;
 }) {
   await requirePermission('settings.manage');
-  const [{ error }, baseRateCents, thresholdCents, deliveryZips, deliveryDays, origin] =
+  const [{ problem }, baseRateCents, thresholdCents, deliveryZips, deliveryDays, origin] =
     await Promise.all([
       searchParams,
       readSetting('shipping.baseRateCents'),
@@ -34,7 +35,7 @@ export default async function ShippingSettingsPage({
       </div>
 
       <SettingsTabs active="/admin/settings/shipping" />
-      <SettingsError message={error} />
+      <FlashMessages problem={problem} testIdPrefix="settings" />
 
       <form action={saveShippingSettingsAction} className="space-y-6">
         <Card>

@@ -21,6 +21,7 @@ export const PERMISSIONS = {
   'seasons.manage': 'Open and close seasons, schedule the flip and run the new-season wizard',
   'routes.manage': 'Plan delivery routes, hand out driver links and reroute boxes',
   'routes.drive': 'Open assigned delivery routes',
+  'email.manage': 'Write campaigns, edit triggered emails and manage subscriber lists',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -37,7 +38,9 @@ const ROLE_DEFAULTS: Record<StaffRole, readonly Permission[]> = {
   // two nights, so it comes with the board. Driving is not: a route link is a
   // credential handed to a volunteer, and `routes.drive` is what it grants.
   // Neither is opening a season: that puts the shop live and rewrites what it
-  // sells, so `seasons.manage` stays with the manager (UR-008).
+  // sells, so `seasons.manage` stays with the manager (UR-008). Writing to the
+  // whole donor list is the same kind of decision, so `email.manage` stays
+  // there too.
   STAFF: [
     'dashboard.view',
     'orders.view',

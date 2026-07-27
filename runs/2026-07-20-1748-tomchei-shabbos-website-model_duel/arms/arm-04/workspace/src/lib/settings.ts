@@ -43,6 +43,15 @@ const SETTING_SCHEMAS = {
   'email.fromName': z.string(),
   'email.fromAddress': z.string(),
   'email.replyToAddress': z.string(),
+  // Branding every email wears (R-085). One header line, one footer line and
+  // one colour is the whole of it: an org that wants a designed letter writes
+  // it in the campaign body.
+  'email.logoUrl': z.string(),
+  'email.footerText': z.string(),
+  'email.accentColor': z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex colour like #8a1c1c.'),
+  // How long a delivered message stays readable before the purge takes it
+  // (R-172). Queued and failed rows are never eligible whatever this says.
+  'email.logRetentionDays': z.number().int().min(7).max(730),
 } as const;
 
 type SettingKey = keyof typeof SETTING_SCHEMAS;
@@ -62,6 +71,10 @@ const DEFAULTS: { [K in SettingKey]: SettingValue<K> } = {
   'email.fromName': '',
   'email.fromAddress': '',
   'email.replyToAddress': '',
+  'email.logoUrl': '',
+  'email.footerText': '',
+  'email.accentColor': '#8a1c1c',
+  'email.logRetentionDays': 90,
 };
 
 export async function readSetting<K extends SettingKey>(key: K): Promise<SettingValue<K>> {

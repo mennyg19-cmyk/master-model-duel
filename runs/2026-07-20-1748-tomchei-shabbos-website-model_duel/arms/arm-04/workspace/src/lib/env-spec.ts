@@ -168,6 +168,47 @@ export const ENV_VARIABLES: EnvVariableSpec[] = [
     secret: true,
   },
   {
+    key: 'EMAIL_PROVIDER',
+    description:
+      'resend = the hosted mail account, the deployment target. capture = write every email into ' +
+      'the CapturedMessage table instead of sending it, so development, CI and the settings test ' +
+      'sender run the real queue and the real templates without mailing a donor. It is rejected ' +
+      'unless APP_URL points at this machine.',
+    example: 'capture',
+  },
+  {
+    key: 'RESEND_API_KEY',
+    description: 'Resend API key. Required only when EMAIL_PROVIDER=resend.',
+    example: '',
+    secret: true,
+  },
+  {
+    key: 'SMS_PROVIDER',
+    description:
+      'twilio = the hosted SMS account, the deployment target. capture = the same offline ' +
+      'stand-in email uses, and rejected off this machine for the same reason.',
+    example: 'capture',
+  },
+  {
+    key: 'TWILIO_ACCOUNT_SID',
+    description: 'Twilio account SID. Required only when SMS_PROVIDER=twilio.',
+    example: '',
+    secret: true,
+  },
+  {
+    key: 'TWILIO_AUTH_TOKEN',
+    description: 'Twilio auth token. Required only when SMS_PROVIDER=twilio.',
+    example: '',
+    secret: true,
+  },
+  {
+    key: 'TWILIO_FROM_NUMBER',
+    description:
+      'The E.164 number texts are sent from, for example +15551234567. Required only when ' +
+      'SMS_PROVIDER=twilio.',
+    example: '',
+  },
+  {
     key: 'CRON_SECRET',
     description:
       'Bearer secret the scheduled-job endpoints require. Empty means every cron endpoint ' +
@@ -198,6 +239,12 @@ const baseSchema = z.object({
   SHIPPO_FEDEX_ACCOUNT_ID: z.string().optional(),
   SHIPPO_UPS_ACCOUNT_ID: z.string().optional(),
   MAPBOX_ACCESS_TOKEN: z.string().optional(),
+  EMAIL_PROVIDER: z.enum(['resend', 'capture']).default('capture'),
+  RESEND_API_KEY: z.string().optional(),
+  SMS_PROVIDER: z.enum(['twilio', 'capture']).default('capture'),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM_NUMBER: z.string().optional(),
   CRON_SECRET: z.string().optional(),
   TRUST_PROXY_HEADERS: z
     .enum(['true', 'false'])
@@ -288,6 +335,42 @@ export const envSchema = baseSchema.superRefine((env, ctx) => {
         'MAPBOX_ACCESS_TOKEN is required unless APP_URL is a loopback address, where an ' +
         'offline stand-in places addresses instead',
     });
+  }
+
+  if (env.EMAIL_PROVIDER === 'resend' && !env.RESEND_API_KEY) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['RESEND_API_KEY'],
+      message: 'RESEND_API_KEY is required when EMAIL_PROVIDER=resend, but it was empty',
+    });
+  }
+
+  if (env.SMS_PROVIDER === 'twilio') {
+    for (const key of ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM_NUMBER'] as const) {
+      if (!env[key]) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `${key} is required when SMS_PROVIDER=twilio, but it was empty`,
+        });
+      }
+    }
+  }
+
+  // The same loopback rule the other stand-ins get, and the one with the
+  // loudest failure: a hosted deployment left on capture takes orders, queues
+  // every confirmation and reminder, and posts none of them — while every
+  // screen reports the message as sent.
+  for (const channel of ['EMAIL_PROVIDER', 'SMS_PROVIDER'] as const) {
+    if (env[channel] === 'capture' && !isLoopbackUrl(env.APP_URL)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [channel],
+        message:
+          `${channel}=capture is only allowed when APP_URL is a loopback address, but APP_URL is ` +
+          `${env.APP_URL}. A deployment that captures its mail never tells a customer anything`,
+      });
+    }
   }
 
   if (env.CRON_SECRET !== undefined && env.CRON_SECRET !== '' && env.CRON_SECRET.length < MIN_CRON_SECRET_LENGTH) {

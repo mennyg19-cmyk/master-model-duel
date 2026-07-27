@@ -18,7 +18,7 @@
     "db:fresh": "tsx scripts/db-fresh.ts",
     "seed": "node --import tsx --conditions=react-server --env-file=.env prisma/seed.ts",
     "test:db": "tsx scripts/test-db.ts",
-    "test": "npm run test:db && node --import tsx --conditions=react-server --env-file=.env.test --test-concurrency=1 --test tests/core.test.ts tests/env-spec.test.ts tests/permissions.test.ts tests/bootstrap.test.ts tests/concurrency.test.ts tests/grouping.test.ts tests/draft-reference.test.ts tests/order-state-machine.test.ts tests/order-lifecycle.test.ts tests/order-numbers.test.ts tests/inventory.test.ts tests/scheduled-jobs.test.ts tests/catalog-browse.test.ts tests/catalog-admin.test.ts tests/media.test.ts tests/newsletter.test.ts tests/cart-builder.test.ts tests/address-book.test.ts tests/checkout.test.ts tests/payments.test.ts tests/admin-ops.test.ts tests/fulfillment.test.ts tests/shipping.test.ts tests/routes.test.ts tests/repeat-seasons.test.ts",
+    "test": "npm run test:db && node --import tsx --conditions=react-server --env-file=.env.test --test-concurrency=1 --test tests/core.test.ts tests/env-spec.test.ts tests/permissions.test.ts tests/bootstrap.test.ts tests/concurrency.test.ts tests/grouping.test.ts tests/draft-reference.test.ts tests/order-state-machine.test.ts tests/order-lifecycle.test.ts tests/order-numbers.test.ts tests/inventory.test.ts tests/scheduled-jobs.test.ts tests/catalog-browse.test.ts tests/catalog-admin.test.ts tests/media.test.ts tests/newsletter.test.ts tests/cart-builder.test.ts tests/address-book.test.ts tests/checkout.test.ts tests/payments.test.ts tests/admin-ops.test.ts tests/fulfillment.test.ts tests/shipping.test.ts tests/routes.test.ts tests/repeat-seasons.test.ts tests/email.test.ts",
     "newsletter:link": "node --import tsx --conditions=react-server --env-file=.env scripts/newsletter-link.ts",
     "smoke": "tsx scripts/smoke.ts",
     "smoke:p2": "tsx scripts/smoke-p2.ts",
@@ -30,6 +30,7 @@
     "smoke:p8": "node --import tsx --conditions=react-server --env-file=.env scripts/smoke-p8.ts",
     "smoke:p9": "node --import tsx --conditions=react-server --env-file=.env scripts/smoke-p9.ts",
     "smoke:p10": "node --import tsx --conditions=react-server --env-file=.env scripts/smoke-p10.ts",
+    "smoke:p11": "node --import tsx --conditions=react-server --env-file=.env scripts/smoke-p11.ts",
     "fixtures:scale": "node --import tsx --conditions=react-server --env-file=.env scripts/fixtures-scale.ts",
     "ci": "npm run lint && npm run typecheck && npm run db:guard && npm test"
   },

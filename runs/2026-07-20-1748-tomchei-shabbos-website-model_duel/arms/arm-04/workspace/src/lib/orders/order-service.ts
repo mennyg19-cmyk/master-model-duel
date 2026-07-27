@@ -8,6 +8,7 @@ import { resolveFulfillmentFees, type RateRules } from '../checkout/fees';
 import { formatCents, sumCents } from '../core/money';
 import { failure, type Failure, type Result } from '../core/result';
 import { db } from '../db';
+import { queueOrderConfirmation } from '../email/transactional';
 import { abort, runInTransaction } from '../transaction';
 import { inventoryDemand, type InventoryDemand } from '../inventory/demand';
 import { releaseUnits, reserveUnits, type InventoryTarget } from '../inventory/reserve';
@@ -112,6 +113,16 @@ export async function finalizeOrder(
     const totals = await chargeFulfillment(tx, lines, packages, rules, shippingQuotes);
 
     await tx.order.update({ where: { id: order.id }, data: { orderNumber, ...totals } });
+
+    // Queued inside the same transaction as the order it confirms (R-087): a
+    // finalize that rolls back must not leave a customer holding an email for
+    // an order that does not exist.
+    await queueOrderConfirmation(
+      { ...order, orderNumber },
+      packages.length,
+      totals.totalCents,
+      tx,
+    );
 
     await recordAudit(
       actor,

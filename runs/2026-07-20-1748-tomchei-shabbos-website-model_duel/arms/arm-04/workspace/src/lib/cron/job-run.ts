@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { Prisma } from '@prisma/client';
 
+import { firstErrorMessage } from '../core/errors';
 import { db } from '../db';
 
 /**
@@ -22,13 +23,6 @@ export type CronJobOutcome<T> = {
   itemsProcessed: number;
   detail: Prisma.JsonObject;
 };
-
-/**
- * A stack trace or a driver error can carry connection strings and row
- * contents. `CronRunLog` is read by staff, so only a short, plain first line
- * of it is kept.
- */
-const MAX_DETAIL_MESSAGE_LENGTH = 200;
 
 export async function runCronJobBody<T>(
   jobName: string,
@@ -56,16 +50,10 @@ export async function runCronJobBody<T>(
       data: {
         status: 'FAILED',
         finishedAt: new Date(),
-        detail: { message: safeMessage(error) },
+        detail: { message: firstErrorMessage(error) },
       },
     });
 
     throw error;
   }
-}
-
-function safeMessage(error: unknown): string {
-  if (!(error instanceof Error)) return 'unknown error';
-
-  return error.message.split('\n')[0].slice(0, MAX_DETAIL_MESSAGE_LENGTH);
 }

@@ -1,12 +1,13 @@
 import 'server-only';
 
-import { Prisma, type AddOn, type Product } from '@prisma/client';
+import type { AddOn, Product } from '@prisma/client';
 import { z } from 'zod';
 
 import { recordAudit } from '../audit';
 import type { StaffContext } from '../auth/staff';
 import { db } from '../db';
 import { dollarsFromForm } from '../core/money';
+import { isMissingRecord, isUniqueViolation } from '../core/prisma';
 import { failure, ok, type Result } from '../core/result';
 
 export const DUPLICATE_SLUG = 'duplicate_slug';
@@ -241,17 +242,4 @@ export async function saveAddOn(context: StaffContext, input: AddOnInput): Promi
     if (isMissingRecord(error)) return failure(INVALID_CATALOG_INPUT, MISSING_ADD_ON);
     throw error;
   }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return hasPrismaCode(error, 'P2002');
-}
-
-/** The row a form asked to update was deleted between the page load and the save. */
-function isMissingRecord(error: unknown): boolean {
-  return hasPrismaCode(error, 'P2025');
-}
-
-function hasPrismaCode(error: unknown, code: string): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
 }

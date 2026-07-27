@@ -330,7 +330,7 @@ async function main() {
     deliveryDays: existingDays,
   });
   expect('S5c', 'A ZIP list entry that is not a ZIP code is reported, not silently dropped',
-    (rejectedZips.headers.get('location') ?? '').includes('error='),
+    (rejectedZips.headers.get('location') ?? '').includes('problem='),
     `saving "Lakewood" as a ZIP -> ${rejectedZips.status} ${decodeURIComponent(rejectedZips.headers.get('location') ?? '')}`);
 
   const settingsTabs = await manager.get('/admin/settings');

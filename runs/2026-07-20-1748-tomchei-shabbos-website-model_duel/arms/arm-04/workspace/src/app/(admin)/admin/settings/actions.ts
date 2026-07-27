@@ -1,33 +1,31 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { recordAudit } from '@/lib/audit';
+import { auditSettingChange, firstMessage, wholeNumber } from '@/lib/admin/settings-form';
 import { requirePermission } from '@/lib/auth/staff';
 import { dollarsFromForm } from '@/lib/core/money';
 import { db } from '@/lib/db';
 import { parseDeliveryZipList } from '@/lib/delivery-area';
+import { rejectWith } from '@/lib/forms/flash-redirect';
 import { writeSetting } from '@/lib/settings';
-import type { StaffContext } from '@/lib/auth/staff';
 
 /**
  * Every settings action follows the same three steps: check the permission,
  * parse the whole form with one named schema, and hand a failure back to the
- * page that submitted it through `?error=`. Settings pages are plain forms with
- * no client state, which is why the message travels on the URL rather than in a
- * `useActionState` return the way the catalog forms do.
+ * page that submitted it through `?problem=`. Settings pages are plain forms
+ * with no client state, which is why the message travels on the URL rather than
+ * in a `useActionState` return the way the catalog forms do.
+ *
+ * Email lives in `settings/email/actions.ts`, next to the page that submits it.
  */
 
 const STOREFRONT_PATHS = ['/', '/collection', '/order'];
 
 const SETTINGS_PATH = '/admin/settings';
 const SHIPPING_PATH = '/admin/settings/shipping';
-const EMAIL_PATH = '/admin/settings/email';
-
-/** Numbers arrive from a form as text, so they are read as text and then converted. */
-const wholeNumber = (message: string) => z.string().trim().regex(/^\d+$/, message).transform(Number);
 
 const storeOpenSchema = z.object({
   open: z.enum(['true', 'false']).transform((value) => value === 'true'),
@@ -82,25 +80,6 @@ function parseDeliveryDays(raw: string): string[] {
   return [...new Set(raw.split('\n').map((line) => line.trim()).filter(Boolean))].slice(0, 20);
 }
 
-/** Blank means "not set yet", which is different from a name nobody can read. */
-const senderAddress = z
-  .string()
-  .trim()
-  .refine(
-    (value) => value === '' || z.email().safeParse(value).success,
-    'Sender addresses have to be email addresses, or blank.',
-  );
-
-const emailSenderSchema = z.object({
-  fromName: z
-    .string()
-    .trim()
-    .min(1, 'Email has to come from a name, so recipients know who wrote.')
-    .max(80, 'Keep the sender name to 80 characters or fewer.'),
-  fromAddress: senderAddress,
-  replyToAddress: senderAddress,
-});
-
 export async function setStoreOpenAction(formData: FormData) {
   const context = await requirePermission('settings.manage');
   const parsed = storeOpenSchema.safeParse(Object.fromEntries(formData));
@@ -124,7 +103,7 @@ export async function saveOrderSettingsAction(formData: FormData) {
 
   const { followUpDays } = parsed.data;
   await writeSetting('orders.followUpDays', followUpDays);
-  await audit(context, 'orders.followUpDays', `${followUpDays} days`);
+  await auditSettingChange(context, 'orders.followUpDays', `${followUpDays} days`);
 
   revalidateStorefront(SETTINGS_PATH);
 }
@@ -139,7 +118,7 @@ export async function savePackageTypeAction(formData: FormData) {
     ? await db.packageType.update({ where: { id: packageTypeId }, data: parsed.data })
     : await db.packageType.create({ data: parsed.data });
 
-  await audit(context, 'orders.packageTypes', `saved ${saved.name}`);
+  await auditSettingChange(context, 'orders.packageTypes', `saved ${saved.name}`);
   revalidatePath(SETTINGS_PATH);
 }
 
@@ -153,7 +132,7 @@ export async function savePickupLocationAction(formData: FormData) {
     ? await db.pickupLocation.update({ where: { id: pickupLocationId }, data: parsed.data })
     : await db.pickupLocation.create({ data: parsed.data });
 
-  await audit(context, 'orders.pickupLocations', `saved ${saved.name}`);
+  await auditSettingChange(context, 'orders.pickupLocations', `saved ${saved.name}`);
   revalidatePath(SETTINGS_PATH);
 }
 
@@ -178,7 +157,7 @@ export async function saveShippingSettingsAction(formData: FormData) {
     postalCode: parsed.data.originPostalCode,
     phone: parsed.data.originPhone,
   });
-  await audit(
+  await auditSettingChange(
     context,
     'shipping',
     `${zips.length} delivery ZIPs, ${days.length} delivery days, base rate ${parsed.data.baseRate}c, ` +
@@ -192,36 +171,6 @@ export async function saveShippingSettingsAction(formData: FormData) {
   if (rejected.length > 0) {
     rejectWith(SHIPPING_PATH, `Saved ${zips.length} ZIP codes. Ignored: ${rejected.join(', ')}`);
   }
-}
-
-export async function saveEmailSettingsAction(formData: FormData) {
-  const context = await requirePermission('settings.manage');
-  const parsed = emailSenderSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) rejectWith(EMAIL_PATH, firstMessage(parsed.error));
-
-  await writeSetting('email.fromName', parsed.data.fromName);
-  await writeSetting('email.fromAddress', parsed.data.fromAddress);
-  await writeSetting('email.replyToAddress', parsed.data.replyToAddress);
-  await audit(context, 'email', `sender ${parsed.data.fromAddress || 'unset'}`);
-
-  revalidatePath(EMAIL_PATH);
-}
-
-async function audit(context: StaffContext, key: string, summary: string) {
-  await recordAudit(context, {
-    action: 'settings.changed',
-    entityType: 'Setting',
-    entityId: key,
-    detail: { key, summary },
-  });
-}
-
-function firstMessage(error: { issues: { message: string }[] }): string {
-  return error.issues[0].message;
-}
-
-function rejectWith(path: string, message: string): never {
-  redirect(`${path}?error=${encodeURIComponent(message)}`);
 }
 
 /**

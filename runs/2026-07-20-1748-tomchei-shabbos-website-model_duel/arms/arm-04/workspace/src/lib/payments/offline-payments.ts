@@ -10,6 +10,7 @@ import type { StaffContext } from '../auth/staff';
 import { formatCents } from '../core/money';
 import { failure, ok, type Result } from '../core/result';
 import { db } from '../db';
+import { queueRefundNotice } from '../email/transactional';
 import { recomputeOrderPaymentStatus } from '../orders/payment-status';
 import { abort, runInTransaction } from '../transaction';
 import { getPaymentGateway } from './gateway';
@@ -203,6 +204,11 @@ export async function refundPayment(
     });
 
     await recomputeOrderPaymentStatus(payment.orderId, tx);
+    await queueRefundNotice(
+      payment.orderId,
+      { refundId: created.id, amountCents: input.amountCents, reason },
+      tx,
+    );
     await recordAudit(
       staff,
       {

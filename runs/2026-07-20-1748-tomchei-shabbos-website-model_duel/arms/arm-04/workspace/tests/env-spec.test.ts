@@ -27,6 +27,12 @@ const HOSTED_OVERRIDES = {
   SHIPPING_PROVIDER: 'shippo',
   SHIPPO_API_TOKEN: 'carrier-token',
   MAPBOX_ACCESS_TOKEN: 'mapbox-token',
+  EMAIL_PROVIDER: 'resend',
+  RESEND_API_KEY: 'mail-provider-key',
+  SMS_PROVIDER: 'twilio',
+  TWILIO_ACCOUNT_SID: 'text-provider-account',
+  TWILIO_AUTH_TOKEN: 'text-provider-token',
+  TWILIO_FROM_NUMBER: '+15550100',
   CRON_SECRET: 'Zx9Qw3Lm7Pv2Rt6Ys1Jd8Hn4',
 };
 
@@ -123,6 +129,27 @@ test('route planning and the sweepers need their secrets off this machine', () =
   assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, CRON_SECRET: '' }), ['CRON_SECRET']);
   assert.deepEqual(pathsRejectedBy({ CRON_SECRET: 'too-short' }), ['CRON_SECRET']);
   assert.deepEqual(pathsRejectedBy({ MAPBOX_ACCESS_TOKEN: '', CRON_SECRET: '' }), []);
+});
+
+/**
+ * Capturing mail is the stand-in with the quietest failure: a hosted
+ * deployment left on it takes orders, queues every confirmation and posts none
+ * of them while every screen reports the message as sent (R-088).
+ */
+test('captured mail and texts are loopback-only, and the providers need their keys', () => {
+  assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, EMAIL_PROVIDER: 'capture' }), [
+    'EMAIL_PROVIDER',
+  ]);
+  assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, SMS_PROVIDER: 'capture' }), [
+    'SMS_PROVIDER',
+  ]);
+  assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, RESEND_API_KEY: '' }), [
+    'RESEND_API_KEY',
+  ]);
+  assert.deepEqual(pathsRejectedBy({ ...HOSTED_OVERRIDES, TWILIO_AUTH_TOKEN: '', TWILIO_FROM_NUMBER: '' }), [
+    'TWILIO_AUTH_TOKEN',
+    'TWILIO_FROM_NUMBER',
+  ]);
 });
 
 test('clerk still requires its keys', () => {

@@ -19,3 +19,10 @@ export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInp
 export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return <select className={cn(CONTROL_CLASSES, className)} {...props} />;
 }
+
+export function Textarea({
+  className,
+  ...props
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cn(CONTROL_CLASSES, className)} {...props} />;
+}

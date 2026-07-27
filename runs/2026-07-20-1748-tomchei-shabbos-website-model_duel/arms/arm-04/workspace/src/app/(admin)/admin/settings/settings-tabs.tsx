@@ -33,13 +33,3 @@ export function SettingsTabs({ active }: { active: SettingsTab }) {
     </nav>
   );
 }
-
-export function SettingsError({ message }: { message: string | undefined }) {
-  if (!message) return null;
-
-  return (
-    <p role="alert" className="text-sm text-[var(--color-danger)]" data-testid="settings-error">
-      {message}
-    </p>
-  );
-}

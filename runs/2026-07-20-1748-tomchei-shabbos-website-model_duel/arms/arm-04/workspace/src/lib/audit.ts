@@ -187,6 +187,19 @@ type AuditDetails = {
     deliveryDay: string;
     deliveryWindow: string;
   };
+  /// R-083. A letter went to the whole donor list, so the row says how many
+  /// people it reached and how many were already written to — a rerun that
+  /// mailed nobody is a row saying exactly that, which is the proof the
+  /// idempotency held.
+  'email.campaign_sent': { queued: number; alreadySent: number; recipientCount: number };
+  /// R-086. The wording of a triggered email changed, or was switched off.
+  /// Which key, not the new text: the row points at the template that holds it.
+  'email.template_saved': { key: string; isEnabled: boolean };
+  /// R-090. Somebody proved the mail account works. The address is kept
+  /// because "who did we test against" is the first question when a test
+  /// arrives nowhere.
+  'email.test_sent': { destination: string; provider: string };
+  'email.list_changed': { slug: string; change: 'created' | 'joined' | 'left' };
   'staff.invited': { email: string; role: StaffRole };
   'staff.role_changed': { from: StaffRole; to: StaffRole };
   'staff.confirmed': never;

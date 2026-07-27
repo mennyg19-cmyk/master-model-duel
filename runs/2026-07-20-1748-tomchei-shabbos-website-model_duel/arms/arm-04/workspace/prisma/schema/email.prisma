@@ -1,0 +1,116 @@
+enum EmailCampaignStatus {
+  DRAFT
+  SENDING
+  SENT
+}
+
+/// A named slice of the newsletter list (R-084).
+///
+/// The three preference flags on a subscriber answer "what may we send you";
+/// a list answers "who is this letter for" — donors, drivers, last year's
+/// customers. The two are checked together at send time, so a list can never
+/// become a way around an opt-out.
+model SubscriberList {
+  id          String @id @default(uuid())
+  name        String
+  slug        String @unique
+  description String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members   SubscriberListMember[]
+  campaigns EmailCampaign[]
+}
+
+model SubscriberListMember {
+  id           String @id @default(uuid())
+  listId       String
+  subscriberId String
+
+  addedAt DateTime @default(now())
+
+  list       SubscriberList       @relation(fields: [listId], references: [id], onDelete: Cascade)
+  subscriber NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, subscriberId])
+  @@index([subscriberId])
+}
+
+/// An override for one triggered email (R-086, R-089).
+///
+/// The wording of every triggered message ships in the code, so a fresh
+/// database sends complete emails on day one. A row here replaces the subject
+/// or the body for one key, which is how the office changes what a confirmation
+/// says without a deployment. `isEnabled = false` is the off switch for a
+/// message the org does not want at all.
+model EmailTemplate {
+  id  String @id @default(uuid())
+  key String @unique
+
+  subject String
+  body    String
+
+  isEnabled Boolean @default(true)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  updatedByStaffUserId String?
+}
+
+/// One letter to a list (R-083).
+///
+/// A campaign is drafted, previewed, test-sent and only then sent. Sending
+/// writes one `EmailCampaignSend` per subscriber inside the same claim as the
+/// outbox row, so pressing Send twice — or a cron retrying a half-finished
+/// send — reaches each person exactly once.
+model EmailCampaign {
+  id      String             @id @default(uuid())
+  name    String
+  subject String
+  body    String
+  status  EmailCampaignStatus @default(DRAFT)
+
+  /// Null means every subscribed address (R-083).
+  listId String?
+
+  /// Which opt-in this letter needs, matching a `NewsletterSubscriber` flag:
+  /// `seasonAnnouncements`, `orderReminders` or `impactStories`. Null means the
+  /// letter only needs a live subscription.
+  preferenceKey String?
+
+  sentAt         DateTime?
+  recipientCount Int       @default(0)
+
+  createdByStaffUserId String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  list  SubscriberList?     @relation(fields: [listId], references: [id], onDelete: SetNull)
+  sends EmailCampaignSend[]
+
+  @@index([status, createdAt])
+}
+
+/// Proof that this campaign has already reached this subscriber.
+///
+/// The unique pair is the idempotency: a rerun collides here and queues
+/// nothing, which is why a second Send cannot produce a second delivery.
+model EmailCampaignSend {
+  id           String @id @default(uuid())
+  campaignId   String
+  subscriberId String
+
+  /// The outbox row this became. Null only for a send whose subscriber had no
+  /// address left to write to by the time the sweep reached them.
+  messageId String? @unique
+
+  createdAt DateTime @default(now())
+
+  campaign   EmailCampaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  subscriber NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  message    NotificationLog?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@unique([campaignId, subscriberId])
+  @@index([subscriberId])
+}

@@ -8,6 +8,7 @@ import { normalizeEmail } from '../core/normalize';
 import { normalizePhone } from '../core/phone';
 import { failure, ok, type Result } from '../core/result';
 import { db } from '../db';
+import { queuePaymentLink } from '../email/transactional';
 import { env } from '../env';
 import { findOwnedOrder, type DraftOwner } from '../orders/draft-access';
 import { finalizeOrder, transitionOrder } from '../orders/order-service';
@@ -143,6 +144,15 @@ async function openHostedSession(order: Order): Promise<StartedCheckout> {
       status: 'open',
       amountCents: order.totalCents,
     },
+  });
+
+  // R-087. The customer is on the page already; the email is for the one who
+  // closes the tab, and it is keyed to this session so a resumed payment mails
+  // the live link rather than the dead one.
+  await queuePaymentLink(order, {
+    sessionId: session.sessionId,
+    amountDueCents: order.totalCents - order.amountPaidCents,
+    paymentUrl: session.url,
   });
 
   return { orderId: order.id, hostedUrl: session.url };

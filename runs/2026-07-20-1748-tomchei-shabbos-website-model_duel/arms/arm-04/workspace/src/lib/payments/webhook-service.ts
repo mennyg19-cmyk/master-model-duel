@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { recordAudit } from '../audit';
 import { failure, ok, type Result } from '../core/result';
 import { db } from '../db';
+import { queueRefundNotice } from '../email/transactional';
 import { transitionOrder } from '../orders/order-service';
 import { recomputeOrderPaymentStatus } from '../orders/payment-status';
 import { getPaymentGateway } from './gateway';
@@ -245,7 +246,7 @@ async function handBackUnsafeCharge(unsafe: {
   });
 
   await db.$transaction(async (tx) => {
-    await tx.paymentRefund.create({
+    const refund = await tx.paymentRefund.create({
       data: {
         paymentId: unsafe.paymentId,
         amountCents: receipt.amountCents,
@@ -255,6 +256,11 @@ async function handBackUnsafeCharge(unsafe: {
     });
 
     await recomputeOrderPaymentStatus(unsafe.orderId, tx);
+    await queueRefundNotice(
+      unsafe.orderId,
+      { refundId: refund.id, amountCents: receipt.amountCents, reason },
+      tx,
+    );
     await recordAudit(
       null,
       {
@@ -300,7 +306,7 @@ async function syncRefund(event: StripeEvent): Promise<WebhookOutcome> {
   const reason = 'Refunded through the payment provider';
 
   await db.$transaction(async (tx) => {
-    await tx.paymentRefund.create({
+    const refund = await tx.paymentRefund.create({
       data: {
         paymentId: payment.id,
         amountCents: outstanding,
@@ -310,6 +316,11 @@ async function syncRefund(event: StripeEvent): Promise<WebhookOutcome> {
     });
 
     await recomputeOrderPaymentStatus(payment.orderId, tx);
+    await queueRefundNotice(
+      payment.orderId,
+      { refundId: refund.id, amountCents: outstanding, reason },
+      tx,
+    );
     await recordAudit(
       null,
       {

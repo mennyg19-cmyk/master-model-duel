@@ -25,3 +25,12 @@ export function flashHref(basePath: string, params: FlashParams = {}): string {
 export function redirectWithFlash(basePath: string, params: FlashParams = {}): never {
   redirect(flashHref(basePath, params));
 }
+
+/**
+ * An action that could not do what it was asked, sent back to the screen that
+ * asked. `problem` is the one key `FlashMessages` reads, so a message written
+ * under any other name is a message the office never sees.
+ */
+export function rejectWith(basePath: string, message: string): never {
+  redirectWithFlash(basePath, { problem: message });
+}

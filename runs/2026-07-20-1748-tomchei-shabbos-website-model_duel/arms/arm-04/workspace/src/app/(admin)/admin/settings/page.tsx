@@ -4,11 +4,12 @@ import {
   saveOrderSettingsAction,
   setStoreOpenAction,
 } from './actions';
-import { SettingsError, SettingsTabs } from './settings-tabs';
+import { SettingsTabs } from './settings-tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/field';
+import { FlashMessages } from '@/components/ui/flash';
 import { requirePermission } from '@/lib/auth/staff';
 import { db } from '@/lib/db';
 import { readSetting } from '@/lib/settings';
@@ -18,10 +19,10 @@ export const dynamic = 'force-dynamic';
 export default async function OrderSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ problem?: string }>;
 }) {
   await requirePermission('settings.manage');
-  const [{ error }, isStoreOpen, followUpDays, packageTypes, pickupLocations] = await Promise.all([
+  const [{ problem }, isStoreOpen, followUpDays, packageTypes, pickupLocations] = await Promise.all([
     searchParams,
     readSetting('store.open'),
     readSetting('orders.followUpDays'),
@@ -39,7 +40,7 @@ export default async function OrderSettingsPage({
       </div>
 
       <SettingsTabs active="/admin/settings" />
-      <SettingsError message={error} />
+      <FlashMessages problem={problem} testIdPrefix="settings" />
 
       <Card>
         <CardTitle>Store status</CardTitle>

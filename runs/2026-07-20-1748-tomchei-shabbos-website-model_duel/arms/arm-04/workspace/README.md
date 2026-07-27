@@ -1,7 +1,7 @@
 # Tomchei Shabbos — Mishloach Manos platform
 
 Greenfield rebuild of the nonprofit Purim mishloach manos platform.
-This repository currently contains **phases P1 to P10**:
+This repository currently contains **phases P1 to P11**:
 
 - **P1** — foundation, identity, roles, permissions, staff tooling.
 - **P2** — the domain core as schema plus engine: seasons, catalog, customers and
@@ -20,11 +20,12 @@ This repository currently contains **phases P1 to P10**:
   scheduling, the follow-up list and the scheduled sweeps.
 - **P10** — next year: the season calendar and its wizard, replacement mappings,
   and repeat orders for customers, the counter and the office.
+- **P11** — email and notifications: the campaign builder, subscriber lists, the
+  triggered emails an order sends, and the sweeper that finally delivers
+  everything P9 has been queuing — over Resend for mail and Twilio for text.
 
-The mail and SMS transport, the full year-one import pipeline and reporting land
-in later phases of `shared/MERGED-BUILD-PLAN.md`. Every customer message is
-written into a notification outbox; nothing is actually posted until that
-transport exists.
+The full year-one import pipeline and reporting land in later phases of
+`shared/MERGED-BUILD-PLAN.md`.
 
 ## Ports
 
@@ -80,6 +81,7 @@ entirely and just set `DATABASE_URL`.
 | `npm run smoke:p8` | P8 smoke: carrier rates, the margin, buying and cancelling a label, tracking |
 | `npm run smoke:p9` | P9 smoke: building a route, the driver link, rerouting, pickup, bulk scheduling and the crons |
 | `npm run smoke:p10` | P10 smoke: the repeat review page, staff and bulk repeat, the mappings screen, the wizard and the auto-flip |
+| `npm run smoke:p11` | P11 smoke: preferences and tokens, the campaign, transactional email, a forced provider failure, the crons and the purge |
 | `npm run fixtures:scale` | Generates 1,000 orders and 5,000 packages; `-- clear` takes them out again |
 
 `npm run smoke` needs `npm run dev` running and starts from an empty database
@@ -89,8 +91,8 @@ server and the seeded database; `smoke:p4` clears the drafts an earlier run left
 behind so it starts from an empty cart, and `smoke:p6` generates the scale fixtures
 and removes them again so the database is what it was.
 
-Newsletter mail is a later phase, so `npm run newsletter:link` is how the
-preferences and unsubscribe pages are opened until then.
+`npm run newsletter:link` prints a subscriber's signed preferences link, which
+is how those pages are opened without waiting for a letter to arrive.
 
 ## Storefront
 
@@ -166,6 +168,8 @@ document that can carry script, served from this site's origin.
 | `/admin/routes`, `/admin/routes/[routeId]` | Build a route from the waiting boxes or just schedule their day; assign a driver, hand out a link, print the sheet and the cards, tick stops off |
 | `/admin/pickup` | The counter: what is ready, what is blocked and why, the door list, and the collected stamp |
 | `/admin/follow-up` | The call list: money owed, boxes nobody came for, deliveries promised and not out |
+| `/admin/email`, `/admin/email/campaigns/[campaignId]` | Every letter the org has written; draft one, preview it, test it against one address, then send it to the list |
+| `/admin/email/lists`, `/admin/email/templates`, `/admin/email/outbox` | Hand-picked groups inside the newsletter, the wording of the emails an order sends, and every message the app has tried to deliver |
 | `/drive/[token]`, `/driver` | The volunteer's phone — one route, no account — and the staff driver's list of their own vans |
 
 The counter is the storefront: `/admin/pos/[customerId]` renders the same product
@@ -245,11 +249,13 @@ food is on the shelf, the notice goes out once, and the door list prints what is
 waiting. `/admin/follow-up` is the call list — money owed, boxes nobody came for,
 deliveries promised and not out — filtered one reason at a time.
 
-Three scheduled jobs run behind `CRON_SECRET` as a bearer token:
+Five scheduled jobs run behind `CRON_SECRET` as a bearer token:
 `/api/cron/pickup-expiry` stamps boxes nobody collected, `/api/cron/payment-reminder`
-chases overdue orders once each, and `/api/cron/season-flip` opens and closes seasons
-on the calendar below. No secret configured means all three endpoints refuse
-everybody, which is the safe reading of "not set up"; a hosted deployment must set it.
+chases overdue orders once each, `/api/cron/season-flip` opens and closes seasons on
+the calendar below, `/api/cron/notification-sweep` empties the outbox, and
+`/api/cron/email-log-purge` clears delivered mail past its keep-by date. No secret
+configured means every endpoint refuses everybody, which is the safe reading of
+"not set up"; a hosted deployment must set it.
 
 ## Next year: seasons, mappings and repeat orders
 
@@ -289,10 +295,52 @@ call: it lands an old order idempotently on `(season, importedOrderReference)`,
 fills the family's address book, and creates anything the catalogue is missing as an
 archived stub, so an imported order repeats like any other.
 
+## Email and text
+
+Nothing in the app sends a message itself. Every one is written to the
+notification outbox — email and text as separate rows, because they succeed and
+fail separately — and `/api/cron/notification-sweep` delivers them. That is what
+makes a provider outage a delay instead of a hole, and it is why the screen that
+queues a message says "3 queued" rather than claiming a delivery it has not seen.
+
+Each row carries the key of the event that caused it, so a replayed webhook, a
+second checkout attempt or a rerun campaign write nothing new. The sweeper claims
+what is due with one conditional `UPDATE ... FOR UPDATE SKIP LOCKED`, so
+overlapping sweeps cannot both take a message, and passes the same key to the
+provider as an idempotency key in case a send times out after it was accepted. A
+refusal pushes the row a minute, five, half an hour, then two hours into the
+future and gives up after five tries; every attempt writes a `NotificationAttempt`
+row, so "it arrived in the end" and "it failed four times first" are both
+answerable next year.
+
+`/admin/email` is the hub. Campaigns are drafted, previewed and test-sent before
+anybody is written to, and sending is safe to press twice: a recipient already
+written to for that campaign is skipped by a unique row rather than by hoping.
+Lists are hand-picked subsets of the newsletter and can only hold people who
+already subscribed. `/admin/email/templates` holds the wording of the three
+emails an order sends — confirmation, payment link, refund — which ship in code
+and stay there until somebody saves an override, so a fresh database sends
+sensible mail on day one and Reset always has somewhere to go back to. A
+placeholder the app cannot fill is refused at save time rather than printed as
+`{{custmerName}}` in a donor's inbox. `/admin/email/outbox` answers "did she get
+it?" with the attempt count, the provider's own words and when the next try is
+due.
+
+Mail goes through Resend and text through Twilio, each behind a one-function
+`MessageProvider` so the outbox knows nothing about either. `EMAIL_PROVIDER` and
+`SMS_PROVIDER` set to `capture` write the message into `CapturedMessage` instead
+of sending it, which is what development, CI and the settings test sender use;
+env validation refuses capture off this machine, because a hosted deployment that
+captures its mail tells its customers nothing while every screen reports success.
+Email also waits — queued, attempt count untouched — until a sender address is
+set on Settings → Email, so configuring it later delivers the backlog rather than
+finding it burnt out.
+
 ## Domain model
 
 The Prisma schema is a folder, one file per concern: `identity`, `customers`,
-`catalog`, `orders`, `fulfillment`, `inventory`, `ops`, `media`, `newsletter`.
+`catalog`, `orders`, `fulfillment`, `inventory`, `ops`, `media`, `newsletter`,
+`notifications`, `email`.
 
 The engine that goes with it:
 
@@ -326,6 +374,11 @@ The engine that goes with it:
 | Whether a box may change how it travels | `src/lib/routing/reroute.ts` — the fee is never re-priced, a bought label is cancelled first, and a box already gone refuses |
 | Whether a pickup box may be announced | `src/lib/pickup/pickup-service.ts` — packed *and* in stock, held for seven days, and the row says which of the two is missing |
 | Who gets told what, once | `src/lib/notifications/outbox.ts` — every customer message is a row with a unique dedupe key, so a second press is a no-op rather than a second text |
+| What actually delivers it | `src/lib/notifications/dispatch.ts` — claim what is due, hand it to the channel's provider, back off and record every attempt |
+| What an email looks like and says | `src/lib/email/branding.ts` (the letterhead) and `email/templates.ts` (the shipped wording of each triggered email, and the placeholders it may use) |
+| Which order events write an email | `src/lib/email/transactional.ts` — queued inside the same transaction as the order, payment or refund that caused it |
+| Who a campaign reaches | `src/lib/email/campaigns.ts` — one audience query for the count, the preview and the send, so the number on screen is the number written to |
+| How long delivered mail is kept | `src/lib/notifications/purge.ts` — only `SENT` rows past the retention setting; queued, failed and audit rows are never eligible |
 | Who needs ringing | `src/lib/scheduling/follow-up.ts` — unpaid, unclaimed and undelivered on one list, one reason at a time |
 | What last year's item is called now | `src/lib/catalog/replacements.ts` — the mapping chain, followed across seasons with a depth limit, a loop guard and the same slug preferred over a stale link |
 | What a repeat would actually order | `src/lib/orders/repeat-plan.ts` — one plan the review page, the counter and the bulk sweep all read, so a customer and a staff member see the same answer. `repeat-recipients.ts` resolves who each line is going to; `repeat-apply.ts` is the write, and re-reads every chosen product inside its own transaction |
