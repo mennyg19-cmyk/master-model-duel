@@ -123,6 +123,12 @@ export async function packageDashboard() {
       order: { select: { id: true, orderNumber: true, draftReference: true } },
       fulfillmentMethod: true,
       lines: true,
+      shipmentBoxes: {
+        where: { externalLabelId: { not: null }, labelVoidedAt: null },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { externalLabelId: true, carrier: true, service: true, labelUrl: true, trackingNumber: true, trackingStatus: true },
+      },
     },
     orderBy: { updatedAt: "desc" },
     take: PACKAGE_DASHBOARD_LIMIT,

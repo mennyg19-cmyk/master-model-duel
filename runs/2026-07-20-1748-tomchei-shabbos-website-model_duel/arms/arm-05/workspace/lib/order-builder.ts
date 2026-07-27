@@ -333,7 +333,17 @@ export async function getAccount(request: Request) {
     where: { id: customer.customerId },
     include: {
       addresses: { orderBy: { id: "desc" } },
-      orders: { orderBy: { updatedAt: "desc" }, include: { lines: true } },
+      orders: {
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          draftReference: true,
+          status: true,
+          totalCents: true,
+          updatedAt: true,
+          lines: { select: { quantity: true } },
+        },
+      },
     },
   });
 }
@@ -376,6 +386,14 @@ export async function updateCustomerAddress(
   return address;
 }
 
+function customerWireFormat(wireFormat: Prisma.JsonValue) {
+  if (!wireFormat || typeof wireFormat !== "object" || Array.isArray(wireFormat)) return wireFormat;
+  const { checkout, ...rest } = wireFormat as Record<string, unknown>;
+  if (!checkout || typeof checkout !== "object" || Array.isArray(checkout)) return rest;
+  const { shippingQuotes: _shippingQuotes, ...customerCheckout } = checkout as Record<string, unknown>;
+  return { ...rest, checkout: customerCheckout };
+}
+
 export function serializeDraft(draft: DraftRecord | null) {
   if (!draft) return null;
   return {
@@ -383,7 +401,7 @@ export function serializeDraft(draft: DraftRecord | null) {
     draftReference: draft.draftReference,
     subtotalCents: draft.subtotalCents,
     totalCents: draft.totalCents,
-    wireFormat: draft.wireFormat,
+    wireFormat: customerWireFormat(draft.wireFormat),
     addresses: draft.customer?.addresses ?? [],
     lines: draft.lines,
   };

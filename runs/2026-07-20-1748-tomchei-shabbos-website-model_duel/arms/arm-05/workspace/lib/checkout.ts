@@ -3,6 +3,7 @@ import { Prisma, type PaymentMethod } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { materializeFinalizedOrder } from "@/lib/package-operations";
+import { quoteCheckoutShipping } from "@/lib/shipping";
 
 const deliveryModes = ["SHIP", "PICKUP", "BULK_DELIVERY", "LOCAL_DELIVERY"] as const;
 const checkoutSchema = z.object({
@@ -106,15 +107,15 @@ async function assertLiveOrder(orderId: string) {
 async function saveCheckoutDetails(orderId: string, parsed: CheckoutInput) {
   const { order, subtotalCents } = await assertLiveOrder(orderId);
   const addresses = new Map(order.customer?.addresses.map((address) => [address.id, address]));
+  const rules = await getDeliveryRules();
   for (const recipient of parsed.recipients) {
     const address = addresses.get(recipient.addressId);
     if (!address) throw new Error("A checkout recipient does not belong to this draft.");
-    if (recipient.method === "LOCAL_DELIVERY" && !((await getDeliveryRules()).allowedZipCodes.includes(address.postalCode.slice(0, 5)))) {
+    if (recipient.method === "LOCAL_DELIVERY" && !rules.allowedZipCodes.includes(address.postalCode.slice(0, 5))) {
       throw new Error(`${address.recipientName}'s ZIP code is outside the local per-package delivery area.`);
     }
   }
 
-  const rules = await getDeliveryRules();
   for (const recipient of parsed.recipients) {
     if (recipient.method.includes("DELIVERY") && rules.deliveryDates.length > 0 && !recipient.deliveryDate) {
       throw new Error("Choose an available Purim-week delivery date.");
@@ -123,8 +124,15 @@ async function saveCheckoutDetails(orderId: string, parsed: CheckoutInput) {
       throw new Error("Choose one of the available Purim-week delivery dates.");
     }
   }
-  const fulfillmentCents = totalDeliveryFees(parsed.recipients, rules);
-  const checkout = { ...parsed, rules: { ...rules, resolvedAt: new Date().toISOString() } };
+  const shippingAddresses = [];
+  for (const recipient of parsed.recipients) {
+    const address = addresses.get(recipient.addressId);
+    if (recipient.method === "SHIP" && address) shippingAddresses.push(address);
+  }
+  const shippingQuotes = await quoteCheckoutShipping(shippingAddresses);
+  const fulfillmentCents = totalDeliveryFees(parsed.recipients, rules)
+    + shippingQuotes.reduce((total, quote) => total + quote.customerChargeCents, 0);
+  const checkout = { ...parsed, rules: { ...rules, resolvedAt: new Date().toISOString() }, shippingQuotes };
   const totalCents = subtotalCents + fulfillmentCents + parsed.donationCents;
   await prisma.$transaction([
     prisma.order.update({

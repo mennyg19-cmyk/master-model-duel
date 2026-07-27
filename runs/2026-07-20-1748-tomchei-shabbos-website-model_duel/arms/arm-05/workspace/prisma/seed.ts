@@ -20,8 +20,12 @@ async function seed() {
       name: "Classic Mishloach Manos",
       kind: "PACKAGE",
       priceCents: 3600,
+      lengthInches: 9,
+      widthInches: 6,
+      heightInches: 4,
+      weightOunces: 24,
     },
-    update: { name: "Classic Mishloach Manos", priceCents: 3600 },
+    update: { name: "Classic Mishloach Manos", priceCents: 3600, lengthInches: 9, widthInches: 6, heightInches: 4, weightOunces: 24 },
   });
   await prisma.productOption.upsert({
     where: { productId_name_value: { productId: product.id, name: "Presentation", value: "Classic ribbon" } },
@@ -37,8 +41,12 @@ async function seed() {
       description: "A larger collection for sharing with family, friends, or a whole office.",
       kind: "PACKAGE",
       priceCents: 5400,
+      lengthInches: 12,
+      widthInches: 9,
+      heightInches: 5,
+      weightOunces: 36,
     },
-    update: { name: "Community Celebration Box", priceCents: 5400 },
+    update: { name: "Community Celebration Box", priceCents: 5400, lengthInches: 12, widthInches: 9, heightInches: 5, weightOunces: 36 },
   });
   await prisma.inventoryItem.upsert({
     where: { productId: premiumProduct.id },
@@ -118,8 +126,12 @@ async function seed() {
       name: "Neighborhood Joy Box",
       kind: "PACKAGE",
       priceCents: 4600,
+      lengthInches: 10,
+      widthInches: 8,
+      heightInches: 4,
+      weightOunces: 28,
     },
-    update: { name: "Neighborhood Joy Box", priceCents: 4600 },
+    update: { name: "Neighborhood Joy Box", priceCents: 4600, lengthInches: 10, widthInches: 8, heightInches: 4, weightOunces: 28 },
   });
   await prisma.inventoryItem.upsert({
     where: { productId: celebrationProduct.id },
@@ -156,6 +168,25 @@ async function seed() {
       },
     },
   });
+  if (!await prisma.pickupLocation.findFirst({ where: { name: "Tomchei Shabbos warehouse" } })) {
+    await prisma.pickupLocation.create({
+      data: {
+        name: "Tomchei Shabbos warehouse",
+        line1: "1 Seed Street",
+        city: "Brooklyn",
+        state: "NY",
+        postalCode: "11201",
+      },
+    });
+  }
+  if (!await prisma.packageType.count()) {
+    await prisma.packageType.createMany({
+      data: [
+        { name: "Small shipment box", lengthInches: 12, widthInches: 9, heightInches: 6, maxWeightOunces: 48 },
+        { name: "Large shipment box", lengthInches: 18, widthInches: 12, heightInches: 9, maxWeightOunces: 96 },
+      ],
+    });
+  }
   console.log("P3 seasons, storefront catalog, customer, order, and inventory seeded.");
 }
 

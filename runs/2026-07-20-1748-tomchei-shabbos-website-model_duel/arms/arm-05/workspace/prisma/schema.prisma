@@ -515,9 +515,21 @@ model ShipmentBox {
   packageId       String?
   packageTypeId   String
   externalLabelId String?     @unique
+  carrier         String?
+  service         String?
+  chargedCents    Int?
+  labelCostCents  Int?
+  marginCents     Int?
+  labelUrl        String?
+  trackingNumber  String?
+  trackingStatus  String?
+  labelVoidedAt   DateTime?
+  lastTrackedAt   DateTime?
   package         Package?    @relation(fields: [packageId], references: [id], onDelete: SetNull)
   packageType     PackageType @relation(fields: [packageTypeId], references: [id], onDelete: Restrict)
   createdAt       DateTime    @default(now())
+
+  @@index([packageId, labelVoidedAt])
 }
 
 model InventoryItem {

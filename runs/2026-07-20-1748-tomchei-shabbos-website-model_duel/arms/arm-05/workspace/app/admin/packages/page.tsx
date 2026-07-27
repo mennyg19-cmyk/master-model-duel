@@ -12,6 +12,7 @@ type PackageRecord = {
   order: { id: string; orderNumber: number | null; draftReference: string };
   fulfillmentMethod: { code: string; name: string };
   lines: { quantity: number }[];
+  shipmentBoxes: { externalLabelId: string | null; carrier: string | null; service: string | null; labelUrl: string | null; trackingNumber: string | null; trackingStatus: string | null }[];
 };
 type Artifact = { id: string; filingGroup: string; kind: string };
 type Dashboard = {
@@ -61,11 +62,19 @@ export default function PackagesPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void load(controller.signal).catch((error: unknown) => {
-      if (!controller.signal.aborted) {
-        setMessage(error instanceof Error ? error.message : "Packages could not be loaded.");
-      }
-    });
+    void fetch("/api/admin/packages", { signal: controller.signal })
+      .then(async (response) => ({ response, body: await response.json() as Dashboard & { error?: string } }))
+      .then(({ response, body }) => {
+        if (controller.signal.aborted) return;
+        if (!response.ok) {
+          setMessage(body.error ?? "Packages could not be loaded.");
+          return;
+        }
+        applyDashboard(body);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Packages could not be loaded.");
+      });
     return () => controller.abort();
   }, []);
 
@@ -82,6 +91,13 @@ export default function PackagesPage() {
     if (!response.ok) return;
     if (response.body.batch) setArtifacts(response.body.batch.artifacts);
     setMessage(response.body.created === false ? "Tonight's batch already exists; no artifacts were regenerated." : "Nightly print batch is ready.");
+  }
+
+  async function runShippingAction(packageId: string, action: "create_label" | "void_label" | "refresh_tracking" | "validate_address") {
+    const response = await postJson(`/api/admin/packages/${packageId}/shipping`, { action });
+    if (!response.ok) return;
+    setMessage(action === "validate_address" ? "Shippo accepted the package address." : "Shipping record updated.");
+    await load();
   }
 
   function toggle(packageId: string) {
@@ -135,6 +151,18 @@ export default function PackagesPage() {
               {["NEW", "PRINTED"].includes(packageRecord.status) && <button className="button secondary" onClick={() => void runPackageAction({ action: "advance", packageId: packageRecord.id, version: packageRecord.version, status: "PACKED" })} type="button">Pack</button>}
               {["NEW", "PRINTED", "PACKED"].includes(packageRecord.status) && <button className="button secondary" onClick={() => void runPackageAction({ action: "advance", packageId: packageRecord.id, version: packageRecord.version, status: "SENT" })} type="button">Send</button>}
               {["NEW", "PRINTED", "PACKED"].includes(packageRecord.status) && <button className="button secondary" onClick={() => void runPackageAction({ action: "advance", packageId: packageRecord.id, version: packageRecord.version, status: "PICKED_UP" })} type="button">Pick up</button>}
+              {packageRecord.fulfillmentMethod.code === "SHIP" && (
+                <>
+                  <button className="button secondary" onClick={() => void runShippingAction(packageRecord.id, "validate_address")} type="button">Validate address</button>
+                  {packageRecord.shipmentBoxes[0]
+                    ? <>
+                      {packageRecord.shipmentBoxes[0].labelUrl && <a className="button secondary" href={packageRecord.shipmentBoxes[0].labelUrl} rel="noopener noreferrer" target="_blank">Open carrier label</a>}
+                      <button className="button secondary" onClick={() => void runShippingAction(packageRecord.id, "refresh_tracking")} type="button">Refresh tracking</button>
+                      {packageRecord.status !== "SENT" && <button className="button secondary" onClick={() => void runShippingAction(packageRecord.id, "void_label")} type="button">Void label</button>}
+                    </>
+                    : <button className="button secondary" onClick={() => void runShippingAction(packageRecord.id, "create_label")} type="button">Buy cheapest label</button>}
+                </>
+              )}
             </span>
           </div>
         ))}

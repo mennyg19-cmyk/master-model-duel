@@ -88,7 +88,7 @@ export default function OperationsPage() {
       <button className="button secondary" onClick={() => void load()} type="button">Search</button>
       <section className="card ops-list" id="orders">
         <h2>Orders</h2>
-        {orders.map((order) => <div className="ops-row" key={order.id}><span>{order.orderNumber ? `#${order.orderNumber}` : order.draftReference} · {order.customer?.emailNormalized ?? "Guest"}</span><span>{formatMoney(order.totalCents)} · {order.status} · {order.payments.map((payment) => `${payment.method}/${payment.status}`).join(", ") || "unpaid"}</span></div>)}
+        {orders.map((order) => <div className="ops-row" key={order.id}><a href={`/admin/orders/${order.id}`}>{order.orderNumber ? `#${order.orderNumber}` : order.draftReference} · {order.customer?.emailNormalized ?? "Guest"}</a><span>{formatMoney(order.totalCents)} · {order.status} · {order.payments.map((payment) => `${payment.method}/${payment.status}`).join(", ") || "unpaid"}</span></div>)}
         <button className="button secondary" onClick={() => void bulkVersionProbe()} type="button">Run bounded version-conflict probe</button>
       </section>
       <section className="card ops-list" id="customers">

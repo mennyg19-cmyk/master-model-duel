@@ -8,10 +8,37 @@ type RouteContext = { params: Promise<{ orderId: string }> };
 export async function GET(request: Request, context: RouteContext) {
   const authorization = await authorize(request, "orders.read");
   if (!authorization.ok) return NextResponse.json({ error: authorization.error }, { status: authorization.status });
+  const includeMargin = authorization.staffMember.role === "MANAGER";
   const { orderId } = await context.params;
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { customer: true, lines: { include: { addOns: true } }, payments: true, packages: true },
+    include: {
+      customer: true,
+      lines: { include: { addOns: true } },
+      payments: true,
+      packages: {
+        include: {
+          fulfillmentMethod: true,
+          shipmentBoxes: {
+            orderBy: { createdAt: "desc" },
+            select: {
+              id: true,
+              carrier: true,
+              service: true,
+              labelUrl: true,
+              trackingNumber: true,
+              trackingStatus: true,
+              labelVoidedAt: true,
+              ...(includeMargin ? {
+                chargedCents: true,
+                labelCostCents: true,
+                marginCents: true,
+              } : {}),
+            },
+          },
+        },
+      },
+    },
   });
   return order ? NextResponse.json({ order }) : NextResponse.json({ error: "Order not found." }, { status: 404 });
 }
