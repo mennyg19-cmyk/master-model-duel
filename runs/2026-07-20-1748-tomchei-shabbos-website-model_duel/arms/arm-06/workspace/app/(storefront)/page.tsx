@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BRAND } from "@/lib/brand";
-import { getSeasonYear } from "@/lib/season";
+import { getSeasonYear } from "@/lib/seasons/year";
 import { Button } from "@/components/ui/button";
 
 export default function HomePage() {

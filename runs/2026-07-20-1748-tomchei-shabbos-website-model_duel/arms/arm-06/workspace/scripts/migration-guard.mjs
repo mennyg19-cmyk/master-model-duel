@@ -43,14 +43,26 @@ try {
   process.exit(1);
 }
 
+// Drift detection parses the diff output instead of relying on --exit-code's
+// numeric status (which differs across prisma versions): an empty diff prints
+// "-- This is an empty migration." with --script ("No difference detected"
+// without it); anything else IS the drift, printed for the log.
 try {
-  run(["migrate", "diff", "--from-schema-datasource", "prisma/schema.prisma", "--to-schema-datamodel", "prisma/schema.prisma", "--exit-code"]);
-} catch (error) {
-  if (error.status === 2) {
-    console.error("migration-guard: schema.prisma has drifted from the applied migrations. Create a migration.");
-  } else {
-    console.error(`migration-guard: migrate diff failed:\n${error.stdout ?? error.message}`);
+  const diff = run([
+    "migrate",
+    "diff",
+    "--from-schema-datasource",
+    "prisma/schema.prisma",
+    "--to-schema-datamodel",
+    "prisma/schema.prisma",
+    "--script",
+  ]);
+  if (!/No difference detected|empty migration/i.test(diff)) {
+    console.error(`migration-guard: schema.prisma has drifted from the applied migrations. Create a migration:\n${diff}`);
+    process.exit(1);
   }
+} catch (error) {
+  console.error(`migration-guard: migrate diff failed:\n${error.stdout ?? error.message}`);
   process.exit(1);
 }
 

@@ -1,0 +1,82 @@
+import { Order, OrderStatus } from "@prisma/client";
+import { prisma, reloadOrThrow } from "@/lib/db";
+import { DomainRuleError, NotFoundError } from "@/lib/errors";
+import { claimOrderNumber, formatWireFormat } from "@/lib/orders/numbers";
+
+// R-044..R-046: draft → finalized | discarded; terminal states never move.
+export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
+  DRAFT: ["FINALIZED", "DISCARDED"],
+  FINALIZED: [],
+  DISCARDED: [],
+};
+
+export class IllegalTransitionError extends Error {
+  constructor(from: OrderStatus, to: OrderStatus) {
+    super(`Illegal order transition: ${from} → ${to}`);
+    this.name = "IllegalTransitionError";
+  }
+}
+
+// The conditional UPDATE lost the race: a concurrent transaction already moved
+// the order out of DRAFT between our read and our write.
+export class OrderConcurrencyError extends Error {
+  constructor(orderId: string) {
+    super(`Order ${orderId} was changed concurrently; reload and retry`);
+    this.name = "OrderConcurrencyError";
+  }
+}
+
+export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
+  return ORDER_TRANSITIONS[from].includes(to);
+}
+
+export function assertTransition(from: OrderStatus, to: OrderStatus): void {
+  if (!canTransition(from, to)) throw new IllegalTransitionError(from, to);
+}
+
+// Finalize claims the season's next order number and flips DRAFT → FINALIZED
+// in one transaction. The conditional UPDATE (status = DRAFT) makes a second
+// concurrent finalizer a no-op row count → throw → rollback, so the number
+// can never be double-claimed.
+export async function finalizeOrder(orderId: string): Promise<Order> {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({ where: { id: orderId }, include: { season: true } });
+    if (!order) throw new NotFoundError("Order", orderId);
+    assertTransition(order.status, "FINALIZED");
+    // Same open-season gate as createDraftOrder (UR-008): a draft created while
+    // the season was open may not be finalized after it closed.
+    if (order.season.status !== "OPEN") {
+      throw new DomainRuleError(`Season ${order.season.name} is closed; expected OPEN to finalize`);
+    }
+
+    const orderNumber = await claimOrderNumber(tx, order.seasonId);
+    const updated = await tx.order.updateMany({
+      where: { id: orderId, status: "DRAFT" },
+      data: {
+        status: "FINALIZED",
+        orderNumber,
+        wireFormat: formatWireFormat(order.season.name, orderNumber),
+        version: { increment: 1 },
+      },
+    });
+    if (updated.count === 0) throw new OrderConcurrencyError(orderId);
+    return reloadOrThrow(() => tx.order.findUnique({ where: { id: orderId } }), "Order", orderId);
+  });
+}
+
+// Discard uses the same conditional-UPDATE guard as finalize (WHERE status =
+// DRAFT): a discard that raced a finalize is a no-op row count → throw →
+// rollback, so a finalized order can never be clobbered to DISCARDED.
+export async function discardOrder(orderId: string): Promise<Order> {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundError("Order", orderId);
+    assertTransition(order.status, "DISCARDED");
+    const updated = await tx.order.updateMany({
+      where: { id: orderId, status: "DRAFT" },
+      data: { status: "DISCARDED", version: { increment: 1 } },
+    });
+    if (updated.count === 0) throw new OrderConcurrencyError(orderId);
+    return reloadOrThrow(() => tx.order.findUnique({ where: { id: orderId } }), "Order", orderId);
+  });
+}

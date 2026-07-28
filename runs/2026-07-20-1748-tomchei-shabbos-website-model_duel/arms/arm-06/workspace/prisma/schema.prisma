@@ -24,6 +24,63 @@ enum OverrideEffect {
   DENY
 }
 
+enum SeasonStatus {
+  OPEN
+  CLOSED
+}
+
+enum ProductKind {
+  GOOD
+  BUNDLE
+  SERVICE
+}
+
+enum OrderStatus {
+  DRAFT
+  FINALIZED
+  DISCARDED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERPAID
+}
+
+enum PaymentMethod {
+  STRIPE
+  CASH
+  CHECK
+  COMP
+}
+
+enum PaymentRecordStatus {
+  POSTED
+  VOIDED
+}
+
+enum PackageStage {
+  NEW
+  PRINTED
+  PACKED
+  SENT
+  PICKED_UP
+}
+
+enum AssemblyBatchStatus {
+  PLANNED
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum CronRunStatus {
+  RUNNING
+  OK
+  FAILED
+}
+
 model StaffUser {
   id            String               @id @default(cuid())
   email         String               @unique
@@ -56,13 +113,20 @@ model PermissionOverride {
 
 // Customers are accounts, never staff rows (UR-012, resolution 8a).
 // clerkUserId links the app customer to the external identity provider subject.
+// Dedupe (R-144): engine matches on email (normalized at write) or normalizedPhone;
+// both arms are backed by unique indexes, so concurrent signups collapse onto
+// one row instead of silently duplicating.
 model Customer {
-  id          String   @id @default(cuid())
-  email       String   @unique
-  name        String
-  clerkUserId String?  @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String    @id @default(cuid())
+  email           String    @unique
+  name            String
+  phone           String?
+  normalizedPhone String?   @unique
+  clerkUserId     String?   @unique
+  addresses       Address[]
+  orders          Order[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@map("customers")
 }
@@ -100,4 +164,419 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@map("settings")
+}
+
+// ---------------------------------------------------------------------------
+// P2 — domain core
+// ---------------------------------------------------------------------------
+
+// UR-008: open/closed gate; scheduledOpensAt/ClosesAt are the optional
+// auto-flip schedule (the flip job runs in a later phase; cron run log below).
+// Counters drive per-season sequential order numbers (R-151) and draft refs (R-047).
+model Season {
+  id                 String       @id @default(cuid())
+  name               String       @unique
+  status             SeasonStatus @default(OPEN)
+  scheduledOpensAt   DateTime?
+  scheduledClosesAt  DateTime?
+  lastOrderSeq       Int          @default(0)
+  lastDraftSeq       Int          @default(0)
+  orders             Order[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@map("seasons")
+}
+
+// R-146..R-148: dims/kinds/inventory flags; options carry price adjustments;
+// replacedById is the replacement link used by repeat orders (P10).
+model Product {
+  id              String          @id @default(cuid())
+  slug            String          @unique
+  name            String
+  description     String?
+  kind            ProductKind     @default(GOOD)
+  basePriceCents  Int
+  lengthMm        Int?
+  widthMm         Int?
+  heightMm        Int?
+  weightGrams     Int?
+  trackInventory  Boolean         @default(false)
+  allowBackorder  Boolean         @default(false)
+  active          Boolean         @default(true)
+  replacedBy      Product?        @relation("ReplacementLinks", fields: [replacedById], references: [id])
+  replacedById    String?
+  replaces        Product[]       @relation("ReplacementLinks")
+  options         ProductOption[]
+  allowedAddOns   ProductAddOn[]
+  inventoryItem   InventoryItem?
+  orderLines      OrderLine[]
+  bomLines        BomLine[]
+  assemblyBatches AssemblyBatch[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("products")
+}
+
+model ProductOption {
+  id        String               @id @default(cuid())
+  product   Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  name      String
+  values    ProductOptionValue[]
+
+  @@unique([productId, name])
+  @@map("product_options")
+}
+
+model ProductOptionValue {
+  id              String        @id @default(cuid())
+  option          ProductOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  optionId        String
+  label           String
+  priceDeltaCents Int           @default(0)
+  orderLines      OrderLine[]
+
+  @@unique([optionId, label])
+  @@map("product_option_values")
+}
+
+// Add-ons are their own catalog entity; ProductAddOn restricts which products
+// an add-on may attach to (R-148).
+model AddOn {
+  id            String         @id @default(cuid())
+  slug          String         @unique
+  name          String
+  priceCents    Int
+  active        Boolean        @default(true)
+  products      ProductAddOn[]
+  inventoryItem InventoryItem?
+  orderLines    OrderLine[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("add_ons")
+}
+
+model ProductAddOn {
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  addOn     AddOn   @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+  addOnId   String
+
+  @@id([productId, addOnId])
+  @@map("product_add_ons")
+}
+
+// R-145: saved addresses carry geocode fields; geocode cache below owns TTLs.
+model Address {
+  id            String         @id @default(cuid())
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId    String
+  label         String?
+  line1         String
+  line2         String?
+  city          String
+  region        String
+  postalCode    String
+  country       String         @default("US")
+  lat           Float?
+  lng           Float?
+  geocodedAt    DateTime?
+  packages      Package[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([customerId, label])
+  @@map("addresses")
+}
+
+// R-044..R-047, R-149..R-152. orderNumber is claimed atomically on finalize;
+// draftRef/wireFormat carry the draft reference + wire format.
+model Order {
+  id            String                @id @default(cuid())
+  season        Season                @relation(fields: [seasonId], references: [id])
+  seasonId      String
+  customer      Customer              @relation(fields: [customerId], references: [id])
+  customerId    String
+  status        OrderStatus           @default(DRAFT)
+  orderNumber   Int?
+  draftRef      String?               @unique
+  wireFormat    String?
+  paymentStatus PaymentStatus         @default(UNPAID)
+  totalCents    Int                   @default(0)
+  version       Int                   @default(1)
+  lines         OrderLine[]
+  payments      Payment[]
+  stripeIntents StripePaymentIntent[]
+  shippingQuotes ShippingQuote[]
+  packages      Package[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([seasonId, orderNumber])
+  @@map("orders")
+}
+
+// OrderLine tree (R-150): add-on lines hang off their parent product line via
+// parentLineId (CASCADE: deleting a parent line removes its add-on lines with
+// it). All names/prices are snapshots taken at write; the FK references exist
+// to reject fabricated catalog ids, not for live price lookups. Line-kind
+// integrity (exactly one of productId/addOnId; add-on lines must carry a
+// parentLineId; product lines must not) is CHECK-enforced in the migration.
+model OrderLine {
+  id                   String              @id @default(cuid())
+  order                Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId              String
+  parentLine           OrderLine?          @relation("LineAddOns", fields: [parentLineId], references: [id], onDelete: Cascade)
+  parentLineId         String?
+  addOnLines           OrderLine[]         @relation("LineAddOns")
+  product              Product?            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productId            String?
+  productName          String
+  qty                  Int                 @default(1)
+  unitPriceCents       Int
+  optionValue          ProductOptionValue? @relation(fields: [optionValueId], references: [id], onDelete: Restrict)
+  optionValueId        String?
+  optionLabel          String?
+  optionPriceDeltaCents Int                @default(0)
+  addOn                AddOn?              @relation(fields: [addOnId], references: [id], onDelete: Restrict)
+  addOnId              String?
+  lineTotalCents       Int
+  createdAt            DateTime            @default(now())
+
+  @@map("order_lines")
+}
+
+// UR-001: recipient/address/method/greeting grouping key; stages optional and
+// data-driven via FulfillmentMethod.stages; PackageEvent is package-level audit.
+model Package {
+  id                   String            @id @default(cuid())
+  order                Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId              String
+  recipientName        String
+  // RESTRICT: an address referenced by packages cannot be deleted, so the
+  // stored groupingKey (which embeds the address id) can never go stale.
+  recipientAddress     Address?          @relation(fields: [recipientAddressId], references: [id], onDelete: Restrict)
+  recipientAddressId   String?
+  fulfillmentMethod    FulfillmentMethod @relation(fields: [fulfillmentMethodId], references: [id])
+  fulfillmentMethodId  String
+  greeting             String?
+  groupingKey          String
+  stage                PackageStage      @default(NEW)
+  version              Int               @default(1)
+  events               PackageEvent[]
+  shippingQuotes       ShippingQuote[]
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([orderId, groupingKey])
+  @@map("packages")
+}
+
+// R-153/R-154: data-driven fulfillment methods own their stage lists, e.g.
+// DELIVERY: NEW→PRINTED→PACKED→SENT; PICKUP: NEW→PACKED→PICKED_UP.
+model FulfillmentMethod {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  label           String
+  stages          Json
+  terminalStage   PackageStage
+  active          Boolean   @default(true)
+  packages        Package[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("fulfillment_methods")
+}
+
+model PackageEvent {
+  id         String       @id @default(cuid())
+  package    Package      @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId  String
+  action     String
+  fromStage  PackageStage?
+  toStage    PackageStage?
+  actorId    String?
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  @@index([packageId, createdAt])
+  @@map("package_events")
+}
+
+// R-160: posted/voided payments; voided rows are excluded from the cached
+// payment status recomputation.
+model Payment {
+  id           String              @id @default(cuid())
+  order        Order               @relation(fields: [orderId], references: [id])
+  orderId      String
+  method       PaymentMethod
+  status       PaymentRecordStatus @default(POSTED)
+  amountCents  Int
+  postedById   String?
+  voidedAt     DateTime?
+  voidReason   String?
+  createdAt    DateTime            @default(now())
+
+  @@index([orderId, status])
+  @@map("payments")
+}
+
+// R-159: Stripe PaymentIntent mirror; raw holds the last webhook payload
+// (writers must redact PII/card fields before persisting). The intent
+// clientSecret is a payment credential and is deliberately NOT stored.
+model StripePaymentIntent {
+  id          String   @id @default(cuid())
+  order       Order    @relation(fields: [orderId], references: [id])
+  orderId     String
+  intentId    String   @unique
+  amountCents Int
+  currency    String   @default("usd")
+  status      String
+  raw         Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("stripe_payment_intents")
+}
+
+// R-155: quote options expire — checkout must re-quote after expiresAt.
+model ShippingQuote {
+  id         String   @id @default(cuid())
+  order      Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    String?
+  package    Package? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId  String?
+  options    Json
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@map("shipping_quotes")
+}
+
+// R-156
+model PickupLocation {
+  id         String   @id @default(cuid())
+  name       String
+  line1      String
+  city       String
+  region     String
+  postalCode String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("pickup_locations")
+}
+
+// R-157: package types and the boxes shipments go out in.
+model PackageType {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  lengthMm        Int
+  widthMm         Int
+  heightMm        Int
+  maxWeightGrams  Int?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@map("package_types")
+}
+
+model ShipmentBox {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  lengthMm        Int
+  widthMm         Int
+  heightMm        Int
+  tareWeightGrams Int      @default(0)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@map("shipment_boxes")
+}
+
+// R-158/R-139: one inventory row per unit of stock, targeting exactly one of
+// product | addOn (XOR enforced by CHECK in the migration); version drives
+// optimistic concurrency on mutations.
+model InventoryItem {
+  id        String   @id @default(cuid())
+  product   Product? @relation(fields: [productId], references: [id])
+  productId String?  @unique
+  addOn     AddOn?   @relation(fields: [addOnId], references: [id])
+  addOnId   String?  @unique
+  onHand    Int      @default(0)
+  reserved  Int      @default(0)
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("inventory_items")
+}
+
+// R-162: geocode results cached per normalized address with a TTL.
+model GeocodeCache {
+  id         String   @id @default(cuid())
+  addressKey String   @unique
+  lat        Float
+  lng        Float
+  provider   String
+  fetchedAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@map("geocode_cache")
+}
+
+// R-163: every cron execution leaves a row.
+model CronRun {
+  id         String        @id @default(cuid())
+  name       String
+  status     CronRunStatus @default(RUNNING)
+  startedAt  DateTime      @default(now())
+  finishedAt DateTime?
+  message    String?
+
+  @@index([name, startedAt])
+  @@map("cron_runs")
+}
+
+// UR-016/G-009: BOM + assembly batches are schema-only this phase (no UI;
+// managers enable the feature later).
+model Ingredient {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  unit        String
+  onHand      Decimal   @default(0) @db.Decimal(12, 3)
+  bomLines    BomLine[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("ingredients")
+}
+
+model BomLine {
+  id           String     @id @default(cuid())
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId    String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  ingredientId String
+  qty          Decimal    @db.Decimal(12, 3)
+
+  @@unique([productId, ingredientId])
+  @@map("bom_lines")
+}
+
+model AssemblyBatch {
+  id          String              @id @default(cuid())
+  product     Product             @relation(fields: [productId], references: [id])
+  productId   String
+  qtyPlanned  Int
+  status      AssemblyBatchStatus @default(PLANNED)
+  completedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@map("assembly_batches")
 }
