@@ -606,3 +606,10 @@
 2026-07-28T15:03:39Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-06,,plan,kimi-k3-max,,,,,,,,,Test 2 build plan from USER-RESOLVED; usage_missing_pending_export
 2026-07-28T15:12:30Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,2,arm-06,,reviewer,glm-5.2-high,,,,,,,,,grade BUILD-PLAN /15 + bonus_plan; usage_missing_pending_export
 2026-07-28T15:14:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P1,build,kimi-k3-max,,,,,,,,,T4 P1 initial build; usage_missing_pending_export
+2026-07-28T16:00:56Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P1,review_security,glm-5.2-high,,,,,,,,,P1 security panel; usage_missing_pending_export
+2026-07-28T16:00:56Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P1,review_quality,glm-5.2-high,,,,,,,,,P1 quality panel; usage_missing_pending_export
+2026-07-28T16:00:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P1,review_rules,glm-5.2-high,,,,,,,,,P1 rules panel; usage_missing_pending_export
+2026-07-28T16:00:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P1,review_clean_code,glm-5.2-high,,,,,,,,,P1 clean-code panel; usage_missing_pending_export
+2026-07-28T16:14:22Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P1,review_aggregate,glm-5.2-high,,,,,,,,,P1 aggregate of 4 specialists; usage_missing_pending_export
+2026-07-28T16:17:55Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P1,fix,kimi-k3-max,f2617bcd-8746-4c70-92b7-e74d940e08d9,,,,,,,,P1 fix pass vs aggregate 0B7M24m; usage_missing_pending_export
+2026-07-28T16:38:58Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P2,build,kimi-k3-max,f2617bcd-8746-4c70-92b7-e74d940e08d9,,,,,,,,T4 P2 initial build; usage_missing_pending_export

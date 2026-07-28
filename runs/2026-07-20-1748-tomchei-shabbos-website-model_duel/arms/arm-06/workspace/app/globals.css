@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #f5f3ff;
+  --color-brand-100: #ede9fe;
+  --color-brand-200: #ddd6fe;
+  --color-brand-600: #6d28d9;
+  --color-brand-700: #5b21b6;
+  --color-brand-900: #2e1065;
+  --color-accent-100: #fef3c7;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  background-color: var(--color-stone-50);
+  color: var(--color-stone-900);
+  -webkit-font-smoothing: antialiased;
+}

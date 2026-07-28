@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  MANAGER
+  STAFF
+  DRIVER
+}
+
+enum StaffStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+}
+
+enum OverrideEffect {
+  GRANT
+  DENY
+}
+
+model StaffUser {
+  id            String               @id @default(cuid())
+  email         String               @unique
+  name          String
+  role          StaffRole            @default(STAFF)
+  status        StaffStatus          @default(PENDING)
+  inviteToken   String?              @unique
+  invitedAt     DateTime?
+  confirmedAt   DateTime?
+  version       Int                  @default(1)
+  overrides     PermissionOverride[]
+  sessions      AuthSession[]
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@map("staff_users")
+}
+
+model PermissionOverride {
+  id          String         @id @default(cuid())
+  staffUser   StaffUser      @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  staffUserId String
+  permission  String
+  effect      OverrideEffect
+  createdAt   DateTime       @default(now())
+
+  @@unique([staffUserId, permission])
+  @@map("permission_overrides")
+}
+
+// Customers are accounts, never staff rows (UR-012, resolution 8a).
+// clerkUserId links the app customer to the external identity provider subject.
+model Customer {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String
+  clerkUserId String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("customers")
+}
+
+model AuthSession {
+  id         String    @id @default(cuid())
+  staffUser  StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  staffUserId String
+  ip         String?
+  userAgent  String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@map("auth_sessions")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String?
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
