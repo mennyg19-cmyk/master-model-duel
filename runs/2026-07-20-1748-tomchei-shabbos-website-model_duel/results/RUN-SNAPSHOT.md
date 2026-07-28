@@ -16,6 +16,6 @@
 | 4 | **complete** 18.0/20 |
 | 5 | **complete** 12.0/15 |
 
-Cost ledger: many arm-05 rows still `usage=MISSING` — backfill before claiming full cost gate.
+Cost ledger: arm-05 backfilled from `usage-events-2026-07-28.csv`; `verify-cost-ledger -RequireUsage` → **ok=true**.
 
 See [SCOREBOARD.md](./SCOREBOARD.md)
