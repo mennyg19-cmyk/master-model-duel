@@ -9,6 +9,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 | arm-03 | **6** | **8** | **15** | | **18.0** | **11.0** | **11.0** | **69.0** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
 | arm-04 | **7** | **8** | **15** | | **18.0** | **14.0** | **11.0** | **73.0** | inv_novel=6; bonus_plan | **yes** (join after Test 6; Opus 5 high; T6 rerun) |
 | arm-05 | — | — | — | | **18.0** | **12.0** | — | **30.0** | — | **yes** (Terra high; T4+T5 only) |
+| arm-06 | **7** | **6.5** | **15** | | | | | | inv_novel=4; bonus_plan | **yes** (Kimi K3 max; full suite) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -20,6 +21,7 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 | arm-02 | 7 | 2.00 | 13 | 0.54 |
 | arm-03 | 7 | 1.99 | 13 | 0.54 |
 | arm-04 | 7 | 2.00 | 10 | **0.70** |
+| arm-06 | 6 | 2.00 | 11 | 0.55 |
 
 ## Cost (from COST-LEDGER.csv)
 

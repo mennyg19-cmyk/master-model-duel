@@ -47,10 +47,18 @@
       }
     },
     "claude-fable": {
-      "label": "Claude Fable / Opus-class",
-      "slugs": ["claude-fable-5-thinking-high", "claude-fable-5-thinking-medium"],
+      "label": "Claude Fable",
+      "slugs": ["claude-fable-5-thinking-high", "claude-fable-5-thinking-medium", "claude-fable-5-thinking-xhigh"],
       "hosts": {
-        "cursor": ["claude-fable-5-thinking-high", "claude-fable-5-thinking-medium"],
+        "cursor": ["claude-fable-5-thinking-high", "claude-fable-5-thinking-medium", "claude-fable-5-thinking-xhigh"],
+        "opencode": []
+      }
+    },
+    "claude-opus": {
+      "label": "Claude Opus",
+      "slugs": ["claude-opus-5-thinking-high", "claude-opus-5-thinking-high-fast", "claude-opus-4-8-thinking-high", "claude-opus-4-8-thinking-high-fast"],
+      "hosts": {
+        "cursor": ["claude-opus-5-thinking-high", "claude-opus-5-thinking-high-fast", "claude-opus-4-8-thinking-high", "claude-opus-4-8-thinking-high-fast"],
         "opencode": ["anthropic/claude-opus-4-20250514", "anthropic/claude-opus-4-5"]
       }
     },
@@ -61,8 +69,8 @@
     },
     "kimi": {
       "label": "Kimi",
-      "slugs": ["kimi-k2.7-code"],
-      "hosts": { "cursor": ["kimi-k2.7-code"], "opencode": ["moonshotai/kimi-k2"] }
+      "slugs": ["kimi-k2.7-code", "kimi-k3-max"],
+      "hosts": { "cursor": ["kimi-k2.7-code", "kimi-k3-max"], "opencode": ["moonshotai/kimi-k2"] }
     }
   },
   "reviewer_defaults": {

@@ -34,3 +34,18 @@
 **Update:** Port 4105 cleared; re-smoke **S1–S5 pass**. P1 gated **1.5/20**.
 **Status:** DONE — P1 gated; P2 starting
 
+## [2026-07-28T08:53:00Z] Late join arm-06
+**What happened:** Added **`kimi-k3-max`** (`kimi`), ports 3106/4106. User requested **entire suite** (1a/1b/2/4/5/6; Test 3 skipped for all arms in this run). Test 6: **rerun_same_seeds** (clone arm-02 winner; B1–B5; arm-01/02/03/04 scores frozen). Live grill for Test 1b (no frozen replay). Catalog: added `kimi-k3-max` to `kimi` family in `catalog/MODEL-FAMILIES.json`.
+**Rule:** Shared freezes unchanged; see protocol/LATE-JOIN.md. Grade vs frozen RECONCILED-INVENTORY + MERGED-BUILD-PLAN; bonus_inventory_novel / bonus_plan allowed.
+**Status:** DECIDED — Test 1a focused specialists running.
+
+## [2026-07-28T09:49:00Z] arm-06 T1a merge quota
+**What happened:** arm-06 merge agent hit `resource_exhausted` before writing output; resumed once (same agent).
+**Rule:** Protocol rule 29 (quota exhaustion → resume once).
+**Status:** DONE — merge resumed.
+
+
+## [2026-07-28T08:46:35.7136836Z] Late join arm-06
+**What happened:** Added contestant mid-run.
+**Rule:** Shared freezes unchanged; see protocol/LATE-JOIN.md.
+**Status:** DECIDED

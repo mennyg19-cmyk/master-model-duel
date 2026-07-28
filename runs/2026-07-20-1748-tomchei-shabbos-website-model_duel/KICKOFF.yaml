@@ -76,3 +76,12 @@ late_joins:
     joined_utc: 2026-07-27T16:11:32.6055869Z
     tests: "4,5"
     tests_note: user requested Test 4+5 only; skip 1a/1b/2/6; build from frozen MERGED-BUILD-PLAN
+
+late_joins:
+  - arm_id: arm-06
+    model: kimi-k3-max
+    family: kimi
+    pack_id: default
+    web_port: 3106
+    db_port: 4106
+    joined_utc: 2026-07-28T08:46:35.7136836Z
