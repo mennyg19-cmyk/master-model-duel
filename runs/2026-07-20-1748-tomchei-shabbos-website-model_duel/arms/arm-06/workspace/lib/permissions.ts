@@ -7,13 +7,15 @@ export const PERMISSIONS = [
   "audit.view",
   "catalog.manage",
   "settings.manage",
+  "customers.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 
 const ROLE_DEFAULTS: Record<StaffRole, readonly Permission[]> = {
   MANAGER: PERMISSIONS,
-  STAFF: ["admin.access"],
+  // UR-014: POS-floor staff edit customer address books (audited); drivers don't.
+  STAFF: ["admin.access", "customers.manage"],
   DRIVER: [],
 };
 

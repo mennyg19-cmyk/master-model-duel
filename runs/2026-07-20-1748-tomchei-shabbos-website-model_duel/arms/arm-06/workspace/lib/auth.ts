@@ -7,6 +7,7 @@ import { env, isDevAuthBypass } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { hasPermission, Permission } from "@/lib/permissions";
 import { decodeSession, encodeSession, SESSION_COOKIE, SessionPayload } from "@/lib/session-codec";
+import { clientIp } from "@/lib/client-ip";
 
 export const SESSION_TTL_HOURS = 12;
 
@@ -87,7 +88,7 @@ export async function requireApiPermission(permission: Permission): Promise<ApiG
 // capped — it is audit metadata, never an auth input.
 export async function createLoginSession(staffUserId: string): Promise<AuthSession> {
   const headerStore = await headers();
-  const ip = headerStore.get("x-forwarded-for")?.split(",")[0].trim().slice(0, 45) ?? null;
+  const ip = clientIp(headerStore);
   return prisma.authSession.create({
     data: {
       staffUserId,

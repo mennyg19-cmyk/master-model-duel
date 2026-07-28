@@ -118,18 +118,35 @@ model PermissionOverride {
 // both arms are backed by unique indexes, so concurrent signups collapse onto
 // one row instead of silently duplicating.
 model Customer {
-  id              String    @id @default(cuid())
-  email           String    @unique
+  id              String            @id @default(cuid())
+  email           String            @unique
   name            String
   phone           String?
-  normalizedPhone String?   @unique
-  clerkUserId     String?   @unique
+  normalizedPhone String?           @unique
+  clerkUserId     String?           @unique
   addresses       Address[]
   orders          Order[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  sessions        CustomerSession[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   @@map("customers")
+}
+
+// P4: server-side customer sessions — same discipline as AuthSession for
+// staff. The HMAC cookie identifies the session row; expiry/revocation are
+// checked against this table on every customer-gated request.
+model CustomerSession {
+  id         String    @id @default(cuid())
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String
+  ip         String?
+  userAgent  String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@map("customer_sessions")
 }
 
 model AuthSession {
@@ -294,6 +311,7 @@ model Address {
   lng           Float?
   geocodedAt    DateTime?
   packages      Package[]
+  recipients    DraftRecipient[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -303,29 +321,58 @@ model Address {
 
 // R-044..R-047, R-149..R-152. orderNumber is claimed atomically on finalize;
 // draftRef/wireFormat carry the draft reference + wire format.
+// P4: guestTokenHash is the HMAC of the one-time guest access token (R-023) —
+// the raw token is never stored, and draft lookups without it return 404 so
+// draft refs cannot be enumerated.
 model Order {
-  id            String                @id @default(cuid())
-  season        Season                @relation(fields: [seasonId], references: [id])
-  seasonId      String
-  customer      Customer              @relation(fields: [customerId], references: [id])
-  customerId    String
-  status        OrderStatus           @default(DRAFT)
-  orderNumber   Int?
-  draftRef      String?               @unique
-  wireFormat    String?
-  paymentStatus PaymentStatus         @default(UNPAID)
-  totalCents    Int                   @default(0)
-  version       Int                   @default(1)
-  lines         OrderLine[]
-  payments      Payment[]
-  stripeIntents StripePaymentIntent[]
+  id             String                @id @default(cuid())
+  season         Season                @relation(fields: [seasonId], references: [id])
+  seasonId       String
+  customer       Customer              @relation(fields: [customerId], references: [id])
+  customerId     String
+  status         OrderStatus           @default(DRAFT)
+  orderNumber    Int?
+  draftRef       String?               @unique
+  wireFormat     String?
+  guestTokenHash String?               @unique
+  paymentStatus  PaymentStatus         @default(UNPAID)
+  totalCents     Int                   @default(0)
+  version        Int                   @default(1)
+  lines          OrderLine[]
+  recipients     DraftRecipient[]
+  payments       Payment[]
+  stripeIntents  StripePaymentIntent[]
   shippingQuotes ShippingQuote[]
-  packages      Package[]
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  packages       Package[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
   @@unique([seasonId, orderNumber])
   @@map("orders")
+}
+
+// P4 (UR-006/G-018): a recipient on a draft order. Address fields are a
+// snapshot so the draft survives address-book edits/deletes; addressId links
+// back to the book row the recipient came from (SetNull on book delete).
+// Packages materialize from these rows at finalize (P5/P7).
+model DraftRecipient {
+  id          String      @id @default(cuid())
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String
+  name        String
+  line1       String
+  line2       String?
+  city        String
+  region      String
+  postalCode  String
+  country     String      @default("US")
+  address     Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  addressId   String?
+  lines       OrderLine[]
+  createdAt   DateTime    @default(now())
+
+  @@index([orderId])
+  @@map("draft_recipients")
 }
 
 // OrderLine tree (R-150): add-on lines hang off their parent product line via
@@ -341,6 +388,10 @@ model OrderLine {
   parentLine           OrderLine?          @relation("LineAddOns", fields: [parentLineId], references: [id], onDelete: Cascade)
   parentLineId         String?
   addOnLines           OrderLine[]         @relation("LineAddOns")
+  // P4: recipient assignment (UR-006). SetNull — removing a draft recipient
+  // unassigns its lines instead of deleting them.
+  recipient            DraftRecipient?     @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+  recipientId          String?
   product              Product?            @relation(fields: [productId], references: [id], onDelete: Restrict)
   productId            String?
   productName          String

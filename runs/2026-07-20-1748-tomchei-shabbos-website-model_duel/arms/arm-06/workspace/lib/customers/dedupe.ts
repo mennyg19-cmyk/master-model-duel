@@ -3,6 +3,16 @@ import { prisma } from "@/lib/db";
 import { normalizeEmail, normalizeWhitespace } from "@/lib/text";
 import { normalizePhone } from "@/lib/phone";
 
+// Guest draft saves must never attach to a customer who has authenticated
+// before: the guest path carries no ownership proof, so attaching would let
+// anyone who knows an email write drafts/recipients into that account.
+export class VerifiedCustomerExistsError extends Error {
+  constructor() {
+    super("An account already exists for this email — sign in to continue checkout");
+    this.name = "VerifiedCustomerExistsError";
+  }
+}
+
 // R-144: a new signup/checkout matching an existing customer on normalized
 // email or phone attaches to that row instead of creating a duplicate.
 // Concurrency: BOTH arms are backed by unique indexes (email, normalizedPhone),
@@ -63,6 +73,28 @@ function findByEmailOrPhone(
       OR: [{ email }, ...(normalizedPhone ? [{ normalizedPhone }] : [])],
     },
   });
+}
+
+// Guest checkout identity: same dedupe as above, but a match on a VERIFIED
+// customer (Clerk-linked or has ever held a session) refuses the attach —
+// they must sign in. Guest-shadow rows (never authenticated) still dedupe, so
+// a returning guest keeps one customer row.
+export async function findOrCreateGuestCustomer(input: {
+  name: string;
+  email: string;
+  phone?: string | null;
+}): Promise<{ customer: Customer; created: boolean }> {
+  const existing = await findByEmailOrPhone(
+    normalizeEmail(input.email),
+    input.phone ? normalizePhone(input.phone) : null,
+  );
+  if (existing) {
+    const hasAuthenticated =
+      existing.clerkUserId !== null ||
+      (await prisma.customerSession.count({ where: { customerId: existing.id } })) > 0;
+    if (hasAuthenticated) throw new VerifiedCustomerExistsError();
+  }
+  return findOrCreateCustomer(input);
 }
 
 function isUniqueViolation(error: unknown): boolean {

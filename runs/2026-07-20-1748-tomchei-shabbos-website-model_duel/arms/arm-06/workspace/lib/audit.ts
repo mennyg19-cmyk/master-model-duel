@@ -19,7 +19,10 @@ export type AuditAction =
   | "media_upload"
   | "media_update"
   | "media_delete"
-  | "settings_update";
+  | "settings_update"
+  | "address_create"
+  | "address_update"
+  | "address_delete";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

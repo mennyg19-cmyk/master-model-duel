@@ -627,3 +627,10 @@
 2026-07-28T19:56:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P3,review_aggregate,glm-5.2-high,,,,,,,,,P3 aggregate of 4 specialists; usage_missing_pending_export
 2026-07-28T19:59:22Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P3,contestant_fix,kimi-k3-max,7e313302-f00c-47cf-9142-3f7f5da3d4c2,,,,,,,,P3 fix pass after aggregate 1B/8M/21m; usage_missing_pending_export
 2026-07-28T20:37:40Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P4,contestant_build,kimi-k3-max,09b5e5ed-f53d-45e8-afc6-2ac72e0b8a59,,,,,,,,P4 cart-first order builder initial build; usage_missing_pending_export
+2026-07-28T21:37:20Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P4,review_security,glm-5.2-high,e6cc4ca0-c324-4f96-aaa8-47df6fbd73fb,,,,,,,,P4 security review; usage_missing_pending_export
+2026-07-28T21:37:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P4,review_quality,glm-5.2-high,98a81e57-15b1-460d-9773-0d84aa3432e3,,,,,,,,P4 quality review; usage_missing_pending_export
+2026-07-28T21:37:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P4,review_rules,glm-5.2-high,91b1324e-9942-4cc4-8629-72b5ecbd4a1b,,,,,,,,P4 rules review; usage_missing_pending_export
+2026-07-28T21:37:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P4,review_clean_code,glm-5.2-high,debdf71e-fba5-4838-a053-231370f42afb,,,,,,,,P4 clean-code review; usage_missing_pending_export
+2026-07-28T21:40:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P4,review_aggregate,glm-5.2-high,d125a09f-a3f3-4373-870f-96e77c54b5bf,,,,,,,,P4 aggregate of 4 specialists; usage_missing_pending_export
+2026-07-28T21:42:09Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P4,contestant_fix,kimi-k3-max,ae96da9a-1478-4df5-a259-b320e39dc934,,,,,,,,P4 fix pass after aggregate 0B/10M/19m; usage_missing_pending_export
+2026-07-28T22:18:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P5,contestant_build,kimi-k3-max,9ad680ab-a6c7-4c82-9306-2fb773bb7fd6,,,,,,,,P5 checkout initial build; usage_missing_pending_export

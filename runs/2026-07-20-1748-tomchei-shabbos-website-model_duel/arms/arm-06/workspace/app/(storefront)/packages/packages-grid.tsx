@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
-import { formatCents, formatDelta } from "@/lib/money";
+import { formatDelta } from "@/lib/money";
+import { lowestPriceCents, priceLabel } from "@/lib/storefront/pricing";
 import { ProductImage } from "@/components/product-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FilterChip } from "@/components/ui/filter-chip";
 
 export interface GridProduct {
   id: string;
@@ -22,19 +24,6 @@ export interface GridProduct {
 }
 
 type SortKey = "name" | "price-asc" | "price-desc";
-
-function lowestPriceCents(product: GridProduct): number {
-  const deltas = product.options.flatMap((option) => option.values.map((value) => value.priceDeltaCents));
-  return product.basePriceCents + Math.min(0, ...deltas);
-}
-
-function priceLabel(product: GridProduct): string {
-  // lowestPriceCents can never exceed the base price, so options alone decide
-  // the "from" prefix.
-  return product.options.length > 0
-    ? `from ${formatCents(lowestPriceCents(product))}`
-    : formatCents(product.basePriceCents);
-}
 
 // R-006/015/016/017: category filters, price sort, sold-out handling, and the
 // quick-view dialog — one grid component so all three controls share state.
@@ -61,9 +50,9 @@ export function PackagesGrid({ products, categories }: { products: GridProduct[]
     <div className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by category">
-          <FilterButton label="All" isActive={activeCategory === null} onClick={() => setActiveCategory(null)} />
+          <FilterChip label="All" isActive={activeCategory === null} onClick={() => setActiveCategory(null)} />
           {categories.map((category) => (
-            <FilterButton
+            <FilterChip
               key={category}
               label={category}
               isActive={activeCategory === category}
@@ -245,23 +234,5 @@ function QuickViewDialog({ product, onClose }: { product: GridProduct; onClose: 
         </div>
       </div>
     </div>
-  );
-}
-
-function FilterButton({ label, isActive, onClick }: { label: string; isActive: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={isActive}
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-3 py-1 text-sm font-medium",
-        isActive
-          ? "border-brand-700 bg-brand-700 text-white"
-          : "border-stone-300 bg-white text-stone-700 hover:bg-stone-100",
-      )}
-    >
-      {label}
-    </button>
   );
 }

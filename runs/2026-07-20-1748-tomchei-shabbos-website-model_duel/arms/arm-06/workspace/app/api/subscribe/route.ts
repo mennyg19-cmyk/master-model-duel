@@ -3,6 +3,7 @@ import { z } from "zod";
 import { parseBody } from "@/lib/parse-body";
 import { upsertSubscriber } from "@/lib/newsletter/subscribers";
 import { newsletterRateLimit } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +19,7 @@ const subscribeSchema = z.object({
 // minted only inside transactional emails (P11), addressed to the mailbox
 // owner. Rate-limited per client IP to blunt spam/upsert abuse.
 export async function POST(request: Request) {
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim().slice(0, 45) ?? "unknown";
-  if (!newsletterRateLimit(clientIp)) {
+  if (!newsletterRateLimit(clientIp(request.headers) ?? "unknown")) {
     return NextResponse.json({ error: "Too many subscribe attempts — try again in a minute" }, { status: 429 });
   }
 

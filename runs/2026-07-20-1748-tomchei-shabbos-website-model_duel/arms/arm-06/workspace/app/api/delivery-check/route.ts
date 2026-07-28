@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseBody } from "@/lib/parse-body";
 import { deliveryCheckRateLimit } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/client-ip";
 import { getSetting } from "@/lib/settings";
 import { isDeliverable } from "@/lib/storefront/delivery";
 
@@ -16,8 +17,7 @@ const checkSchema = z.object({
 // IP — an uncapped yes/no oracle over all 100k ZIPs would enumerate the
 // allowlist.
 export async function POST(request: Request) {
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim().slice(0, 45) ?? "unknown";
-  if (!deliveryCheckRateLimit(clientIp)) {
+  if (!deliveryCheckRateLimit(clientIp(request.headers) ?? "unknown")) {
     return NextResponse.json({ error: "Too many checks — try again in a minute" }, { status: 429 });
   }
 

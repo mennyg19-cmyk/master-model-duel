@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-// Customer account area lands with ordering (P4); the menu is the header's
-// account slot, wired to the pages that exist today.
-export function UserMenu() {
+// Header account slot (R-038): signed-in customers see their name + account
+// links; everyone else gets the sign-in entry. Staff portal stays one click
+// away either way.
+export function UserMenu({ customerName }: { customerName: string | null }) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -35,23 +36,48 @@ export function UserMenu() {
         </svg>
       </button>
       {isOpen && (
-        <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-md border border-stone-200 bg-white py-1 shadow-lg">
-          <Link
-            href="/account"
-            onClick={() => setIsOpen(false)}
-            className="block px-4 py-2 text-sm text-stone-700 hover:bg-stone-100"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/admin"
-            onClick={() => setIsOpen(false)}
-            className="block px-4 py-2 text-sm text-stone-700 hover:bg-stone-100"
-          >
+        <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-md border border-stone-200 bg-white py-1 shadow-lg">
+          {customerName ? (
+            <>
+              <p className="border-b border-stone-100 px-4 py-2 text-xs text-stone-500" data-user-menu-name>
+                Signed in as <span className="font-medium text-stone-800">{customerName}</span>
+              </p>
+              <MenuLink href="/account" onSelect={() => setIsOpen(false)}>
+                Dashboard
+              </MenuLink>
+              <MenuLink href="/account/orders" onSelect={() => setIsOpen(false)}>
+                Orders
+              </MenuLink>
+              <MenuLink href="/account/addresses" onSelect={() => setIsOpen(false)}>
+                Addresses
+              </MenuLink>
+            </>
+          ) : (
+            <MenuLink href="/account" onSelect={() => setIsOpen(false)}>
+              Sign in
+            </MenuLink>
+          )}
+          <MenuLink href="/admin" onSelect={() => setIsOpen(false)}>
             Staff portal
-          </Link>
+          </MenuLink>
         </div>
       )}
     </div>
+  );
+}
+
+function MenuLink({
+  href,
+  onSelect,
+  children,
+}: {
+  href: string;
+  onSelect: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link href={href} onClick={onSelect} className="block px-4 py-2 text-sm text-stone-700 hover:bg-stone-100">
+      {children}
+    </Link>
   );
 }

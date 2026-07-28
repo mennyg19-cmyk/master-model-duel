@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BRAND } from "@/lib/brand";
 import { prisma } from "@/lib/db";
 import { getOpenSeason } from "@/lib/seasons/queries";
+import { getCustomerContext } from "@/lib/customers/session";
 import { SiteHeader } from "@/components/storefront/site-header";
 import { SubscribeForm } from "@/components/storefront/subscribe-form";
 
@@ -10,14 +11,15 @@ export const dynamic = "force-dynamic";
 // R-011/012/013: storefront shell — sticky header, storewide closed banner
 // when no season is open, footer with the newsletter signup.
 export default async function StorefrontLayout({ children }: { children: React.ReactNode }) {
-  const [openSeason, closedSeasonCount] = await Promise.all([
+  const [openSeason, closedSeasonCount, customerCtx] = await Promise.all([
     getOpenSeason(),
     prisma.season.count({ where: { status: "CLOSED" } }),
+    getCustomerContext(),
   ]);
 
   return (
     <div className="flex min-h-screen flex-col">
-      <SiteHeader />
+      <SiteHeader customerName={customerCtx?.customer.name ?? null} />
       {!openSeason && (
         <div className="bg-accent-100 px-4 py-2 text-center text-sm font-medium text-amber-900" role="status">
           {closedSeasonCount > 0 ? (

@@ -10,7 +10,7 @@ const NAV_LINKS: NavLink[] = [
 ];
 
 // R-011: sticky header with desktop nav, mobile menu, and the user menu.
-export function SiteHeader() {
+export function SiteHeader({ customerName }: { customerName: string | null }) {
   return (
     <header className="sticky top-0 z-30 bg-brand-900 text-white shadow-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
@@ -29,7 +29,7 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="flex items-center gap-1">
-          <UserMenu />
+          <UserMenu customerName={customerName} />
           <MobileMenu links={NAV_LINKS} />
         </div>
       </div>

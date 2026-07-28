@@ -1,4 +1,4 @@
-# Tomchei Shabbos — Mishloach Manos platform (arm-06, phase P3)
+# Tomchei Shabbos — Mishloach Manos platform (arm-06, phase P4)
 
 Public storefront + admin catalog/settings on the P2 domain core: Next.js (App Router, RSC) + Prisma + Postgres.
 
@@ -31,6 +31,20 @@ Copy `.env.example` to `.env` and fill values. A missing/invalid variable fails 
 - **Newsletter** — `POST /api/subscribe` (upsert), token-verified `/unsubscribe` page (three independent preference states + unsubscribe-all), HMAC-signed 30-day links (`lib/newsletter/tokens.ts`).
 - **Admin catalog** — `/admin/products` (season select, create/edit, options upsert editor, replacement-link editor, per-product add-on restrictions), `/admin/addons`, `/admin/media` (upload, assign, delete).
 - **Settings hub** — `/admin/settings` with Orders (package types + pickup locations), Shipping (delivery-ZIP allowlist, fees, rules), Email (P11 placeholder), Developer (storage driver, API-keys placeholder) tabs.
+
+## What P4 ships
+
+- **Cart-first order builder** (`/order`) — add items first, assign recipients per line afterward (UR-006). Desktop = catalog + sticky cart sidebar; mobile = catalog + floating cart button opening a bottom sheet. Quick-view dialog selects options, restricted add-ons, and quantity with live unit pricing.
+- **Three-way recipient assignment** — each line assigns to a recipient already on this order, a saved address-book entry, or a brand-new recipient (auto-saves to the book by default, G-019). Duplicate recipient detection merges matching entries.
+- **Address book** — normalized + validated writes, dedupe on a normalized content key (same address never saved twice), deterministic geocode seam with DB cache (`lib/customers/geocode.ts` — swap point for a live provider), autocomplete in the recipient form, full CRUD under `/account/addresses`. Staff address edits (`/admin/customers` → addresses) ride the same lib and write an audit row per change (G-019).
+- **Live stock** — grid and quick-view show reserve-aware availability; adding beyond available stock is blocked client-side, and the server re-validates on save/checkout.
+- **Autosave drafts** — signed-in customers: debounced server save (`POST /api/drafts`, ownership by session). Guests: local-storage draft that becomes a server draft with a one-time guest access token at checkout (R-023). Draft URLs without a valid owner session/token return 404 (anti-enumeration).
+- **Account area** — `/account` dashboard (drafts + recent orders + address count), `/account/orders` history, `/account/orders/[id]` detail with per-recipient line grouping, continue/pay/cancel actions for drafts, `/account/profile` (name/email/phone), `/account/addresses`.
+- **Checkout draft view** — `/checkout?ref=…(&token=…)` renders the draft summary (lines by recipient, totals) ahead of P5 payment; FINALIZED orders show confirmation, DISCARDED 404s.
+
+## Customer auth (dev-auth seam, same shape as staff)
+
+Customer sessions mirror the staff mechanism: HMAC-signed cookie naming a server-side `CustomerSession` row (12h, revocable). `/dev-login` now has a customer section when `DEV_AUTH_BYPASS=true`; `POST/DELETE /api/dev-auth-customer` issues/revokes. Every ownership check runs against the real `Customer` row — there is no client-trusted identity.
 
 ## Auth: dev-auth bypass (documented test seam)
 
@@ -74,5 +88,5 @@ The active driver is shown on `/admin/media` and the Developer settings tab.
 
 ## CI
 
-`npm run ci` = lint + typecheck + migration-guard + unit tests (`scripts/test-*.mts`: permissions, grouping, state machine, P3 helpers) + DB-integration tests (order numbers, inventory race, payments, package stages, constraints — needs the embedded DB running).
+`npm run ci` = lint + typecheck + migration-guard + unit tests (`scripts/test-*.mts`: permissions, grouping, state machine, P3 helpers, P4 helpers — session codec, guest tokens, address dedupe/geocode, cart reducer, rate limiters) + DB-integration tests (order numbers, inventory race, payments, package stages, constraints — needs the embedded DB running).
 `npm run concurrency-smoke` (app running): 10 concurrent versioned updates → 1 win, 9 conflicts.
