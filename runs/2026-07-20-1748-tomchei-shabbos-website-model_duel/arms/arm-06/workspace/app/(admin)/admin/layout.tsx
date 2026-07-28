@@ -14,6 +14,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!hasPermission(ctx.staff, "admin.access")) forbidden();
 
   const items: SidebarItem[] = [{ href: "/admin", label: "Dashboard" }];
+  if (hasPermission(ctx.staff, "catalog.manage")) {
+    items.push(
+      { href: "/admin/products", label: "Products" },
+      { href: "/admin/addons", label: "Add-ons" },
+      { href: "/admin/media", label: "Media" },
+    );
+  }
+  if (hasPermission(ctx.staff, "settings.manage")) items.push({ href: "/admin/settings", label: "Settings" });
   if (hasPermission(ctx.staff, "staff.manage")) items.push({ href: "/admin/staff", label: "Staff" });
   if (hasPermission(ctx.staff, "audit.view")) items.push({ href: "/admin/audit", label: "Audit log" });
 

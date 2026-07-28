@@ -19,10 +19,19 @@ export const ENV_SPEC = [
   },
   {
     key: "DEV_AUTH_BYPASS",
-    description: "Dev-only login without Clerk (true/false). Must be false in production.",
+    description:
+      "Dev-only login without Clerk (true/false). Hard-disabled on Vercel production deploys regardless of this value.",
     example: "false",
     schema: z.enum(["true", "false"]).default("false"),
     secret: false,
+  },
+  {
+    key: "BLOB_READ_WRITE_TOKEN",
+    description:
+      "Vercel Blob token for media uploads (R-180). Optional: without it, uploads use the local .uploads/ driver.",
+    example: "vercel_blob_rw_xxxx",
+    schema: z.string().min(1).optional(),
+    secret: true,
   },
 ] as const;
 

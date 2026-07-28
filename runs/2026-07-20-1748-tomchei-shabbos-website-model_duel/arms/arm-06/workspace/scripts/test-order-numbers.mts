@@ -35,10 +35,10 @@ const customer = await prisma.customer.create({
   data: { email: `race-${Date.now()}@example.org`, name: "Race Customer" },
 });
 const product = await prisma.product.create({
-  data: { slug: `race-product-${Date.now()}`, name: "Test Package", basePriceCents: 1000 },
+  data: { slug: `race-product-${Date.now()}`, name: "Test Package", basePriceCents: 1000, seasonId: season.id },
 });
 const otherProduct = await prisma.product.create({
-  data: { slug: `other-product-${Date.now()}`, name: "Other Package", basePriceCents: 2000 },
+  data: { slug: `other-product-${Date.now()}`, name: "Other Package", basePriceCents: 2000, seasonId: season.id },
 });
 const sizeOption = await prisma.productOption.create({ data: { productId: product.id, name: "Size" } });
 const sizeStandard = await prisma.productOptionValue.create({
@@ -180,9 +180,9 @@ await prisma.order.deleteMany({ where: { seasonId: season.id } });
 await prisma.productAddOn.deleteMany({ where: { productId: product.id } });
 await prisma.productOptionValue.deleteMany({ where: { option: { productId: product.id } } });
 await prisma.productOption.deleteMany({ where: { productId: product.id } });
+await prisma.product.deleteMany({ where: { id: { in: [product.id, otherProduct.id] } } });
 await prisma.season.delete({ where: { id: season.id } });
 await prisma.customer.delete({ where: { id: customer.id } });
-await prisma.product.deleteMany({ where: { id: { in: [product.id, otherProduct.id] } } });
 await prisma.addOn.delete({ where: { id: addOn.id } });
 await reopenSeasons(prisma, previouslyOpen);
 await prisma.$disconnect();

@@ -16,12 +16,14 @@ function check(label: string, condition: boolean) {
   }
 }
 
+const season = await prisma.season.create({ data: { name: `TEST-INV-${Date.now()}`, status: "CLOSED" } });
 const product = await prisma.product.create({
   data: {
     slug: `race-product-${Date.now()}`,
     name: "Race Product",
     basePriceCents: 1000,
     trackInventory: true,
+    seasonId: season.id,
   },
 });
 const item = await prisma.inventoryItem.create({
@@ -50,6 +52,7 @@ check("release + re-reserve round-trips", final?.reserved === 1);
 // Cleanup
 await prisma.inventoryItem.delete({ where: { id: item.id } });
 await prisma.product.delete({ where: { id: product.id } });
+await prisma.season.delete({ where: { id: season.id } });
 await prisma.$disconnect();
 
 if (failures > 0) {

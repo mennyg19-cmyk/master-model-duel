@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiPermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { recordAudit } from "@/lib/audit";
-import { canTargetStaff } from "@/lib/permissions";
+import { canManageStaffRole, canTargetStaff } from "@/lib/permissions";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requireApiPermission("staff.manage");
@@ -16,6 +16,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const target = await prisma.staffUser.findUnique({ where: { id } });
   if (!target) {
     return NextResponse.json({ error: "Staff account not found" }, { status: 404 });
+  }
+  if (!canManageStaffRole(gate.ctx.staff.role, target.role)) {
+    return NextResponse.json({ error: "You cannot revoke an account above your own role" }, { status: 403 });
   }
 
   await prisma.$transaction([

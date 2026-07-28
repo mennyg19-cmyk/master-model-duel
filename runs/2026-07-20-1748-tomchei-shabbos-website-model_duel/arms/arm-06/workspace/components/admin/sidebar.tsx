@@ -14,18 +14,18 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
 
   return (
     <nav className="flex gap-1 overflow-x-auto bg-brand-900 px-4 py-2 md:w-52 md:flex-col md:px-3 md:py-4">
-      {items.map((item) => {
-        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+      {items.map((navItem) => {
+        const isActive = pathname === navItem.href || pathname.startsWith(`${navItem.href}/`);
         return (
           <Link
-            key={item.href}
-            href={item.href}
+            key={navItem.href}
+            href={navItem.href}
             className={cn(
               "rounded-md px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-700 hover:text-white",
               isActive && "bg-brand-700 text-white",
             )}
           >
-            {item.label}
+            {navItem.label}
           </Link>
         );
       })}

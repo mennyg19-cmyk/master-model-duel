@@ -1,6 +1,7 @@
 // Unit checks for the permission matrix (CI gate, no server needed).
 import {
   canImpersonate,
+  canManageStaffRole,
   canTargetStaff,
   hasPermission,
   PERMISSIONS,
@@ -49,6 +50,15 @@ check("staff cannot impersonate manager", !canImpersonate("STAFF", "MANAGER"));
 check("staff can impersonate driver", canImpersonate("STAFF", "DRIVER"));
 check("staff can impersonate staff (equal)", canImpersonate("STAFF", "STAFF"));
 check("driver cannot impersonate staff", !canImpersonate("DRIVER", "STAFF"));
+
+// staff.manage role bound: create/role-change/override/revoke follow the same
+// rank rule as impersonation, so a granted staff.manage override is never a
+// takeover path.
+check("manager can manage manager", canManageStaffRole("MANAGER", "MANAGER"));
+check("manager can manage staff", canManageStaffRole("MANAGER", "STAFF"));
+check("staff cannot manage manager", !canManageStaffRole("STAFF", "MANAGER"));
+check("staff can manage staff (equal)", canManageStaffRole("STAFF", "STAFF"));
+check("driver cannot manage staff", !canManageStaffRole("DRIVER", "STAFF"));
 
 if (failures > 0) {
   console.error(`${failures} permission check(s) failed`);

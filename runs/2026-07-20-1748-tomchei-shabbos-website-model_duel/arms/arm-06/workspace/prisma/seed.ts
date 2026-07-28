@@ -33,6 +33,8 @@ async function main() {
       name: "Classic Mishloach Manos",
       kind: "GOOD",
       basePriceCents: 3600,
+      category: "Packages",
+      seasonId: season.id,
       lengthMm: 300,
       widthMm: 200,
       heightMm: 100,
@@ -76,6 +78,101 @@ async function main() {
     where: { addOnId: grapeJuice.id },
     update: {},
     create: { addOnId: grapeJuice.id, onHand: 100, reserved: 0 },
+  });
+
+  // P3 storefront fixtures: a second current-season product in another
+  // category (untracked inventory = never sold out), a sold-out tracked
+  // product (onHand 0), and a CLOSED past season with its own browsable
+  // catalog (archive, G-022).
+  const shabbosBasket = await prisma.product.upsert({
+    where: { slug: "shabbos-gift-basket" },
+    update: {},
+    create: {
+      slug: "shabbos-gift-basket",
+      name: "Shabbos Gift Basket",
+      kind: "GOOD",
+      basePriceCents: 5400,
+      category: "Baskets",
+      seasonId: season.id,
+      description: "Challah cover, grape juice, and sweets in a reusable basket.",
+    },
+  });
+  const basketOption = await prisma.productOption.upsert({
+    where: { productId_name: { productId: shabbosBasket.id, name: "Ribbon" } },
+    update: {},
+    create: { productId: shabbosBasket.id, name: "Ribbon" },
+  });
+  await prisma.productOptionValue.upsert({
+    where: { optionId_label: { optionId: basketOption.id, label: "Classic" } },
+    update: {},
+    create: { optionId: basketOption.id, label: "Classic", priceDeltaCents: 0 },
+  });
+  await prisma.productOptionValue.upsert({
+    where: { optionId_label: { optionId: basketOption.id, label: "Festive" } },
+    update: {},
+    create: { optionId: basketOption.id, label: "Festive", priceDeltaCents: 300 },
+  });
+
+  const chocolateHamper = await prisma.product.upsert({
+    where: { slug: "chocolate-hamper" },
+    update: {},
+    create: {
+      slug: "chocolate-hamper",
+      name: "Chocolate Hamper",
+      kind: "GOOD",
+      basePriceCents: 7200,
+      category: "Baskets",
+      seasonId: season.id,
+      description: "Assorted chocolates and hamantaschen.",
+      trackInventory: true,
+    },
+  });
+  await prisma.inventoryItem.upsert({
+    where: { productId: chocolateHamper.id },
+    update: {},
+    create: { productId: chocolateHamper.id, onHand: 0, reserved: 0 },
+  });
+
+  const pastSeason = await prisma.season.upsert({
+    where: { name: "2025" },
+    update: {},
+    create: { name: "2025", status: "CLOSED" },
+  });
+  await prisma.product.upsert({
+    where: { slug: "archive-classic-2025" },
+    update: {},
+    create: {
+      slug: "archive-classic-2025",
+      name: "Classic Mishloach Manos (2025)",
+      kind: "GOOD",
+      basePriceCents: 3200,
+      category: "Packages",
+      seasonId: pastSeason.id,
+      active: false,
+      description: "Last year's classic package.",
+    },
+  });
+  await prisma.product.upsert({
+    where: { slug: "archive-deluxe-2025" },
+    update: {},
+    create: {
+      slug: "archive-deluxe-2025",
+      name: "Deluxe Basket (2025)",
+      kind: "GOOD",
+      basePriceCents: 6500,
+      category: "Baskets",
+      seasonId: pastSeason.id,
+      active: false,
+      description: "Last year's deluxe basket.",
+    },
+  });
+
+  // Delivery ZIP allowlist for the per-package delivery gate (S5); checkout
+  // reads this live in P5, the settings hub edits it in P3.
+  await prisma.setting.upsert({
+    where: { key: "shipping.deliveryZips" },
+    update: {},
+    create: { key: "shipping.deliveryZips", value: ["08701"] },
   });
 
   // Data-driven fulfillment methods (R-153/R-154).

@@ -5,7 +5,7 @@ import { requireApiPermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { recordAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/parse-body";
-import { canTargetStaff, PERMISSIONS } from "@/lib/permissions";
+import { canManageStaffRole, canTargetStaff, PERMISSIONS } from "@/lib/permissions";
 
 const patchSchema = z.object({
   version: z.number().int().min(1),
@@ -32,14 +32,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!target) {
     return NextResponse.json({ error: "Staff account not found" }, { status: 404 });
   }
-  if (parsed.data.role && parsed.data.role !== target.role && !canTargetStaff(gate.ctx.staff.id, id)) {
-    return NextResponse.json({ error: "You cannot change your own role" }, { status: 400 });
+
+  const isRoleChange = parsed.data.role !== undefined && parsed.data.role !== target.role;
+  const isOverrideWrite = parsed.data.overrides !== undefined;
+
+  if ((isRoleChange || isOverrideWrite) && !canTargetStaff(gate.ctx.staff.id, id)) {
+    return NextResponse.json({ error: "You cannot change your own role or permissions" }, { status: 400 });
+  }
+  if ((isRoleChange || isOverrideWrite) && !canManageStaffRole(gate.ctx.staff.role, target.role)) {
+    return NextResponse.json({ error: "You cannot manage an account above your own role" }, { status: 403 });
+  }
+  if (isRoleChange && !canManageStaffRole(gate.ctx.staff.role, parsed.data.role!)) {
+    return NextResponse.json({ error: "You cannot assign a role above your own" }, { status: 403 });
   }
 
   const explicitOverrides = (parsed.data.overrides ?? []).filter((entry) => entry.effect !== null);
 
   const { conflict } = await prisma.$transaction(async (tx) => {
-    if (parsed.data.overrides) {
+    if (isOverrideWrite) {
       await tx.permissionOverride.deleteMany({ where: { staffUserId: id } });
       if (explicitOverrides.length > 0) {
         await tx.permissionOverride.createMany({
@@ -50,6 +60,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           })),
         });
       }
+    } else if (isRoleChange) {
+      // A role change without an explicit override rewrite clears overrides:
+      // a demoted account must not keep GRANTs from its previous role.
+      await tx.permissionOverride.deleteMany({ where: { staffUserId: id } });
     }
 
     // Optimistic concurrency: the version in the WHERE clause makes a stale
@@ -63,7 +77,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
     if (updated.count === 0) return { conflict: true };
 
-    if (parsed.data.role && parsed.data.role !== target.role) {
+    if (isRoleChange) {
       await tx.auditLog.create({
         data: {
           actorId: gate.ctx.impersonator?.id ?? gate.ctx.staff.id,
@@ -74,6 +88,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           metadata: {
             from: target.role,
             to: parsed.data.role,
+            ...(!isOverrideWrite && target.overrides.length > 0 ? { overridesCleared: true } : {}),
             ...(gate.ctx.impersonator
               ? { impersonatedAs: { id: gate.ctx.staff.id, email: gate.ctx.staff.email } }
               : {}),
@@ -81,7 +96,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         },
       });
     }
-    if (parsed.data.overrides) {
+    if (isOverrideWrite) {
       await tx.auditLog.create({
         data: {
           actorId: gate.ctx.impersonator?.id ?? gate.ctx.staff.id,

@@ -5,6 +5,7 @@ import { requireApiPermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { recordAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/parse-body";
+import { canManageStaffRole } from "@/lib/permissions";
 import { normalizeEmail, normalizeWhitespace } from "@/lib/text";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,10 @@ export async function POST(request: Request) {
 
   const parsed = await parseBody(request, createSchema, "Name, valid email, and role are required");
   if (!parsed.ok) return parsed.response;
+
+  if (!canManageStaffRole(gate.ctx.staff.role, parsed.data.role)) {
+    return NextResponse.json({ error: "You cannot create an account above your own role" }, { status: 403 });
+  }
 
   const email = normalizeEmail(parsed.data.email);
   const existing = await prisma.staffUser.findUnique({ where: { email } });

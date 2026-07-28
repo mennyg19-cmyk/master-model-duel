@@ -93,6 +93,7 @@ model StaffUser {
   version       Int                  @default(1)
   overrides     PermissionOverride[]
   sessions      AuthSession[]
+  uploadedMedia MediaAsset[]
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
@@ -182,6 +183,7 @@ model Season {
   lastOrderSeq       Int          @default(0)
   lastDraftSeq       Int          @default(0)
   orders             Order[]
+  products           Product[]
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -190,6 +192,8 @@ model Season {
 
 // R-146..R-148: dims/kinds/inventory flags; options carry price adjustments;
 // replacedById is the replacement link used by repeat orders (P10).
+// P3: every product belongs to exactly one season (UR-008 per-year catalog);
+// category drives storefront filters (R-015).
 model Product {
   id              String          @id @default(cuid())
   slug            String          @unique
@@ -197,6 +201,9 @@ model Product {
   description     String?
   kind            ProductKind     @default(GOOD)
   basePriceCents  Int
+  category        String?
+  season          Season          @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  seasonId        String
   lengthMm        Int?
   widthMm         Int?
   heightMm        Int?
@@ -213,9 +220,11 @@ model Product {
   orderLines      OrderLine[]
   bomLines        BomLine[]
   assemblyBatches AssemblyBatch[]
+  media           MediaAsset[]
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
+  @@index([seasonId, active])
   @@map("products")
 }
 
@@ -540,6 +549,50 @@ model CronRun {
 
   @@index([name, startedAt])
   @@map("cron_runs")
+}
+
+// ---------------------------------------------------------------------------
+// P3 — storefront, newsletter, media
+// ---------------------------------------------------------------------------
+
+// R-009/R-018: newsletter subscribers with three independent preference
+// flags; unsubscribedAt is the global opt-out. Manage/unsubscribe links are
+// HMAC-signed tokens (lib/newsletter/tokens.ts), never bare ids.
+model NewsletterSubscriber {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  name            String?
+  prefNewProducts Boolean   @default(true)
+  prefReminders   Boolean   @default(true)
+  prefCommunity   Boolean   @default(true)
+  unsubscribedAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("newsletter_subscribers")
+}
+
+// R-067/R-128/R-180: one row per uploaded asset. driver records where the
+// bytes live ("vercel-blob" when BLOB_READ_WRITE_TOKEN is set, else the local
+// .uploads seam); url is the public read path (/uploads/<storedName> locally).
+// productId is the photo assignment (SetNull so deleting a product never
+// destroys the library row).
+model MediaAsset {
+  id           String     @id @default(cuid())
+  url          String
+  storedName   String     @unique
+  filename     String
+  contentType  String
+  sizeBytes    Int
+  driver       String
+  product      Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId    String?
+  uploadedBy   StaffUser? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedById String?
+  createdAt    DateTime   @default(now())
+
+  @@index([productId])
+  @@map("media_assets")
 }
 
 // UR-016/G-009: BOM + assembly batches are schema-only this phase (no UI;

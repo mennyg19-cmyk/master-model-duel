@@ -33,7 +33,7 @@ const customer = await prisma.customer.create({
   data: { email: `pay-${Date.now()}@example.org`, name: "Pay Customer" },
 });
 const product = await prisma.product.create({
-  data: { slug: `pay-product-${Date.now()}`, name: "Pay Product", basePriceCents: 1000 },
+  data: { slug: `pay-product-${Date.now()}`, name: "Pay Product", basePriceCents: 1000, seasonId: season.id },
 });
 const line = { productId: product.id, qty: 1 };
 
@@ -90,9 +90,9 @@ check(
 // Cleanup
 await prisma.payment.deleteMany({ where: { order: { seasonId: season.id } } });
 await prisma.order.deleteMany({ where: { seasonId: season.id } });
+await prisma.product.delete({ where: { id: product.id } });
 await prisma.season.delete({ where: { id: season.id } });
 await prisma.customer.delete({ where: { id: customer.id } });
-await prisma.product.delete({ where: { id: product.id } });
 await reopenSeasons(prisma, previouslyOpen);
 await prisma.$disconnect();
 

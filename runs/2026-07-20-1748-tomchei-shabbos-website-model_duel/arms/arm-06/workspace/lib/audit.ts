@@ -11,7 +11,15 @@ export type AuditAction =
   | "impersonation_start"
   | "impersonation_stop"
   | "session_login"
-  | "client_error";
+  | "client_error"
+  | "product_create"
+  | "product_update"
+  | "addon_create"
+  | "addon_update"
+  | "media_upload"
+  | "media_update"
+  | "media_delete"
+  | "settings_update";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

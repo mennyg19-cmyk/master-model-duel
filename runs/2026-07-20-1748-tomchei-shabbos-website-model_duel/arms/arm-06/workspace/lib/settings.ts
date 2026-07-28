@@ -3,9 +3,16 @@ import { prisma } from "@/lib/db";
 
 // Typed key-value settings store (R-161). Every key has a schema; reads
 // validate so a bad row fails loudly instead of poisoning callers.
+const zipSchema = z.string().regex(/^\d{5}$/, "ZIPs are 5 digits");
+
 const settingSchemas = {
   "brand.name": z.string().min(1),
   "setup.completed": z.boolean(),
+  // P3 settings hub (R-094/095): the delivery ZIP allowlist gates per-package
+  // delivery at checkout (read live — edits take effect on the next request).
+  "shipping.deliveryZips": z.array(zipSchema),
+  "shipping.rates": z.array(z.object({ name: z.string().min(1), feeCents: z.number().int().nonnegative() })),
+  "shipping.rules": z.array(z.object({ name: z.string().min(1), description: z.string() })),
 } as const;
 
 export type SettingKey = keyof typeof settingSchemas;

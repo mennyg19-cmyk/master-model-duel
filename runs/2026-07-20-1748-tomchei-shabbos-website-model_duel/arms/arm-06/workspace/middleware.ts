@@ -8,8 +8,12 @@ export async function middleware(request: NextRequest) {
   const secret = process.env.AUTH_SECRET;
   const session = raw && secret ? await decodeSession(raw, secret) : null;
   if (!session) {
-    const loginUrl = new URL("/dev-login", request.url);
-    loginUrl.searchParams.set("next", request.nextUrl.pathname);
+    // Dev-login only exists while the bypass flag is on (and off a production
+    // deploy); otherwise unauthenticated visitors land on the storefront,
+    // matching requireStaff's redirect.
+    const bypassOn = process.env.DEV_AUTH_BYPASS === "true" && process.env.VERCEL_ENV !== "production";
+    const loginUrl = new URL(bypassOn ? "/dev-login" : "/", request.url);
+    if (bypassOn) loginUrl.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
   return NextResponse.next();
