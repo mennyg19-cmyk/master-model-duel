@@ -48,11 +48,13 @@ export function SettingsTabs({
   orders,
   developer,
   storeStatus,
+  email,
 }: {
   shipping: ShippingState;
   orders: OrdersState;
   developer: { storageDriver: string };
   storeStatus: string;
+  email: { mode: { email: "live" | "fixture" | "capture"; sms: "live" | "capture" } };
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("Orders");
@@ -60,6 +62,7 @@ export function SettingsTabs({
   const [bulkFee, setBulkFee] = useState((shipping.fees.bulkPerDestinationCents / 100).toFixed(2));
   const [perPackageFee, setPerPackageFee] = useState((shipping.fees.perPackagePerRecipientCents / 100).toFixed(2));
   const [daysText, setDaysText] = useState(shipping.days.join("\n"));
+  const [testAddress, setTestAddress] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -354,17 +357,63 @@ export function SettingsTabs({
       )}
 
       {tab === "Email" && (
-        <div className="mt-6 max-w-2xl">
+        <div className="mt-6 max-w-2xl" data-settings-email-tab>
           <h2 className="text-lg font-semibold">Email platform</h2>
           <p className="mt-2 text-sm text-stone-600">
-            Transactional email (welcome, order confirmation, delivery updates, deadline reminders)
-            ships in P11 when the customer flows exist to trigger it. This tab will show the
-            provider configuration, template status, and a send log.
+            Delivery mode — email{" "}
+            <Badge tone={email.mode.email === "live" ? "green" : email.mode.email === "fixture" ? "amber" : "stone"} data-settings-email-mode>
+              {email.mode.email === "live"
+                ? "live (Resend)"
+                : email.mode.email === "fixture"
+                  ? "fixture (dev double via RESEND_BASE_URL)"
+                  : "capture (no RESEND_API_KEY — nothing contacts a provider)"}
+            </Badge>{" "}
+            sms{" "}
+            <Badge tone={email.mode.sms === "live" ? "green" : "stone"} data-settings-sms-mode>
+              {email.mode.sms === "live" ? "live (Twilio)" : "capture (no TWILIO_*)"}
+            </Badge>
           </p>
           <p className="mt-2 text-sm text-stone-600">
-            The newsletter unsubscribe/preference flow is already live — subscribers manage state at
+            Campaigns, templates, lists, and triggered-key overrides live in the{" "}
+            <a href="/admin/email" className="text-brand-700 hover:underline">
+              email platform
+            </a>
+            . Subscribers manage their own state at
             <code className="mx-1 rounded bg-stone-100 px-1">/unsubscribe</code> with signed links.
           </p>
+          <form
+            className="mt-4 flex max-w-md gap-2"
+            data-email-test-form
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const result = await apiFetch<{ delivered: boolean; providerId: string | null; error: string | null }>(
+                "/api/admin/settings/email-test",
+                { method: "POST", body: { toAddress: testAddress } },
+              );
+              if (result.ok && result.body.delivered) {
+                setStatus(`Test email delivered through the real dispatch path (provider ${result.body.providerId ?? "n/a"}).`);
+                setError(null);
+              } else if (result.ok) {
+                setError(`Test email failed: ${result.body.error ?? "unknown"}`);
+                setStatus(null);
+              } else {
+                setError(result.body.error ?? "Test send failed");
+                setStatus(null);
+              }
+            }}
+          >
+            <Input
+              type="email"
+              placeholder="you@example.org"
+              value={testAddress}
+              onChange={(event) => setTestAddress(event.target.value)}
+              required
+              data-email-test-address
+            />
+            <Button type="submit" size="sm" data-email-test-send>
+              Send test email
+            </Button>
+          </form>
         </div>
       )}
 

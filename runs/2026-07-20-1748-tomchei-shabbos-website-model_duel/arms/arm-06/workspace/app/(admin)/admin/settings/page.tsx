@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getOpenSeason } from "@/lib/seasons/queries";
 import { getSetting } from "@/lib/settings";
+import { currentDeliveryMode } from "@/lib/email/dispatch";
 import { isBlobDriver } from "@/lib/media/storage";
 import { SettingsTabs } from "@/app/(admin)/admin/settings/settings-tabs";
 
@@ -56,6 +57,7 @@ export default async function AdminSettingsPage() {
           })),
         }}
         developer={{ storageDriver: isBlobDriver() ? "Vercel Blob" : "local (.uploads)" }}
+        email={{ mode: currentDeliveryMode() }}
       />
     </div>
   );

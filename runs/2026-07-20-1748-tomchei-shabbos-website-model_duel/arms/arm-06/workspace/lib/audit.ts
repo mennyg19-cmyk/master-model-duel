@@ -71,7 +71,14 @@ export type AuditAction =
   | "season_flip_cron"
   | "repeat_create"
   | "repeat_bulk_history"
-  | "legacy_import";
+  | "legacy_import"
+  // P11 email platform. Hub edits (templates/triggered/lists/subscriber
+  // management) share one action with the edited kind in metadata; campaign
+  // sends, payment-link emails, and the settings test sender get their own.
+  | "email_hub_update"
+  | "email_campaign_send"
+  | "email_test_send"
+  | "payment_link_email";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

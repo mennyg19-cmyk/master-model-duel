@@ -4,6 +4,7 @@ import { DomainRuleError, NotFoundError } from "@/lib/errors";
 import { recordAudit } from "@/lib/audit";
 import { voidPaymentTx } from "@/lib/payments/post";
 import { createRefund, getStripeConfig } from "@/lib/payments/stripe";
+import { enqueueRefundEmailTx } from "@/lib/email/order-emails";
 
 // R-054: admin-initiated refund of a posted card payment. The local VOIDED
 // flip is evidence-gated: it happens only after Stripe confirms the money
@@ -45,6 +46,18 @@ export async function refundStripePayment(input: {
   const updated = await prisma.$transaction(async (tx) => {
     const voided = await voidPaymentTx(tx, input.paymentId, input.reason ?? "Stripe refund");
     await tx.payment.update({ where: { id: input.paymentId }, data: { refundRef: refund.id } });
+    // R-087: refund email commits in the same transaction as the void — the
+    // customer is always told when money goes back.
+    const order = await tx.order.findUniqueOrThrow({
+      where: { id: voided.orderId },
+      include: { customer: { select: { name: true, email: true } } },
+    });
+    await enqueueRefundEmailTx(tx, {
+      order,
+      customer: order.customer,
+      amountCents: voided.amountCents,
+      stripeRefundId: refund.id,
+    });
     await recordAudit(
       {
         actor: input.actor,

@@ -852,15 +852,17 @@ model CronRun {
 // flags; unsubscribedAt is the global opt-out. Manage/unsubscribe links are
 // HMAC-signed tokens (lib/newsletter/tokens.ts), never bare ids.
 model NewsletterSubscriber {
-  id              String    @id @default(cuid())
-  email           String    @unique
-  name            String?
-  prefNewProducts Boolean   @default(true)
-  prefReminders   Boolean   @default(true)
-  prefCommunity   Boolean   @default(true)
-  unsubscribedAt  DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                 String                  @id @default(cuid())
+  email              String                  @unique
+  name               String?
+  prefNewProducts    Boolean                 @default(true)
+  prefReminders      Boolean                 @default(true)
+  prefCommunity      Boolean                 @default(true)
+  unsubscribedAt     DateTime?
+  listMemberships    EmailListMembership[]
+  campaignRecipients EmailCampaignRecipient[]
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   @@map("newsletter_subscribers")
 }
@@ -1027,23 +1029,163 @@ model RouteEvent {
   @@map("route_events")
 }
 
-// P9 notification seam (G-021): email + SMS sends are captured as rows — the
-// live Resend/Twilio platform lands in P11 and reads this same shape. kind
-// and channel vocabularies live in lib/notify/outbox.ts.
+// P11 (R-088/R-181): lifecycle of one outbox row. PENDING awaits the sweep;
+// SENDING is an in-flight claim (crash → next sweep re-claims it by age);
+// SENT is terminal-success; FAILED keeps the auditable failure trail
+// (attempts + lastError) until maxAttempts makes it permanent.
+enum OutboxStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+// P9 notification seam (G-021) grown into the P11 transactional outbox: every
+// email/SMS the system sends is a row here first (R-088). kind and channel
+// vocabularies live in lib/notify/outbox.ts; the sweeper (lib/email/
+// outbox-sweep.ts) drains PENDING rows through the Resend/Twilio drivers (or
+// the capture double when no keys exist) exactly once per row.
 model OutboxMessage {
-  id        String   @id @default(cuid())
-  kind      String
-  channel   String
-  toAddress String
-  subject   String?
-  body      String
-  order     Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  orderId   String?
-  metadata  Json?
-  createdAt DateTime @default(now())
+  id            String       @id @default(cuid())
+  kind          String
+  channel       String
+  toAddress     String
+  subject       String?
+  body          String
+  order         Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId       String?
+  metadata      Json?
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  lastAttemptAt DateTime?
+  providerId    String?
+  lastError     String?
+  sentAt        DateTime?
+  createdAt     DateTime     @default(now())
 
   @@index([kind, channel, createdAt])
+  @@index([status, createdAt])
   @@map("outbox_messages")
+}
+
+// ---------------------------------------------------------------------------
+// P11 — email platform (R-082..R-090, R-163, R-171, R-172, R-178, R-181)
+// ---------------------------------------------------------------------------
+
+// R-084: staff-managed mailing lists over newsletter subscribers. Campaigns
+// target one list; membership is an explicit join row.
+model EmailList {
+  id          String               @id @default(cuid())
+  name        String               @unique
+  description String?
+  members     EmailListMembership[]
+  campaigns   EmailCampaign[]
+  createdAt   DateTime             @default(now())
+
+  @@map("email_lists")
+}
+
+model EmailListMembership {
+  id           String               @id @default(cuid())
+  list         EmailList            @relation(fields: [listId], references: [id], onDelete: Cascade)
+  listId       String
+  subscriber   NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  subscriberId String
+  createdAt    DateTime             @default(now())
+
+  @@unique([listId, subscriberId])
+  @@map("email_list_memberships")
+}
+
+// R-085: reusable text templates with branding tokens ({{brand}},
+// {{customerName}}, {{orderRef}}, {{footer}} — renderer in lib/email/render.ts).
+// Campaigns start from one; triggered overrides may point at one.
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  subject   String
+  bodyText  String
+  overrides EmailTriggeredOverride[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("email_templates")
+}
+
+// R-086/R-178: per-key control over triggered/transactional email. enabled=false
+// suppresses the send entirely; subject/body overrides replace the coded
+// defaults at enqueue time so the outbox row is the exact final text.
+model EmailTriggeredOverride {
+  key                  String         @id
+  enabled              Boolean        @default(true)
+  subjectOverride      String?
+  bodyTemplateOverride String?
+  template             EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  templateId           String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  @@map("email_triggered_overrides")
+}
+
+enum EmailCampaignStatus {
+  DRAFT
+  SENDING
+  SENT
+  FAILED
+}
+
+// R-083/R-089: one campaign = one subject/body to one list. Sends snapshot the
+// membership into recipient rows, so reruns are idempotent by construction
+// (the unique [campaignId, subscriberId] key can never double-deliver).
+model EmailCampaign {
+  id          String              @id @default(cuid())
+  name        String
+  subject     String
+  bodyText    String
+  list        EmailList           @relation(fields: [listId], references: [id])
+  listId      String
+  status      EmailCampaignStatus @default(DRAFT)
+  recipients  EmailCampaignRecipient[]
+  createdById String?
+  sentAt      DateTime?
+  lastError   String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([status, createdAt])
+  @@map("email_campaigns")
+}
+
+enum EmailRecipientStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+// R-083/R-178: one row per (campaign, subscriber) — the delivery unit. The
+// unique pair is the no-duplicates law; per-row claim (PENDING/FAILED →
+// SENDING) makes overlapping send passes safe.
+model EmailCampaignRecipient {
+  id           String               @id @default(cuid())
+  campaign     EmailCampaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignId   String
+  subscriber   NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  subscriberId String
+  email        String
+  status       EmailRecipientStatus @default(PENDING)
+  attempts     Int                  @default(0)
+  lastError    String?
+  providerId   String?
+  sentAt       DateTime?
+  createdAt    DateTime             @default(now())
+
+  @@unique([campaignId, subscriberId])
+  @@index([campaignId, status])
+  @@map("email_campaign_recipients")
 }
 
 // G-021/R-079: staff-scheduled bulk delivery run. Membership is a persisted

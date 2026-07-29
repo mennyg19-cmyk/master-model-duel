@@ -26,7 +26,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
   if (hasPermission(ctx.staff, "customers.manage")) {
-    items.push({ href: "/admin/customers", label: "Customers" });
+    items.push(
+      { href: "/admin/customers", label: "Customers" },
+      { href: "/admin/email", label: "Email" },
+    );
   }
   if (hasPermission(ctx.staff, "fulfillment.manage")) {
     items.push(

@@ -207,6 +207,63 @@ async function main() {
     create: { key: "payments.reminders", value: { initialAfterDays: 3, intervalDays: 7 } },
   });
 
+  // P11 email platform (R-085/R-172): sender branding, retention/retry
+  // policy, the default mailing list, and the three order-lifecycle triggered
+  // templates. The sweeper/purge crons refuse to guess when policy is unset.
+  await prisma.setting.upsert({
+    where: { key: "email.branding" },
+    update: {},
+    create: {
+      key: "email.branding",
+      value: {
+        fromName: BRAND.orgName,
+        fromEmail: BRAND.supportEmail,
+        replyToEmail: BRAND.supportEmail,
+        footerText: `${BRAND.orgName} · ${BRAND.supportEmail}\nManage your email preferences anytime with the link in any of our emails.`,
+      },
+    },
+  });
+  await prisma.setting.upsert({
+    where: { key: "email.policy" },
+    update: {},
+    create: { key: "email.policy", value: { retentionDays: 90, maxAttempts: 5 } },
+  });
+  await prisma.emailList.upsert({
+    where: { name: "All subscribers" },
+    update: {},
+    create: { name: "All subscribers", description: "Every active newsletter subscriber." },
+  });
+  const triggeredTemplates = [
+    {
+      key: "order_confirmation",
+      name: "Order confirmation",
+      subject: "{{brand}} order {{orderRef}} — thank you",
+      bodyText:
+        "Hello {{customerName}},\n\nThank you for your {{brand}} order {{orderRef}} (total {{amount}}). We will take it from here — you will hear from us as your packages move.\n\n{{footer}}",
+    },
+    {
+      key: "payment_link",
+      name: "Payment link",
+      subject: "{{brand}}: balance due on order {{orderRef}}",
+      bodyText:
+        "Hello {{customerName}},\n\nYour {{brand}} order {{orderRef}} has an outstanding balance of {{amount}}. You can view and pay your order here:\n{{payUrl}}\n\nThank you for supporting {{brand}}.\n\n{{footer}}",
+    },
+    {
+      key: "refund_issued",
+      name: "Refund issued",
+      subject: "{{brand}}: refund issued for order {{orderRef}}",
+      bodyText:
+        "Hello {{customerName}},\n\nA refund of {{amount}} was issued for your {{brand}} order {{orderRef}}. The card statement can take a few days to show it.\n\n{{footer}}",
+    },
+  ];
+  for (const template of triggeredTemplates) {
+    await prisma.emailTemplate.upsert({
+      where: { key: template.key },
+      update: {},
+      create: template,
+    });
+  }
+
   // Data-driven fulfillment methods (R-153/R-154).
   await prisma.fulfillmentMethod.upsert({
     where: { code: "DELIVERY" },

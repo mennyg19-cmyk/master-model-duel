@@ -677,3 +677,7 @@
 2026-07-29T13:43:34Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P10,review_aggregate,glm-5.2-high,f48722a1-5dfa-4f1d-a532-9df44f044ba7,,,,,,,,P10 aggregate of 4 specialists; usage_missing_pending_export
 2026-07-29T13:47:05Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P10,contestant_fix,kimi-k3-max,ced5e6f7-06fd-47a2-99f5-953be346dde2,,,,,,,,P10 fix pass after aggregate 0B/13M/23m; usage_missing_pending_export
 2026-07-29T14:45:23Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P11,contestant_build,kimi-k3-max,2c2bc8e7-2230-407b-a679-6379e2bb480e,,,,,,,,P11 email/SMS platform initial build; usage_missing_pending_export
+2026-07-29T16:00:56Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P11,review_security,glm-5.2-high,9d38f789-be18-471d-9523-46cafec7951a,,,,,,,,P11 security review; usage_missing_pending_export
+2026-07-29T16:00:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P11,review_quality,glm-5.2-high,c7116d48-57c2-4a18-be17-883ff076f37e,,,,,,,,P11 quality review; usage_missing_pending_export
+2026-07-29T16:00:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P11,review_rules,glm-5.2-high,68fb0575-7d65-4765-8eb1-ff08e4dd67da,,,,,,,,P11 rules review; usage_missing_pending_export
+2026-07-29T16:00:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P11,review_clean_code,glm-5.2-high,f0517cb1-5f5a-42af-8821-72dc212f77ee,,,,,,,,P11 clean-code review; usage_missing_pending_export

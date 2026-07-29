@@ -106,6 +106,44 @@ export const ENV_SPEC = [
     secret: true,
   },
   {
+    key: "RESEND_API_KEY",
+    description:
+      "Resend API key (P11; R-171). Optional: without it, outbound email runs in capture mode — outbox rows are marked SENT with a capture:* provider id and no provider is ever contacted (same honesty class as the P5/P8 seams).",
+    example: "re_xxxx",
+    schema: z.string().min(1).optional(),
+    secret: true,
+  },
+  {
+    key: "RESEND_BASE_URL",
+    description:
+      "Resend API base URL override. Defaults to https://api.resend.com. Local seam: point at the in-app dev double (/api/dev/email-fixture) to exercise the wrapper end-to-end — the double only serves when DEV_AUTH_BYPASS=true.",
+    example: "http://127.0.0.1:3106/api/dev/email-fixture",
+    schema: z.string().url().optional(),
+    secret: false,
+  },
+  {
+    key: "TWILIO_ACCOUNT_SID",
+    description:
+      "Twilio account SID for SMS dispatch (P11; G-021 channel wiring for the P9 notifications). Optional: without it, SMS outbox rows capture instead of contacting a provider.",
+    example: "ACxxxx",
+    schema: z.string().min(1).optional(),
+    secret: true,
+  },
+  {
+    key: "TWILIO_AUTH_TOKEN",
+    description: "Twilio auth token. Optional locally — see TWILIO_ACCOUNT_SID.",
+    example: "xxxx",
+    schema: z.string().min(1).optional(),
+    secret: true,
+  },
+  {
+    key: "TWILIO_FROM_NUMBER",
+    description: "Twilio sender number in E.164 form (+1…). Optional locally — see TWILIO_ACCOUNT_SID.",
+    example: "+17325550100",
+    schema: z.string().min(1).optional(),
+    secret: false,
+  },
+  {
     key: "UPS_CLIENT_ID",
     description:
       "R-184 DECLARATION ONLY: direct UPS API credentials are declared so ops can provision them, but no code path uses them — all UPS shipping runs through the org's Shippo carrier account (resolution 6).",

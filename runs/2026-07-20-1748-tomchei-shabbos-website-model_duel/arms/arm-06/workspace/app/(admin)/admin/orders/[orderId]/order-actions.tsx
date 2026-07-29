@@ -114,6 +114,19 @@ export function OrderActions({
     );
   }
 
+  async function sendPaymentLink() {
+    await run("payment-link", async () => {
+      const response = await apiFetch<{ ok?: boolean; sent?: boolean; error?: string }>(
+        `/api/admin/orders/${orderId}/payment-link`,
+        { method: "POST", body: {} },
+      );
+      if (response.ok) {
+        return { ok: true, body: { note: "Payment-link email queued and dispatched — see the email send log." } };
+      }
+      return { ok: false, body: { error: response.body.error ?? "Could not send the payment-link email" } };
+    });
+  }
+
   return (
     <Card className="mt-6 p-5" data-money-panel>
       <CardTitle>Money</CardTitle>
@@ -207,6 +220,11 @@ export function OrderActions({
       <div className="mt-4 flex flex-wrap gap-3 border-t border-stone-200 pt-4">
         {status === "FINALIZED" && (
           <>
+            {outstandingCents > 0 && (
+              <Button variant="secondary" size="sm" onClick={sendPaymentLink} disabled={busy !== null} data-payment-link-email>
+                {busy === "payment-link" ? "Sending…" : "Email payment link"}
+              </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={repeatOrder} disabled={busy !== null} data-repeat-order>
               {busy === "repeat" ? "Repeating…" : "Repeat as new draft"}
             </Button>

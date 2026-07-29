@@ -5,6 +5,7 @@ import { AuditContextLike, recordAudit } from "@/lib/audit";
 import { claimOrderNumber, formatWireFormat } from "@/lib/orders/numbers";
 import { releaseOrderReservation } from "@/lib/checkout/reservations";
 import { materializePackagesTx } from "@/lib/packages/materialize";
+import { enqueueOrderConfirmationTx } from "@/lib/email/order-emails";
 
 // R-044..R-046: draft → finalized | discarded; terminal states never move.
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
@@ -43,7 +44,10 @@ export function assertTransition(from: OrderStatus, to: OrderStatus): void {
 // payment post + number claim must roll back together), so the finalize core
 // takes the tx client. The standalone wrapper keeps P2 callers unchanged.
 export async function finalizeOrderTx(tx: Prisma.TransactionClient, orderId: string): Promise<Order> {
-  const order = await tx.order.findUnique({ where: { id: orderId }, include: { season: true } });
+  const order = await tx.order.findUnique({
+    where: { id: orderId },
+    include: { season: true, customer: { select: { name: true, email: true } } },
+  });
   if (!order) throw new NotFoundError("Order", orderId);
   assertTransition(order.status, "FINALIZED");
   // Same open-season gate as createDraftOrder (UR-008): a draft created while
@@ -66,7 +70,11 @@ export async function finalizeOrderTx(tx: Prisma.TransactionClient, orderId: str
   // UR-001: packages explode from the finalized order in the same transaction
   // (P7). Drafts with no recipients/choices materialize nothing.
   await materializePackagesTx(tx, orderId);
-  return reloadOrThrow(() => tx.order.findUnique({ where: { id: orderId } }), "Order", orderId);
+  const finalized = await reloadOrThrow(() => tx.order.findUnique({ where: { id: orderId } }), "Order", orderId);
+  // R-087: the confirmation email commits in the same transaction as the
+  // finalize — an order can never exist finalized without its email queued.
+  await enqueueOrderConfirmationTx(tx, finalized, order.customer);
+  return finalized;
 }
 
 // Finalize claims the season's next order number and flips DRAFT → FINALIZED

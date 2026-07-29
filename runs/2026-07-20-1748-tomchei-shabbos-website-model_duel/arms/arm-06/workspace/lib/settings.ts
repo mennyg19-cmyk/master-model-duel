@@ -38,6 +38,19 @@ const settingSchemas = {
     initialAfterDays: z.number().int().positive(),
     intervalDays: z.number().int().positive(),
   }),
+  // P11 email platform (R-085/R-172): sender branding applied at enqueue time
+  // (so outbox rows are the exact bytes a provider would receive) and the
+  // retention/retry policy the purge + sweeper crons read.
+  "email.branding": z.object({
+    fromName: z.string().min(1),
+    fromEmail: z.string().email(),
+    replyToEmail: z.string().email(),
+    footerText: z.string().min(1),
+  }),
+  "email.policy": z.object({
+    retentionDays: z.number().int().positive(),
+    maxAttempts: z.number().int().positive(),
+  }),
   // P8: the org's shipping origin — carrier labels and rate quotes ship FROM
   // here. Editable in the settings hub (P12); seeded for Lakewood.
   "shipping.origin": z.object({
