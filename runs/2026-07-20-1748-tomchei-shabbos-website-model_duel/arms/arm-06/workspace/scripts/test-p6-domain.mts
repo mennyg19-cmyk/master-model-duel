@@ -12,6 +12,7 @@ import { refundStripePayment } from "../lib/payments/refund";
 import { repeatOrder } from "../lib/orders/repeat";
 import { runBulkOrderAction, BULK_ACTION_LIMIT } from "../lib/orders/bulk";
 import { stageImport, commitImport, discardImport, readPayload } from "../lib/imports/engine";
+import { expectedCommitPhrase } from "../lib/imports/commit-phrase";
 import { customersImport } from "../lib/imports/customers";
 import { productsImport } from "../lib/imports/products";
 import { buildOrderWhere, parseOrderListParams } from "../lib/admin/order-list";
@@ -102,7 +103,12 @@ check(
   (await prisma.customer.count({ where: { email: { startsWith: `new1-${stamp}` } } })) === 0,
 );
 
-const committedCustomers = await commitImport({ batchId: customerBatch.id, handler: customersImport, ctx });
+const committedCustomers = await commitImport({
+  batchId: customerBatch.id,
+  handler: customersImport,
+  confirmPhrase: expectedCommitPhrase(customerBatch.validRows),
+  ctx,
+});
 check(
   "customers commit lands exactly the valid rows",
   committedCustomers.status === "COMMITTED" && committedCustomers.committedRows === 2
@@ -114,7 +120,10 @@ check(
 );
 check(
   "re-commit is a domain refusal, never a double write",
-  await expectThrow(() => commitImport({ batchId: customerBatch.id, handler: customersImport, ctx }), DomainRuleError),
+  await expectThrow(
+    () => commitImport({ batchId: customerBatch.id, handler: customersImport, confirmPhrase: expectedCommitPhrase(customerBatch.validRows), ctx }),
+    DomainRuleError,
+  ),
 );
 
 // M5 regression: two rows with different emails but one normalized phone —
@@ -142,7 +151,12 @@ check(
       (row) => row.verdict === "duplicate" && row.reason === "phone duplicates row 1 in this file",
     ),
 );
-const committedPhones = await commitImport({ batchId: phoneBatch.id, handler: customersImport, ctx });
+const committedPhones = await commitImport({
+  batchId: phoneBatch.id,
+  handler: customersImport,
+  confirmPhrase: expectedCommitPhrase(phoneBatch.validRows),
+  ctx,
+});
 check(
   "phone-twin commit lands exactly the one valid row, counts stay truthful",
   committedPhones.committedRows === 1 && committedPhones.validRows === 1 && committedPhones.duplicateRows === 1
@@ -185,7 +199,12 @@ check(
   "products stage: slug collision is a duplicate, dirty price invalid",
   productBatch.validRows === 2 && productBatch.duplicateRows === 1 && productBatch.invalidRows === 1,
 );
-const committedProducts = await commitImport({ batchId: productBatch.id, handler: productsImport, ctx });
+const committedProducts = await commitImport({
+  batchId: productBatch.id,
+  handler: productsImport,
+  confirmPhrase: expectedCommitPhrase(productBatch.validRows),
+  ctx,
+});
 const honeyJar = await prisma.product.findUnique({ where: { slug: `honey-jar-${stamp}` } });
 check(
   "products commit lands valid rows in the staged season with derived slugs",

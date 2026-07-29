@@ -691,3 +691,4 @@
 2026-07-29T19:52:53Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P12,review_aggregate,glm-5.2-high,14dc859e-39d4-4a6d-b877-2f0dbe89892a,,,,,,,,P12 aggregate of 4 specialists; usage_missing_pending_export
 2026-07-29T19:55:31Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P12,fix,kimi-k3-max,13912042-c9d8-49d5-a7a5-655ffb325a9b,,,,,,,,P12 fix vs aggregate 2B/9M/21m; usage_missing_pending_export
 2026-07-29T20:13:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P12,fix,kimi-k3-max,13912042-c9d8-49d5-a7a5-655ffb325a9b,,,,,,,,P12 fix resume after auth error; WIP B1/B2/M2 done mid-M3; usage_missing_pending_export
+2026-07-29T21:27:03Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-06,T5,self_review,kimi-k3-max,91455b98-e940-4366-ac61-02c7b05432f6,,,,,,,,Test 5 single self-review after P12 gate 18.0; usage_missing_pending_export

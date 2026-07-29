@@ -52,9 +52,9 @@ export const ENV_SPEC = [
   {
     key: "APP_ENV",
     description:
-      "Deployment environment class (test|production). Drives the P12 test-mode banner (R-014) and gates the test-only destructive routes under /api/admin/test-ops/* (R-129): production refuses them outright.",
-    example: "test",
-    schema: z.enum(["test", "production"]).default("test"),
+      "Deployment environment class (test|production). Drives the P12 test-mode banner (R-014) and gates the test-only destructive routes under /api/admin/test-ops/* (R-129): production refuses them outright. Fail-closed: the default is production, so a deploy that forgets this var keeps the destructive routes (and the dev-auth seam) disabled — only an explicit 'test' opens them.",
+    example: "production",
+    schema: z.enum(["test", "production"]).default("production"),
     secret: false,
   },
   {

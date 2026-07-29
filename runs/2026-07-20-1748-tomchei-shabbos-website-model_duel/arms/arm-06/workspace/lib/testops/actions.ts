@@ -11,8 +11,10 @@ import { SeedCounts, seedBaseline } from "@/lib/testops/baseline-seed";
 type Db = PrismaClient | Prisma.TransactionClient;
 
 // Everything except staff_users / permission_overrides / auth_sessions /
-// audit_logs. Table names = @@map values in prisma/schema.prisma.
-const WIPE_TABLES = [
+// audit_logs. Table names = @@map values in prisma/schema.prisma — exported
+// so the unit suite can pin the lists against the schema (typo or drift = a
+// failing test, not a silently half-wiped rehearsal).
+export const WIPE_TABLES = [
   "reconciliation_findings",
   "reconciliation_runs",
   "email_campaign_recipients",
@@ -68,7 +70,7 @@ const WIPE_TABLES = [
 
 // Clear = transactional data only: the season, catalog, customers, and
 // settings survive; the rehearsal's orders/fulfillment/payment trail goes.
-const CLEAR_TABLES = [
+export const CLEAR_TABLES = [
   "reconciliation_findings",
   "reconciliation_runs",
   "email_campaign_recipients",

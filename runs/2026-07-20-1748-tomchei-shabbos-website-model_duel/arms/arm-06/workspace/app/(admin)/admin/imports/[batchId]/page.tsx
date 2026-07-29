@@ -4,17 +4,9 @@ import { requireStaff } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { readPayload } from "@/lib/imports/engine";
-import { IMPORT_PERMISSION } from "@/lib/imports/kinds";
+import { IMPORT_PERMISSION, KIND_LABEL } from "@/lib/imports/kinds";
 import { BackLink } from "@/components/admin/back-link";
 import { ImportPreview } from "@/app/(admin)/admin/imports/[batchId]/import-preview";
-
-const KIND_LABEL: Record<string, string> = {
-  CUSTOMERS: "Customers",
-  PRODUCTS: "Products",
-  LEGACY_CUSTOMERS: "Legacy customers",
-  LEGACY_PRODUCTS: "Legacy products",
-  LEGACY_ORDERS: "Legacy orders",
-};
 
 export const metadata: Metadata = { title: "Import preview" };
 export const dynamic = "force-dynamic";
@@ -49,6 +41,7 @@ export default async function AdminImportPreviewPage({
 
       <ImportPreview
         batchId={batch.id}
+        filename={batch.filename}
         status={batch.status}
         dryRun={batch.dryRun}
         counts={{

@@ -34,13 +34,16 @@ export interface ProductDrillRow {
   revenueCents: number;
 }
 
-async function seasonPerformanceRows(seasonIds?: string[]): Promise<SeasonPerformance[]> {
+export async function getSeasonPerformance(seasonIds?: string[]): Promise<SeasonPerformance[]> {
   const seasons = await prisma.season.findMany({
     where: seasonIds ? { id: { in: seasonIds } } : undefined,
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   const rows: SeasonPerformance[] = [];
   for (const season of seasons) {
+    // Every aggregate below is keyed (seasonId, …): the loop supplies the
+    // seasonId, each groupBy supplies its own second key (channel, choice) —
+    // a row can never leak another season's numbers into this one.
     const [finalizedOrders, draftOrders, discardedOrders, packages, revenue, fees, channelGroups] =
       await Promise.all([
         prisma.order.count({ where: { seasonId: season.id, status: "FINALIZED" } }),
@@ -81,13 +84,11 @@ async function seasonPerformanceRows(seasonIds?: string[]): Promise<SeasonPerfor
   return rows;
 }
 
-export async function getSeasonPerformance(seasonIds?: string[]): Promise<SeasonPerformance[]> {
-  return seasonPerformanceRows(seasonIds);
-}
-
 // Drill-down: per fulfillment method for one season. Delivery fees come from
 // the frozen recipient snapshots; the shipped column books what customers
-// were charged for labels (the margin ledger's charged side).
+// were charged for labels (the margin ledger's charged side) — PURCHASED
+// shipments only, exactly like getMarginRollup: a void returns the margin, so
+// a VOIDED label's charge never counts here either.
 export async function getMethodDrilldown(seasonId: string): Promise<MethodDrillRow[]> {
   const [packageGroups, feeGroups, shipmentGroups] = await Promise.all([
     prisma.package.groupBy({
@@ -102,7 +103,7 @@ export async function getMethodDrilldown(seasonId: string): Promise<MethodDrillR
     }),
     prisma.shipment.groupBy({
       by: ["status"],
-      where: { package: { order: { seasonId } }, status: { in: ["PURCHASED", "VOIDED"] } },
+      where: { package: { order: { seasonId } }, status: "PURCHASED" },
       _sum: { chargedCents: true },
     }),
   ]);

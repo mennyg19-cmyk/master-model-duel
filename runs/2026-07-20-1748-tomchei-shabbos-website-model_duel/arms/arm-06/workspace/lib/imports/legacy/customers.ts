@@ -1,9 +1,13 @@
-import { Prisma } from "@prisma/client";
-import { normalizeEmail } from "@/lib/text";
+import { Address, Prisma } from "@prisma/client";
+import { normalizeEmail, isValidEmail } from "@/lib/text";
 import { normalizePhone } from "@/lib/phone";
 import { addressDedupeKey } from "@/lib/customers/addresses";
 import { ImportPayload, KindHandler, StagedRow } from "@/lib/imports/engine";
 import { normalizeRegion, normalizeZip, titleCaseName } from "@/lib/imports/legacy/normalize";
+import {
+  findLegacyCustomerMatches,
+  resolveLegacyCustomer,
+} from "@/lib/imports/legacy/resolve-customer";
 
 // R-186/G-029 + UR-014: legacy customers. One CSV row = one customer ADDRESS;
 // rows sharing an email/phone are ONE customer with a book — populating that
@@ -13,7 +17,6 @@ import { normalizeRegion, normalizeZip, titleCaseName } from "@/lib/imports/lega
 //
 // Columns: customer_name, email, phone, address_label, line1, line2, city,
 // region, postal_code, country (address columns optional as a group).
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface LegacyCustomerData {
   customerName: string;
@@ -34,7 +37,7 @@ interface LegacyCustomerData {
 function parseLegacyCustomerRow(rowNumber: number, record: Record<string, string>): StagedRow {
   const customerName = titleCaseName(record.customer_name ?? "");
   const rawEmail = normalizeEmail(record.email ?? "");
-  const email = rawEmail && EMAIL_SHAPE.test(rawEmail) ? rawEmail : null;
+  const email = rawEmail && isValidEmail(rawEmail) ? rawEmail : null;
   const phone = normalizePhone(record.phone ?? "");
   const zip = normalizeZip(record.postal_code ?? "");
 
@@ -68,8 +71,10 @@ function parseLegacyCustomerRow(rowNumber: number, record: Record<string, string
     }
     if (!zip) {
       // Not fatal — the address lands flagged for the review queue instead
-      // of dropping the customer outright (G-029 human mapping).
+      // of dropping the customer outright (G-029 human mapping). m9: the flag
+      // is also the staged row's reason, so the preview shows it before commit.
       data.addressNeedsReview = `ZIP "${record.postal_code}" could not be normalized`;
+      staged.reason = data.addressNeedsReview;
     }
   }
   return staged;
@@ -100,43 +105,58 @@ async function commitLegacyCustomerRows(
   _payload: ImportPayload,
 ): Promise<number> {
   let landed = 0;
+  const candidates = rows.filter((row) => row.verdict === "valid");
 
-  for (const row of rows) {
-    if (row.verdict !== "valid") continue;
+  // One batched customer lookup for the whole batch (m11) instead of two
+  // findUnique calls per row inside the open transaction; creations register
+  // back into the maps so multi-row customers resolve once.
+  const matches = await findLegacyCustomerMatches(
+    tx,
+    candidates.map((row) => {
+      const data = row.data as unknown as LegacyCustomerData;
+      return {
+        email: data.email,
+        phone: data.phone,
+        normalizedPhone: data.normalizedPhone,
+        customerName: data.customerName,
+      };
+    }),
+  );
+  const bookCache = new Map<string, Address[]>();
+
+  for (const row of candidates) {
     const data = row.data as unknown as LegacyCustomerData;
 
-    // Email and phone pointing at DIFFERENT customers is ambiguous — a human
-    // merges them; the import never guesses (same law as legacy orders).
-    const byEmail = data.email ? await tx.customer.findUnique({ where: { email: data.email } }) : null;
-    const byPhone = data.normalizedPhone ? await tx.customer.findUnique({ where: { normalizedPhone: data.normalizedPhone } }) : null;
-    if (byEmail && byPhone && byEmail.id !== byPhone.id) {
+    const resolved = await resolveLegacyCustomer(
+      tx,
+      {
+        email: data.email,
+        phone: data.phone,
+        normalizedPhone: data.normalizedPhone,
+        customerName: data.customerName,
+      },
+      matches,
+    );
+    if ("error" in resolved) {
+      // G-029's never-guess rule as a row verdict: a human merges the two
+      // customers, the import refuses to pick one.
       row.verdict = "invalid";
-      row.reason = `email matches "${byEmail.name}" but phone matches "${byPhone.name}" — merge those customers first`;
+      row.reason = resolved.error;
       continue;
     }
-
-    const existing = byEmail ?? byPhone;
-    const customer = existing
-      ? await tx.customer.update({
-          where: { id: existing.id },
-          // A merge never renames; it only fills a phone gap honestly.
-          data: {
-            phone: existing.phone ?? data.phone,
-            normalizedPhone: existing.normalizedPhone ?? data.normalizedPhone,
-          },
-        })
-      : await tx.customer.create({
-          data: {
-            name: data.customerName,
-            email: data.email ?? `legacy-phone-${data.normalizedPhone!.replace(/\D/g, "")}@legacy.local`,
-            phone: data.phone,
-            normalizedPhone: data.normalizedPhone,
-          },
-        });
-    if (!existing) landed += 1;
+    const { customer, created } = resolved;
+    if (created) {
+      landed += 1;
+    } else if (customer.normalizedPhone === null && data.normalizedPhone !== null) {
+      // A merge never renames; it only fills a phone gap honestly.
+      await tx.customer.update({
+        where: { id: customer.id },
+        data: { phone: data.phone, normalizedPhone: data.normalizedPhone },
+      });
+    }
 
     if (!data.line1) {
-      if (existing) row.reason = "merged into existing customer (contact match)";
+      if (!created) row.reason = "merged into existing customer (contact match)";
       continue;
     }
 
@@ -148,7 +168,11 @@ async function commitLegacyCustomerRows(
       postalCode: data.postalCode ?? "",
       country: data.country,
     });
-    const book = await tx.address.findMany({ where: { customerId: customer.id } });
+    let book = bookCache.get(customer.id);
+    if (!book) {
+      book = await tx.address.findMany({ where: { customerId: customer.id } });
+      bookCache.set(customer.id, book);
+    }
     if (book.some((address) => addressDedupeKey(address) === key)) {
       row.reason = "address already in the book — merged";
       continue;
@@ -160,7 +184,7 @@ async function commitLegacyCustomerRows(
     let label: string = baseLabel;
     for (let n = 2; taken.has(label); n += 1) label = `${baseLabel} (${n})`;
 
-    await tx.address.create({
+    const address = await tx.address.create({
       data: {
         customerId: customer.id,
         label,
@@ -174,6 +198,7 @@ async function commitLegacyCustomerRows(
         reviewReason: data.addressNeedsReview,
       },
     });
+    book.push(address);
     landed += 1;
   }
   return landed;

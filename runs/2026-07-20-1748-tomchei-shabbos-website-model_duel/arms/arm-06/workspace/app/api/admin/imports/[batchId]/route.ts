@@ -6,14 +6,16 @@ import { IMPORT_PERMISSION } from "@/lib/imports/kinds";
 export const dynamic = "force-dynamic";
 
 // Preview: the staged payload with per-row verdicts — nothing has touched the
-// domain tables yet, so this is always safe to render.
+// domain tables yet, so this is always safe to render. A forbidden caller gets
+// the same 404 as an unknown id — the batch's existence is not an oracle.
 export async function GET(_request: Request, { params }: { params: Promise<{ batchId: string }> }) {
   const { batchId } = await params;
+  const notFound = () => NextResponse.json({ error: "Import batch not found" }, { status: 404 });
   const batch = await prisma.importBatch.findUnique({ where: { id: batchId } });
-  if (!batch) return NextResponse.json({ error: "Import batch not found" }, { status: 404 });
+  if (!batch) return notFound();
 
   const gate = await requireApiPermission(IMPORT_PERMISSION[batch.kind]);
-  if (!gate.ok) return gate.response;
+  if (!gate.ok) return gate.response.status === 403 ? notFound() : gate.response;
 
   return NextResponse.json({
     batch: {

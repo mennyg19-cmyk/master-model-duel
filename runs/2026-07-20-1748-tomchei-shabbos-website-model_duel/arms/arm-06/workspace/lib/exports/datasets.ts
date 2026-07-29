@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { Permission } from "@/lib/permissions";
+import { CHANNEL_LABELS } from "@/lib/packages/fulfillment";
 
 // R-092: the export center datasets. Each dataset owns its header, its
 // permission, and a paged row generator — the route streams pages straight
@@ -44,13 +45,6 @@ async function* paged<T extends { id: string }>(
   }
 }
 
-const CHANNEL_LABEL: Record<string, string> = {
-  PICKUP: "Pickup",
-  BULK_DELIVERY: "Bulk delivery",
-  PER_PACKAGE_DELIVERY: "Per-package delivery",
-  SHIPPED: "Shipped",
-};
-
 // -- deliveries: per-recipient fulfillment ledger for one season -------------
 const deliveries: ExportDataset = {
   key: "deliveries",
@@ -85,19 +79,30 @@ const deliveries: ExportDataset = {
                 orderNumber: true,
                 draftRef: true,
                 customer: { select: { email: true, name: true } },
-                packages: { select: { stage: true, recipientName: true } },
+                packages: { select: { stage: true, recipientName: true, recipientAddress: { select: { line1: true, postalCode: true } } } },
               },
             },
           },
         }),
       (row) => {
-        const pkg = row.order.packages.find((candidate) => candidate.recipientName === row.name);
+        // Package stage lookup keys on the full recipient identity (name +
+        // address), not name alone: one order can hold two same-name
+        // recipients at different addresses (the P2 grouping key allows it),
+        // and a name-only `find` would pin both rows to the first package.
+        const candidates = row.order.packages.filter((candidate) => candidate.recipientName === row.name);
+        const pkg =
+          candidates.find(
+            (candidate) =>
+              candidate.recipientAddress !== null &&
+              candidate.recipientAddress.line1 === row.line1 &&
+              candidate.recipientAddress.postalCode === row.postalCode,
+          ) ?? candidates[0];
         return [
           row.order.orderNumber === null ? (row.order.draftRef ?? "") : `#${row.order.orderNumber}`,
           row.order.customer.email,
           row.order.customer.name,
           row.name,
-          row.fulfillmentChoice ? (CHANNEL_LABEL[row.fulfillmentChoice] ?? row.fulfillmentChoice) : "",
+          row.fulfillmentChoice ? CHANNEL_LABELS[row.fulfillmentChoice] : "",
           row.deliveryDay ?? "",
           dollars(row.deliveryFeeCents),
           row.line1,
@@ -144,6 +149,11 @@ const yearEnd: ExportDataset = {
       (row) => {
         const paid = row.payments.reduce((sum, payment) => sum + payment.amountCents, 0);
         const methods = [...new Set(row.payments.map((payment) => payment.method))].join("|");
+        // Legacy refunded orders import as PAID-with-no-payment-rows (terminal
+        // state, money already returned in the old system). Reporting the
+        // cached PAID here would show a "paid" order with $0.00 collected and
+        // a full balance — the accountant-facing label is REFUNDED.
+        const statusLabel = row.paymentStatus === "PAID" && row.payments.length === 0 ? "REFUNDED" : row.paymentStatus;
         return [
           row.orderNumber === null ? (row.draftRef ?? "") : `#${row.orderNumber}`,
           row.customer.email,
@@ -151,7 +161,7 @@ const yearEnd: ExportDataset = {
           dollars(row.totalCents),
           dollars(paid),
           dollars(row.totalCents - paid),
-          row.paymentStatus,
+          statusLabel,
           methods,
           row.createdAt.toISOString().slice(0, 10),
         ];
@@ -235,7 +245,7 @@ const lapsedCustomers: ExportDataset = {
   description: "Customers with finalized history who have not ordered in the current open season.",
   permission: "payments.manage",
   seasonScoped: false,
-  header: ["customer_email", "customer_name", "last_season", "last_order_at", "lifetime_orders", "lifetime_revenue_dollars"],
+  header: ["customer_email", "customer_name", "last_season", "last_order_at", "lifetime_orders", "lifetime_order_total_dollars"],
   filename: () => "lapsed-customers.csv",
   rows: async function* () {
     const openSeason = await prisma.season.findFirst({ where: { status: "OPEN" } });
@@ -266,14 +276,17 @@ const lapsedCustomers: ExportDataset = {
         }),
       (row) => {
         const last = row.orders[0];
-        const revenue = row.orders.reduce((sum, order) => sum + order.totalCents, 0);
+        // Lifetime order total, not "revenue": the reports vocabulary reserves
+        // that word for POSTED payments (the payment ledger is the money
+        // truth), so this column is labeled for what it actually sums.
+        const orderTotal = row.orders.reduce((sum, order) => sum + order.totalCents, 0);
         return [
           row.email,
           row.name,
           last?.season.name ?? "",
           last ? last.createdAt.toISOString().slice(0, 10) : "",
           row.orders.length,
-          dollars(revenue),
+          dollars(orderTotal),
         ];
       },
     );

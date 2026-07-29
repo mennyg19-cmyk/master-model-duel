@@ -110,8 +110,11 @@ export async function runReconciliation(input: { ctx?: AuditContextLike | null }
       matched += 1;
     }
 
-    // Stale mirrors are only knowable with a real Stripe-side list.
-    if (stripeSide.length > 0 || mode === "live" || mode === "fixture") {
+    // Stale mirrors are only knowable with a real Stripe-side list. Live mode
+    // with an empty list means the mirrors really are stale; fixture mode with
+    // an empty list only means the dev double wasn't seeded, so flagging every
+    // mirror there would be a false positive (m6).
+    if (stripeSide.length > 0 || mode === "live") {
       for (const mirror of mirrors) {
         if (!stripeIds.has(mirror.intentId)) {
           add({

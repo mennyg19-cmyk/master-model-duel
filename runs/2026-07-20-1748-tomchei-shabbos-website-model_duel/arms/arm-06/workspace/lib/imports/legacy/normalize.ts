@@ -16,6 +16,25 @@ export function normalizeRegion(raw: string): string {
   return cleaned.length <= 2 ? cleaned.toUpperCase() : titleCaseName(cleaned);
 }
 
+// Slug for a stub/imported legacy product ("legacy-2024-shabbos-box"). One
+// formula for every legacy handler so slugs can never drift apart.
+export function legacySlug(year: number, name: string): string {
+  return `legacy-${year}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+}
+
+// Legacy money parsing is deliberately looser than lib/money dollarsToCents:
+// the old system's exports carry "$47.85" and fractional-cent noise, so we
+// strip the currency marker and round instead of rejecting. One helper for
+// every legacy handler — the looseness is chosen here, once.
+export function parseLegacyMoney(raw: string, column: string): number | { error: string } {
+  const cleaned = raw.trim().replace(/^\$/, "");
+  const value = Number(cleaned);
+  if (cleaned === "" || !Number.isFinite(value) || value < 0) {
+    return { error: `${column} must be a non-negative number (got "${raw}")` };
+  }
+  return Math.round(value * 100);
+}
+
 // US ZIPs arrive as "08701", "08701-1234", "08701 " — normalize to 5 or 5+4.
 // Anything else returns null so the caller can flag review instead of writing
 // a poisoned ZIP into the book.

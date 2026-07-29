@@ -4,6 +4,8 @@ import { requireStaff } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { forbidden } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { IMPORT_ROW_LIMIT } from "@/lib/imports/engine";
+import { KIND_LABEL } from "@/lib/imports/kinds";
 import { Badge } from "@/components/ui/badge";
 import { ImportUpload } from "@/app/(admin)/admin/imports/import-upload";
 
@@ -12,14 +14,6 @@ export const dynamic = "force-dynamic";
 
 // R-063 + R-186: CSV import home — stage a file, review recent batches. The
 // kinds a staff user sees follow their permissions.
-const KIND_LABEL: Record<string, string> = {
-  CUSTOMERS: "Customers",
-  PRODUCTS: "Products",
-  LEGACY_CUSTOMERS: "Legacy customers",
-  LEGACY_PRODUCTS: "Legacy products",
-  LEGACY_ORDERS: "Legacy orders",
-};
-
 export default async function AdminImportsPage() {
   const ctx = await requireStaff();
   const canCustomers = hasPermission(ctx.staff, "customers.manage");
@@ -45,7 +39,13 @@ export default async function AdminImportsPage() {
         Staged CSV imports — preview every row&apos;s verdict before anything writes.
       </p>
 
-      <ImportUpload canCustomers={canCustomers} canCatalog={canCatalog} canPayments={canPayments} />
+      <ImportUpload
+        canCustomers={canCustomers}
+        canCatalog={canCatalog}
+        canPayments={canPayments}
+        kindLabels={KIND_LABEL}
+        rowLimit={IMPORT_ROW_LIMIT}
+      />
 
       <section className="mt-8">
         <h2 className="text-lg font-semibold">Recent batches</h2>

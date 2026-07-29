@@ -5,17 +5,11 @@ import { prisma } from "@/lib/db";
 import { formatCents } from "@/lib/money";
 import { getMethodDrilldown, getProductDrilldown, getSeasonPerformance } from "@/lib/reports/seasons";
 import { getMarginRollup, getMarginRows } from "@/lib/reports/margin";
+import { CHANNEL_LABELS } from "@/lib/packages/fulfillment";
 import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = { title: "Reports" };
 export const dynamic = "force-dynamic";
-
-const CHANNEL_LABEL: Record<string, string> = {
-  PICKUP: "Pickup",
-  BULK_DELIVERY: "Bulk delivery",
-  PER_PACKAGE_DELIVERY: "Per-package delivery",
-  SHIPPED: "Shipped",
-};
 
 function tabHref(tab: string, params: Record<string, string | undefined> = {}): string {
   const search = new URLSearchParams({ tab });
@@ -108,7 +102,7 @@ async function PerformanceTab({ seasonId, drill }: { seasonId?: string; drill?: 
               <td className="py-2 pr-4 text-right">{formatCents(row.deliveryFeesCents)}</td>
               <td className="py-2 pr-4 text-right">{formatCents(row.avgOrderCents)}</td>
               <td className="py-2 pr-4 text-xs text-stone-600">
-                {row.channelMix.map((mix) => `${CHANNEL_LABEL[mix.channel] ?? mix.channel} ${mix.packages}`).join(" · ") || "—"}
+                {row.channelMix.map((mix) => `${CHANNEL_LABELS[mix.channel]} ${mix.packages}`).join(" · ") || "—"}
               </td>
               <td className="py-2 pr-4 text-xs">
                 <Link href={tabHref("performance", { season: row.seasonId, drill: "method" })} className="text-brand-700 hover:underline" data-drill="method">
@@ -138,7 +132,7 @@ async function PerformanceTab({ seasonId, drill }: { seasonId?: string; drill?: 
             <tbody>
               {methodDrill.map((row) => (
                 <tr key={row.channel} className="border-b border-stone-100" data-method-row={row.channel}>
-                  <td className="py-2 pr-4">{CHANNEL_LABEL[row.channel] ?? row.channel}</td>
+                  <td className="py-2 pr-4">{CHANNEL_LABELS[row.channel]}</td>
                   <td className="py-2 pr-4 text-right" data-cell="packages">{row.packages}</td>
                   <td className="py-2 pr-4 text-right" data-cell="fees">{formatCents(row.deliveryFeesCents)}</td>
                   <td className="py-2 pr-4 text-right">{formatCents(row.shippedChargedCents)}</td>
@@ -183,7 +177,8 @@ async function MarginTab({
   seasonId?: string;
   seasons: { id: string; name: string }[];
 }) {
-  const [rollup, rows] = await Promise.all([getMarginRollup(seasonId), getMarginRows({ seasonId })]);
+  const [rollup, margin] = await Promise.all([getMarginRollup(seasonId), getMarginRows({ seasonId })]);
+  const rows = margin.rows;
 
   return (
     <section className="mt-6" data-report-margin>
@@ -291,6 +286,11 @@ async function MarginTab({
           )}
         </tbody>
       </table>
+      {margin.truncated && (
+        <p className="mt-1 text-xs text-stone-500">
+          Showing the newest {margin.take} shipments — this list is capped; narrow by season to see the rest.
+        </p>
+      )}
     </section>
   );
 }

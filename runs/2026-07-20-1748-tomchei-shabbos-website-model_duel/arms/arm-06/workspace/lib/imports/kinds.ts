@@ -24,3 +24,14 @@ export const IMPORT_HANDLERS: Record<ImportKind, KindHandler> = {
   LEGACY_PRODUCTS: legacyProductsImport,
   LEGACY_ORDERS: legacyOrdersImport,
 };
+
+// Display labels for the kind enum, one home for every import surface. The
+// upload form's "(old system)" hint is applied at its call site, not forked
+// into a second map.
+export const KIND_LABEL: Record<ImportKind, string> = {
+  CUSTOMERS: "Customers",
+  PRODUCTS: "Products",
+  LEGACY_CUSTOMERS: "Legacy customers",
+  LEGACY_PRODUCTS: "Legacy products",
+  LEGACY_ORDERS: "Legacy orders",
+};

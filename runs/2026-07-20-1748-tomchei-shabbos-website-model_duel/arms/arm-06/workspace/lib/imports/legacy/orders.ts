@@ -1,12 +1,13 @@
-import { PaymentMethod, Prisma } from "@prisma/client";
-import { normalizeEmail } from "@/lib/text";
+import { PaymentMethod, Prisma, Product } from "@prisma/client";
+import { normalizeEmail, isValidEmail } from "@/lib/text";
 import { normalizePhone } from "@/lib/phone";
 import { addressDedupeKey } from "@/lib/customers/addresses";
 import { claimOrderNumber, formatWireFormat } from "@/lib/orders/numbers";
 import { postPaymentTx } from "@/lib/payments/post";
 import { ImportPayload, KindHandler, StagedRow } from "@/lib/imports/engine";
 import { legacySeason } from "@/lib/imports/legacy/seasons";
-import { normalizeRegion, normalizeZip, titleCaseName } from "@/lib/imports/legacy/normalize";
+import { legacySlug, normalizeRegion, normalizeZip, parseLegacyMoney, titleCaseName } from "@/lib/imports/legacy/normalize";
+import { findLegacyCustomerMatches, resolveLegacyCustomer } from "@/lib/imports/legacy/resolve-customer";
 
 // R-186/G-029: historical orders from the messy legacy export. One CSV row
 // per LINE ITEM; rows sharing legacy_order_no commit as one FINALIZED order
@@ -50,31 +51,23 @@ interface LegacyOrderRow {
   greeting: string | null;
 }
 
-function parseMoney(raw: string, column: string): number | { error: string } {
-  const cleaned = raw.trim().replace(/^\$/, "");
-  const value = Number(cleaned);
-  if (cleaned === "" || !Number.isFinite(value) || value < 0) {
-    return { error: `${column} must be a non-negative number (got "${raw}")` };
-  }
-  return Math.round(value * 100);
-}
-
 function parseLegacyOrderRow(rowNumber: number, record: Record<string, string>): StagedRow {
-  const itemPrice = parseMoney(record.item_unit_price ?? "", "item_unit_price");
-  const shipping = parseMoney(record.shipping_cents ?? "0", "shipping_cents");
+  const itemPrice = parseLegacyMoney(record.item_unit_price ?? "", "item_unit_price");
+  const shipping = parseLegacyMoney(record.shipping_cents ?? "0", "shipping_cents");
   const totalRaw = (record.total_cents ?? "").trim();
-  const total = totalRaw === "" ? null : parseMoney(totalRaw, "total_cents");
+  const total = totalRaw === "" ? null : parseLegacyMoney(totalRaw, "total_cents");
   const qty = Number((record.item_qty ?? "").trim());
   const method = (record.payment_method ?? "").trim().toLowerCase();
   const payment = (record.payment_status ?? "paid").trim().toLowerCase();
   const orderDate = (record.order_date ?? "").trim();
   const parsedDate = new Date(orderDate);
+  const rawEmail = normalizeEmail(record.email ?? "");
 
   const data: LegacyOrderRow = {
     legacyOrderNo: (record.legacy_order_no ?? "").trim(),
     orderDate,
     year: Number.isNaN(parsedDate.getTime()) ? 0 : parsedDate.getUTCFullYear(),
-    email: normalizeEmail(record.email ?? "") || null,
+    email: rawEmail && isValidEmail(rawEmail) ? rawEmail : null,
     phone: record.phone?.trim() || null,
     normalizedPhone: normalizePhone(record.phone ?? ""),
     customerName: record.customer_name ? titleCaseName(record.customer_name) : null,
@@ -98,6 +91,11 @@ function parseLegacyOrderRow(rowNumber: number, record: Record<string, string>):
   if (!data.legacyOrderNo) return { ...staged, verdict: "invalid", reason: "legacy_order_no is required" };
   if (!orderDate || Number.isNaN(parsedDate.getTime())) {
     return { ...staged, verdict: "invalid", reason: `order_date "${orderDate}" is not a date` };
+  }
+  if (rawEmail && !data.email) {
+    // m8: a written-but-malformed email must not silently vanish into a
+    // phone-only (or synthetic-email) customer at commit — the row is told.
+    return { ...staged, verdict: "invalid", reason: `email "${rawEmail}" is malformed` };
   }
   if (!data.email && !data.normalizedPhone) {
     return { ...staged, verdict: "invalid", reason: "no usable customer contact (email and phone both broken)" };
@@ -131,33 +129,6 @@ async function markOrderDuplicates(tx: Prisma.TransactionClient, rows: StagedRow
   }
 }
 
-// Email and phone are both dedupe keys (R-144); when they point at DIFFERENT
-// existing customers the row is ambiguous — a human merges the customers, the
-// import never guesses (G-029 human mapping for messy rows).
-async function resolveCustomer(tx: Prisma.TransactionClient, head: LegacyOrderRow): Promise<{ id: string } | { error: string }> {
-  const byEmail = head.email ? await tx.customer.findUnique({ where: { email: head.email } }) : null;
-  const byPhone = head.normalizedPhone ? await tx.customer.findUnique({ where: { normalizedPhone: head.normalizedPhone } }) : null;
-  if (byEmail && byPhone && byEmail.id !== byPhone.id) {
-    return { error: `email matches "${byEmail.name}" but phone matches "${byPhone.name}" — merge those customers first` };
-  }
-  const existing = byEmail ?? byPhone;
-  if (existing) return { id: existing.id };
-  const email = head.email ?? `legacy-phone-${(head.normalizedPhone ?? "unknown").replace(/\D/g, "")}@legacy.local`;
-  const created = await tx.customer.create({
-    data: {
-      email,
-      name: head.customerName ?? email.split("@")[0],
-      phone: head.phone,
-      normalizedPhone: head.normalizedPhone,
-    },
-  });
-  return { id: created.id };
-}
-
-function stubSlug(year: number, productName: string): string {
-  return `legacy-${year}-${productName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
-}
-
 async function commitLegacyOrderRows(
   tx: Prisma.TransactionClient,
   rows: StagedRow[],
@@ -172,12 +143,30 @@ async function commitLegacyOrderRows(
     groups.set(data.legacyOrderNo, group);
   }
 
+  // One batched customer lookup for the whole commit (m11) instead of two
+  // findUnique calls per order inside the open transaction.
+  const matches = await findLegacyCustomerMatches(
+    tx,
+    [...groups.values()].map((members) => {
+      const head = members[0].data;
+      return { email: head.email, phone: head.phone, normalizedPhone: head.normalizedPhone, customerName: head.customerName };
+    }),
+  );
+
   let landed = 0;
+  // Catalog reads are cached per season for the whole commit (one full scan
+  // per season, not one per order group). Stubs created below are written
+  // back into the cached map, so later groups in the same season see them.
+  const catalogs = new Map<string, Map<string, Product>>();
   for (const [orderNo, members] of groups) {
     const head = members[0].data;
     const season = await legacySeason(tx, head.year);
 
-    const customer = await resolveCustomer(tx, head);
+    const customer = await resolveLegacyCustomer(
+      tx,
+      { email: head.email, phone: head.phone, normalizedPhone: head.normalizedPhone, customerName: head.customerName },
+      matches,
+    );
     if ("error" in customer) {
       for (const { row } of members) {
         row.verdict = "invalid";
@@ -185,6 +174,8 @@ async function commitLegacyOrderRows(
       }
       continue;
     }
+
+    const customerRecord = customer.customer;
 
     // Recipient: explicit columns win; otherwise the customer's first clean
     // book address fills in (UR-014 — the book is the year-one memory).
@@ -199,7 +190,7 @@ async function commitLegacyOrderRows(
     };
     if (!recipient.line1) {
       const book = await tx.address.findMany({
-        where: { customerId: customer.id, needsReview: false },
+        where: { customerId: customerRecord.id, needsReview: false },
         orderBy: [{ createdAt: "asc" }],
       });
       const fallback = book[0];
@@ -215,7 +206,7 @@ async function commitLegacyOrderRows(
         };
       }
     } else {
-      const book = await tx.address.findMany({ where: { customerId: customer.id } });
+      const book = await tx.address.findMany({ where: { customerId: customerRecord.id } });
       const key = addressDedupeKey({
         line1: recipient.line1,
         line2: recipient.line2,
@@ -234,8 +225,12 @@ async function commitLegacyOrderRows(
       continue;
     }
 
-    const catalog = await tx.product.findMany({ where: { seasonId: season.id } });
-    const byName = new Map(catalog.map((product) => [product.name.toLowerCase(), product]));
+    let byName = catalogs.get(season.id);
+    if (!byName) {
+      const catalog = await tx.product.findMany({ where: { seasonId: season.id } });
+      byName = new Map(catalog.map((product) => [product.name.toLowerCase(), product]));
+      catalogs.set(season.id, byName);
+    }
 
     const orderNumber = await claimOrderNumber(tx, season.id);
     const subtotal = members.reduce((sum, { data }) => sum + data.itemQty * data.unitPriceCents, 0);
@@ -247,7 +242,7 @@ async function commitLegacyOrderRows(
     const order = await tx.order.create({
       data: {
         seasonId: season.id,
-        customerId: customer.id,
+        customerId: customerRecord.id,
         status: "FINALIZED",
         paymentStatus: head.paymentStatus === "unpaid" ? "UNPAID" : "PAID",
         orderNumber,
@@ -278,10 +273,10 @@ async function commitLegacyOrderRows(
       let product = byName.get(data.itemName.toLowerCase());
       if (!product) {
         product = await tx.product.upsert({
-          where: { slug: stubSlug(head.year, data.itemName) },
+          where: { slug: legacySlug(head.year, data.itemName) },
           update: {},
           create: {
-            slug: stubSlug(head.year, data.itemName),
+            slug: legacySlug(head.year, data.itemName),
             name: data.itemName,
             seasonId: season.id,
             basePriceCents: 0,

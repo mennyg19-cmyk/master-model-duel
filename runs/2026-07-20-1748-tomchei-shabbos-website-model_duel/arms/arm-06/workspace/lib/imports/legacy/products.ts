@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { ImportPayload, KindHandler, StagedRow } from "@/lib/imports/engine";
 import { legacySeason, legacySeasonName } from "@/lib/imports/legacy/seasons";
-import { titleCaseName } from "@/lib/imports/legacy/normalize";
+import { legacySlug, parseLegacyMoney, titleCaseName } from "@/lib/imports/legacy/normalize";
 
 // R-186: legacy catalog import. Rows target the "Legacy <year>" season named
 // by the row's year column (upserted CLOSED, same convention as the P10
@@ -18,14 +18,9 @@ interface LegacyProductData {
   slug: string;
 }
 
-function slugify(year: number, name: string): string {
-  return `legacy-${year}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
-}
-
 function parseLegacyProductRow(rowNumber: number, record: Record<string, string>): StagedRow {
   const productName = titleCaseName(record.product_name ?? "");
-  const rawPrice = (record.price ?? "").trim().replace(/^\$/, "");
-  const price = Number(rawPrice);
+  const parsedPrice = parseLegacyMoney(record.price ?? "", "price");
   const year = Number((record.year ?? "").trim());
 
   const data: LegacyProductData = {
@@ -42,15 +37,13 @@ function parseLegacyProductRow(rowNumber: number, record: Record<string, string>
     return { ...staged, verdict: "invalid", reason: `year "${record.year}" — expected a 4-digit year` };
   }
   if (!productName) return { ...staged, verdict: "invalid", reason: "product_name is required" };
-  if (!rawPrice || !Number.isFinite(price) || price < 0) {
-    return { ...staged, verdict: "invalid", reason: "price must be a non-negative number (e.g. 47.85)" };
-  }
-  data.priceCents = Math.round(price * 100);
-  data.slug = slugify(year, productName);
+  if (typeof parsedPrice !== "number") return { ...staged, verdict: "invalid", reason: parsedPrice.error };
+  data.priceCents = parsedPrice;
+  data.slug = legacySlug(year, productName);
   return staged;
 }
 
-async function markProductDuplicates(tx: Prisma.TransactionClient, rows: StagedRow[]): Promise<void> {
+async function markLegacyProductDuplicates(tx: Prisma.TransactionClient, rows: StagedRow[]): Promise<void> {
   const slugs = [...new Set(rows.filter((r) => r.verdict === "valid").map((r) => (r.data as unknown as LegacyProductData).slug))];
   if (slugs.length === 0) return;
   const existing = await tx.product.findMany({ where: { slug: { in: slugs } }, select: { slug: true } });
@@ -99,6 +92,6 @@ export const legacyProductsImport: KindHandler = {
   requiredHeaders: ["year", "product_name", "price"],
   parseRow: parseLegacyProductRow,
   duplicateKeys: (data) => [{ key: (data as unknown as LegacyProductData).slug, label: "product" }],
-  markDatabaseDuplicates: markProductDuplicates,
+  markDatabaseDuplicates: markLegacyProductDuplicates,
   commitRows: commitLegacyProductRows,
 };

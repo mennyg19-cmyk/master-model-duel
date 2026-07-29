@@ -10,14 +10,6 @@ import { Select } from "@/components/ui/select";
 
 type Kind = "CUSTOMERS" | "PRODUCTS" | "LEGACY_CUSTOMERS" | "LEGACY_PRODUCTS" | "LEGACY_ORDERS";
 
-const KIND_LABEL: Record<Kind, string> = {
-  CUSTOMERS: "Customers",
-  PRODUCTS: "Products",
-  LEGACY_CUSTOMERS: "Legacy customers (old system)",
-  LEGACY_PRODUCTS: "Legacy products (old system)",
-  LEGACY_ORDERS: "Legacy orders (old system)",
-};
-
 const KIND_COLUMNS: Record<Kind, string> = {
   CUSTOMERS: "name, email, phone (phone optional)",
   PRODUCTS: "name, price, description, category, active (last three optional)",
@@ -30,15 +22,21 @@ const KIND_COLUMNS: Record<Kind, string> = {
 // Stage a CSV: the file is read client-side and POSTed as text — the server
 // parses, validates, and stores per-row verdicts. Nothing writes to the
 // domain tables at this step. G-029: dry-run stages the same ledger but the
-// batch can never commit — proof against a disposable database.
+// batch can never commit — proof against a disposable database. The shared
+// KIND_LABEL map arrives as a prop (the client bundle can't reach lib/imports
+// server modules); the "(old system)" hint is this form's own suffix.
 export function ImportUpload({
   canCustomers,
   canCatalog,
   canPayments,
+  kindLabels,
+  rowLimit,
 }: {
   canCustomers: boolean;
   canCatalog: boolean;
   canPayments: boolean;
+  kindLabels: Record<Kind, string>;
+  rowLimit: number;
 }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>(canCustomers ? "CUSTOMERS" : "PRODUCTS");
@@ -70,6 +68,7 @@ export function ImportUpload({
   }
 
   const legacy = kind.startsWith("LEGACY_");
+  const kindLabel = (value: Kind) => `${kindLabels[value]}${value.startsWith("LEGACY_") ? " (old system)" : ""}`;
 
   return (
     <Card className="mt-5 max-w-2xl p-5" data-import-upload>
@@ -83,11 +82,11 @@ export function ImportUpload({
             onChange={(event) => setKind(event.target.value as Kind)}
             data-import-kind
           >
-            {canCustomers && <option value="CUSTOMERS">{KIND_LABEL.CUSTOMERS}</option>}
-            {canCatalog && <option value="PRODUCTS">{KIND_LABEL.PRODUCTS}</option>}
-            {canCustomers && <option value="LEGACY_CUSTOMERS">{KIND_LABEL.LEGACY_CUSTOMERS}</option>}
-            {canCatalog && <option value="LEGACY_PRODUCTS">{KIND_LABEL.LEGACY_PRODUCTS}</option>}
-            {canPayments && <option value="LEGACY_ORDERS">{KIND_LABEL.LEGACY_ORDERS}</option>}
+            {canCustomers && <option value="CUSTOMERS">{kindLabel("CUSTOMERS")}</option>}
+            {canCatalog && <option value="PRODUCTS">{kindLabel("PRODUCTS")}</option>}
+            {canCustomers && <option value="LEGACY_CUSTOMERS">{kindLabel("LEGACY_CUSTOMERS")}</option>}
+            {canCatalog && <option value="LEGACY_PRODUCTS">{kindLabel("LEGACY_PRODUCTS")}</option>}
+            {canPayments && <option value="LEGACY_ORDERS">{kindLabel("LEGACY_ORDERS")}</option>}
           </Select>
         </div>
         <div>
@@ -112,8 +111,8 @@ export function ImportUpload({
         </label>
       )}
       <p className="mt-3 text-xs text-stone-500">
-        Columns: {KIND_COLUMNS[kind]}. First row is the header. Duplicates and invalid rows are reported, never
-        silently written.
+        Columns: {KIND_COLUMNS[kind]}. First row is the header. At most {rowLimit} data rows per file. Duplicates and
+        invalid rows are reported, never silently written.
       </p>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </Card>

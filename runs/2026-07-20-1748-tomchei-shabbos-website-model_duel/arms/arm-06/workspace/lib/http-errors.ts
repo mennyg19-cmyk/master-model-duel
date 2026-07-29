@@ -30,3 +30,13 @@ export function mapDomainError(
   }
   return null;
 }
+
+// The common route tail: map what we know, rethrow what we don't.
+export function mapDomainErrorOrThrow(
+  error: unknown,
+  extras: ReadonlyArray<readonly [new (...args: never[]) => Error, number]> = [],
+): NextResponse {
+  const mapped = mapDomainError(error, extras);
+  if (mapped) return mapped;
+  throw error;
+}

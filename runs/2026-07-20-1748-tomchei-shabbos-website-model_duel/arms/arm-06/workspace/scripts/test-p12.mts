@@ -121,6 +121,22 @@ check("check method maps to the CHECK enum",
 check("a missing legacy_order_no is invalid",
   legacyOrdersImport.parseRow(7, { ...baseOrder, legacy_order_no: " " }).verdict === "invalid");
 
+// --- testops destructive table lists stay in sync with the schema (m13) ------
+const { WIPE_TABLES, CLEAR_TABLES } = await import("../lib/testops/actions");
+const { readFileSync } = await import("node:fs");
+const schema = readFileSync(new URL("../prisma/schema.prisma", import.meta.url), "utf8");
+const mappedTables = new Set([...schema.matchAll(/@@map\("([^"]+)"\)/g)].map((match) => match[1]));
+check("every WIPE/CLEAR table name is a real @@map table (typos fail here, not mid-rehearsal)",
+  [...WIPE_TABLES, ...CLEAR_TABLES].every((table) => mappedTables.has(table)));
+check("WIPE and CLEAR lists have no duplicate entries",
+  new Set(WIPE_TABLES).size === WIPE_TABLES.length && new Set(CLEAR_TABLES).size === CLEAR_TABLES.length);
+const SURVIVORS = ["staff_users", "permission_overrides", "auth_sessions", "audit_logs"];
+check("identity + audit tables survive every destructive action",
+  SURVIVORS.every((table) => !WIPE_TABLES.includes(table) && !CLEAR_TABLES.includes(table)));
+check("every non-survivor @@map table is in WIPE (a new table can't be silently left behind)",
+  [...mappedTables].filter((table) => !SURVIVORS.includes(table)).every((table) => WIPE_TABLES.includes(table)));
+check("CLEAR is a subset of WIPE", CLEAR_TABLES.every((table) => WIPE_TABLES.includes(table)));
+
 if (failures > 0) {
   console.error(`${failures} P12 unit check(s) failed`);
   process.exit(1);

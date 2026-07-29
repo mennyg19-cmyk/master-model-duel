@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ImportKind } from "@prisma/client";
 import { requireApiPermission } from "@/lib/auth";
 import { parseBody } from "@/lib/parse-body";
-import { mapDomainError } from "@/lib/http-errors";
+import { mapDomainErrorOrThrow } from "@/lib/http-errors";
 import { getOpenSeason } from "@/lib/seasons/queries";
 import { stageImport } from "@/lib/imports/engine";
 import { IMPORT_HANDLERS, IMPORT_PERMISSION } from "@/lib/imports/kinds";
@@ -44,8 +44,6 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, batchId: batch.id }, { status: 201 });
   } catch (error) {
-    const mapped = mapDomainError(error);
-    if (mapped) return mapped;
-    throw error;
+    return mapDomainErrorOrThrow(error);
   }
 }

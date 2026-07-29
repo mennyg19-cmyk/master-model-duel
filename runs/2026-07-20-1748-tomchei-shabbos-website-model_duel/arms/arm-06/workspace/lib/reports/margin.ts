@@ -69,14 +69,23 @@ function toMarginRow(row: MarginRowPayload): MarginRow {
   };
 }
 
-export async function getMarginRows(input: { seasonId?: string; take?: number }): Promise<MarginRow[]> {
+export interface MarginRowsPage {
+  rows: MarginRow[];
+  take: number;
+  // One extra row is fetched past the cap so the page can say "this list is
+  // truncated" instead of rendering a silently incomplete ledger.
+  truncated: boolean;
+}
+
+export async function getMarginRows(input: { seasonId?: string; take?: number }): Promise<MarginRowsPage> {
+  const take = input.take ?? 200;
   const rows = await prisma.shipment.findMany({
     where: input.seasonId ? { package: { order: { seasonId: input.seasonId } } } : undefined,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: input.take ?? 200,
+    take: take + 1,
     select: rowSelect,
   });
-  return rows.map(toMarginRow);
+  return { rows: rows.slice(0, take).map(toMarginRow), take, truncated: rows.length > take };
 }
 
 // Rollups count PURCHASED shipments only — VOIDED labels refunded the cost

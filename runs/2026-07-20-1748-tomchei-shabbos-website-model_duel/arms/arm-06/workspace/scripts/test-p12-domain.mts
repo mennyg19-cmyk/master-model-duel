@@ -11,6 +11,9 @@ import http from "node:http";
 
 process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:4106/app";
 process.env.AUTH_SECRET ??= "0123456789abcdef0123456789abcdef";
+// The suite exercises the test-class seams (test-ops guard, dev-auth rules):
+// declare the class explicitly — B1 made "production" the fail-closed default.
+process.env.APP_ENV ??= "test";
 
 let failures = 0;
 
@@ -73,6 +76,14 @@ const { getMarginRollup } = await import("../lib/reports/margin");
 const { normalizePhone } = await import("../lib/phone");
 const { requireTestEnv } = await import("../lib/testops/guard");
 const { env } = await import("../lib/env");
+const { ENV_SPEC } = await import("../lib/env-spec");
+const { expectedCommitPhrase } = await import("../lib/imports/commit-phrase");
+
+// B1: the APP_ENV spec default must be the fail-closed class — a deploy that
+// forgets the var keeps destructive test-ops (and the dev seam) disabled.
+const appEnvSpec = ENV_SPEC.find((entry) => entry.key === "APP_ENV");
+check("APP_ENV fails closed: the spec default is production, never test",
+  appEnvSpec !== undefined && appEnvSpec.schema.parse(undefined) === "production" && env.APP_ENV === "test");
 
 const staff = await prisma.staffUser.create({
   data: { email: `p12-staff-${stamp}@example.org`, name: "P12 Staff", role: "MANAGER", status: "ACTIVE", confirmedAt: new Date() },
@@ -110,21 +121,31 @@ check("a dry-run batch stages with the dryRun flag and full verdicts",
   dryBatch.dryRun === true && dryBatch.totalRows === 4 && dryBatch.validRows === 3 && dryBatch.duplicateRows === 1);
 check(
   "a dry-run batch can never commit (G-029)",
-  await throwsNamed(() => commitImport({ batchId: dryBatch.id, handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS, ctx }), "DomainRuleError"),
+  await throwsNamed(
+    () => commitImport({ batchId: dryBatch.id, handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS, confirmPhrase: expectedCommitPhrase(dryBatch.validRows), ctx }),
+    "DomainRuleError",
+  ),
 );
 await discardImport({ batchId: dryBatch.id, ctx });
 check("dry-run proves the ledger without writing: no customer landed",
   (await prisma.customer.count({ where: { email: customerEmail } })) === 0);
 
-const realBatch = await commitImport({
-  batchId: (await stageImport({
-    kind: "LEGACY_CUSTOMERS",
-    handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS,
-    filename: "legacy-customers.csv",
-    csvText: customersCsv,
-    ctx,
-  })).id,
+const stagedBook = await stageImport({
+  kind: "LEGACY_CUSTOMERS",
   handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS,
+  filename: "legacy-customers.csv",
+  csvText: customersCsv,
+  ctx,
+});
+check("a wrong typed phrase refuses the commit before anything writes (B2/G-029)",
+  await throwsNamed(
+    () => commitImport({ batchId: stagedBook.id, handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS, confirmPhrase: "yes commit it", ctx }),
+    "DomainRuleError",
+  ) && (await prisma.customer.count({ where: { email: customerEmail } })) === 0);
+const realBatch = await commitImport({
+  batchId: stagedBook.id,
+  handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS,
+  confirmPhrase: expectedCommitPhrase(stagedBook.validRows),
   ctx,
 });
 // committedRows for the customers handler counts what landed: the new
@@ -141,15 +162,17 @@ check("the book holds all three addresses (near-dupe kept for cleanup review)",
 check("the unparseable ZIP landed flagged, not dropped",
   bookCustomer.addresses.some((address) => address.needsReview && address.reviewReason?.includes("call me") === true));
 
-const reCommit = await commitImport({
-  batchId: (await stageImport({
-    kind: "LEGACY_CUSTOMERS",
-    handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS,
-    filename: "legacy-customers-again.csv",
-    csvText: customersCsv,
-    ctx,
-  })).id,
+const stagedBookAgain = await stageImport({
+  kind: "LEGACY_CUSTOMERS",
   handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS,
+  filename: "legacy-customers-again.csv",
+  csvText: customersCsv,
+  ctx,
+});
+const reCommit = await commitImport({
+  batchId: stagedBookAgain.id,
+  handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS,
+  confirmPhrase: expectedCommitPhrase(stagedBookAgain.validRows),
   ctx,
 });
 check("re-importing the same file merges — zero new customers, zero new addresses",
@@ -164,18 +187,20 @@ const ambPhone = normalizePhone(ambPhoneRaw)!;
 await prisma.customer.create({
   data: { email: `p12-amb-b-${stamp}@example.org`, name: "Amb B", phone: ambPhoneRaw, normalizedPhone: ambPhone },
 });
-const ambBatch = await commitImport({
-  batchId: (await stageImport({
-    kind: "LEGACY_CUSTOMERS",
-    handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS,
-    filename: "legacy-ambiguous.csv",
-    csvText: [
-      "customer_name,email,phone,line1,city,region,postal_code",
-      `Split Person,${ambA.email},${ambPhoneRaw},1 Split Way,Lakewood,NJ,08701`,
-    ].join("\n"),
-    ctx,
-  })).id,
+const stagedAmb = await stageImport({
+  kind: "LEGACY_CUSTOMERS",
   handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS,
+  filename: "legacy-ambiguous.csv",
+  csvText: [
+    "customer_name,email,phone,line1,city,region,postal_code",
+    `Split Person,${ambA.email},${ambPhoneRaw},1 Split Way,Lakewood,NJ,08701`,
+  ].join("\n"),
+  ctx,
+});
+const ambBatch = await commitImport({
+  batchId: stagedAmb.id,
+  handler: IMPORT_HANDLERS.LEGACY_CUSTOMERS,
+  confirmPhrase: expectedCommitPhrase(stagedAmb.validRows),
   ctx,
 });
 const ambRow = readPayload(ambBatch).rows[0];
@@ -223,15 +248,17 @@ const productsCsv = [
   "2023,Legacy Honey Cake,18.00,cake,9in",
   "2024,Shabbos Box,$47.85,box,large",
 ].join("\n");
-const productBatch = await commitImport({
-  batchId: (await stageImport({
-    kind: "LEGACY_PRODUCTS",
-    handler: IMPORT_HANDLERS.LEGACY_PRODUCTS,
-    filename: "legacy-products.csv",
-    csvText: productsCsv,
-    ctx,
-  })).id,
+const stagedProducts = await stageImport({
+  kind: "LEGACY_PRODUCTS",
   handler: IMPORT_HANDLERS.LEGACY_PRODUCTS,
+  filename: "legacy-products.csv",
+  csvText: productsCsv,
+  ctx,
+});
+const productBatch = await commitImport({
+  batchId: stagedProducts.id,
+  handler: IMPORT_HANDLERS.LEGACY_PRODUCTS,
+  confirmPhrase: expectedCommitPhrase(stagedProducts.validRows),
   ctx,
 });
 // Rerunnable: deterministic slugs mean a second run marks both rows duplicate.
@@ -252,15 +279,17 @@ const ordersCsv = [
   `LG-P12-101-${stamp},2024-02-13,p12-buyer2-${stamp}@example.org,P12 Unpaid,Shabbos Box,1,47.85,0,cash,unpaid,,7 Test Way,Testville,NJ,08701`,
   `LG-P12-102-${stamp},2024-02-14,p12-buyer3-${stamp}@example.org,P12 Refunded,Shabbos Box,1,47.85,0,check,refunded,,9 Test Way,Testville,NJ,08701`,
 ].join("\n");
-const orderBatch = await commitImport({
-  batchId: (await stageImport({
-    kind: "LEGACY_ORDERS",
-    handler: IMPORT_HANDLERS.LEGACY_ORDERS,
-    filename: "legacy-orders.csv",
-    csvText: ordersCsv,
-    ctx,
-  })).id,
+const stagedOrders = await stageImport({
+  kind: "LEGACY_ORDERS",
   handler: IMPORT_HANDLERS.LEGACY_ORDERS,
+  filename: "legacy-orders.csv",
+  csvText: ordersCsv,
+  ctx,
+});
+const orderBatch = await commitImport({
+  batchId: stagedOrders.id,
+  handler: IMPORT_HANDLERS.LEGACY_ORDERS,
+  confirmPhrase: expectedCommitPhrase(stagedOrders.validRows),
   ctx,
 });
 check("the 4-row file commits as 3 orders", orderBatch.committedRows === 3);
@@ -295,15 +324,17 @@ const imported102 = await prisma.order.findFirstOrThrow({ where: { legacyRef: `L
 check("the refunded order stays PAID with no payment rows (never enters collection queues)",
   imported102.paymentStatus === "PAID" && imported102.payments.length === 0);
 
-const orderReimport = await commitImport({
-  batchId: (await stageImport({
-    kind: "LEGACY_ORDERS",
-    handler: IMPORT_HANDLERS.LEGACY_ORDERS,
-    filename: "legacy-orders-again.csv",
-    csvText: ordersCsv,
-    ctx,
-  })).id,
+const stagedOrdersAgain = await stageImport({
+  kind: "LEGACY_ORDERS",
   handler: IMPORT_HANDLERS.LEGACY_ORDERS,
+  filename: "legacy-orders-again.csv",
+  csvText: ordersCsv,
+  ctx,
+});
+const orderReimport = await commitImport({
+  batchId: stagedOrdersAgain.id,
+  handler: IMPORT_HANDLERS.LEGACY_ORDERS,
+  confirmPhrase: expectedCommitPhrase(stagedOrdersAgain.validRows),
   ctx,
 });
 check("re-importing legacy orders marks every row duplicate via Order.legacyRef",
@@ -325,14 +356,37 @@ check("the multi-season table covers every season in one bounded pass",
 // the real page). A channel + package fixture makes the non-empty path real.
 const drillMethod = await prisma.fulfillmentMethod.findFirstOrThrow({ where: { code: "DELIVERY" } });
 await prisma.draftRecipient.updateMany({ where: { orderId: imported101.id }, data: { fulfillmentChoice: "PER_PACKAGE_DELIVERY" } });
-await prisma.package.create({
+const drillPackage = await prisma.package.create({
   data: { orderId: imported101.id, recipientName: "P12 Drill", fulfillmentMethodId: drillMethod.id, groupingKey: `p12-drill-${stamp}`, channel: "PER_PACKAGE_DELIVERY" },
 });
+// M2: the charged side of the drill-down lives on the SHIPPED row (same shape
+// as the S1 smoke ledger). A voided label returns the margin — its charge
+// must NOT count as "shipping charged", exactly like the margin rollup.
+const drillShipMethod = await prisma.fulfillmentMethod.findFirstOrThrow({ where: { code: "SHIPPED" } });
+const shippedPackage = await prisma.package.create({
+  data: { orderId: imported100.id, recipientName: "P12 Drill Ship", fulfillmentMethodId: drillShipMethod.id, groupingKey: `p12-drill-ship-${stamp}`, channel: "SHIPPED" },
+});
+await prisma.shipment.create({ data: { packageId: shippedPackage.id, status: "PURCHASED", chargedCents: 500, costCents: 400, marginCents: 100 } });
+await prisma.shipment.create({ data: { packageId: shippedPackage.id, status: "VOIDED", chargedCents: 700, costCents: 600, marginCents: 100 } });
 const methodDrill = await getMethodDrilldown(legacy2024.id);
 check("the method drill-down aggregates real channel strings (regression: fee map keys, not array indices)",
   methodDrill.length >= 1 &&
     methodDrill.every((row) => typeof row.channel === "string" && Number.isFinite(row.deliveryFeesCents) && Number.isFinite(row.shippedChargedCents)) &&
     methodDrill.some((row) => row.channel === "PER_PACKAGE_DELIVERY" && row.packages >= 1));
+// Rerun-safe parity: the drill's SHIPPED charged must equal the season's
+// PURCHASED-only ground truth while a nonzero VOIDED charge exists that any
+// regression to counting VOIDED would inflate.
+const purchasedTruth = await prisma.shipment.aggregate({
+  where: { package: { order: { seasonId: legacy2024.id } }, status: "PURCHASED" },
+  _sum: { chargedCents: true },
+});
+const voidedTruth = await prisma.shipment.aggregate({
+  where: { package: { order: { seasonId: legacy2024.id } }, status: "VOIDED" },
+  _sum: { chargedCents: true },
+});
+check("the drill-down counts PURCHASED-only shipping charged (M2 margin-rollup parity; VOIDED excluded)",
+  (voidedTruth._sum.chargedCents ?? 0) > 0 &&
+    methodDrill.find((row) => row.channel === "SHIPPED")?.shippedChargedCents === (purchasedTruth._sum.chargedCents ?? 0));
 const legacy2023 = await prisma.season.findFirstOrThrow({ where: { name: "Legacy 2023" } });
 const emptyDrill = await getMethodDrilldown(legacy2023.id);
 check("a season with no channel data drills empty instead of throwing", Array.isArray(emptyDrill) && emptyDrill.length === 0);

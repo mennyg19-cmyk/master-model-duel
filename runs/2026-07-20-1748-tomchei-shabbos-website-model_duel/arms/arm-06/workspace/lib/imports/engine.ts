@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { DomainRuleError, NotFoundError } from "@/lib/errors";
 import { AuditContextLike, recordAudit } from "@/lib/audit";
 import { parseCsv } from "@/lib/csv";
+import { expectedCommitPhrase } from "@/lib/imports/commit-phrase";
 
 // R-063/R-143: staged, atomic CSV import. Stage parses + validates + marks
 // duplicates and stores the verdict per row; commit re-checks duplicates
@@ -145,6 +146,8 @@ export async function stageImport(input: {
 export async function commitImport(input: {
   batchId: string;
   handler: KindHandler;
+  /** G-029: the operator's typed copy of the phrase shown by the preview. */
+  confirmPhrase: string;
   ctx: AuditContextLike;
 }): Promise<ImportBatch> {
   return prisma.$transaction(async (tx) => {
@@ -157,6 +160,13 @@ export async function commitImport(input: {
       // G-029: dry-run exists precisely to prove the ledger without writing;
       // committing it would be a contradiction. Discard it instead.
       throw new DomainRuleError("This batch is a dry run — it staged and validated only. Re-upload without dry-run to commit.");
+    }
+    // G-029's other half: the commit only proceeds when the operator types
+    // the exact phrase the preview derived from the staged verdict ledger —
+    // proof the dry-run summary was read, enforced server-side.
+    const expected = expectedCommitPhrase(batch.validRows);
+    if (input.confirmPhrase !== expected) {
+      throw new DomainRuleError(`Commit requires the exact confirmation phrase shown by the preview: "${expected}"`);
     }
 
     const payload = readPayload(batch);

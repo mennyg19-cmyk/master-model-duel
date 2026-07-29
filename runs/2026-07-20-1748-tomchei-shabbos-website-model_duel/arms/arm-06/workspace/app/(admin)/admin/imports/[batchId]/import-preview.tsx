@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-fetch";
+import { expectedCommitPhrase } from "@/lib/imports/commit-phrase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -20,12 +21,14 @@ const VERDICT_TONES = { valid: "green", duplicate: "amber", invalid: "red" } as 
 // audited.
 export function ImportPreview({
   batchId,
+  filename,
   status,
   dryRun,
   counts,
   rows,
 }: {
   batchId: string;
+  filename: string;
   status: "STAGED" | "COMMITTED" | "DISCARDED";
   dryRun: boolean;
   counts: { total: number; valid: number; duplicate: number; invalid: number; committed: number };
@@ -34,12 +37,16 @@ export function ImportPreview({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [phrase, setPhrase] = useState("");
 
   async function decide(action: "commit" | "discard") {
     if (action === "discard" && !window.confirm("Discard this staged import? Nothing has been written.")) return;
     setBusy(action);
     setError(null);
-    const result = await apiFetch(`/api/admin/imports/${batchId}/${action}`, { method: "POST", body: {} });
+    const result = await apiFetch(`/api/admin/imports/${batchId}/${action}`, {
+      method: "POST",
+      body: action === "commit" ? { confirmPhrase: phrase } : {},
+    });
     setBusy(null);
     if (!result.ok) {
       setError(result.body.error ?? `Could not ${action}`);
@@ -49,6 +56,9 @@ export function ImportPreview({
   }
 
   const columns = [...new Set(rows.flatMap((row) => Object.keys(row.data)))];
+  // G-029: the commit button arms only when the operator types the exact
+  // phrase derived from this verdict ledger — the server re-checks it.
+  const commitPhrase = expectedCommitPhrase(counts.valid);
 
   return (
     <div className="mt-5">
@@ -68,7 +78,26 @@ export function ImportPreview({
         )}
         {status === "STAGED" && !dryRun && (
           <>
-            <Button size="sm" onClick={() => decide("commit")} disabled={busy !== null || counts.valid === 0} data-import-commit>
+            <label className="flex items-center gap-2 text-sm text-stone-700">
+              <span>
+                Type <span className="font-mono font-medium text-stone-900">{commitPhrase}</span> to commit:
+              </span>
+              <input
+                type="text"
+                className="rounded-md border border-stone-300 px-2 py-1 text-sm"
+                value={phrase}
+                onChange={(event) => setPhrase(event.target.value)}
+                placeholder={commitPhrase}
+                autoComplete="off"
+                data-import-confirm-phrase
+              />
+            </label>
+            <Button
+              size="sm"
+              onClick={() => decide("commit")}
+              disabled={busy !== null || counts.valid === 0 || phrase !== commitPhrase}
+              data-import-commit
+            >
               {busy === "commit" ? "Committing…" : `Commit ${counts.valid} row${counts.valid === 1 ? "" : "s"}`}
             </Button>
             <Button variant="secondary" size="sm" onClick={() => decide("discard")} disabled={busy !== null} data-import-discard>
@@ -84,6 +113,9 @@ export function ImportPreview({
       )}
 
       <div className="mt-4 overflow-x-auto">
+        <p className="mb-1 text-xs text-stone-500" data-import-filename>
+          Rows from {filename}
+        </p>
         <table className="w-full border-collapse text-sm" data-import-rows>
           <thead>
             <tr className="border-b border-stone-200 text-left text-xs uppercase tracking-wide text-stone-500">
