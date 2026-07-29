@@ -61,11 +61,14 @@ export type AuditAction =
   | "delivered"
   | "pickup_ready"
   | "pickup_expired"
-  // P10 season lifecycle + repeat flows.
+  // P10 season lifecycle + repeat flows. The cron flip gets its own action
+  // (not "season_schedule") so manager schedule edits and system flips are
+  // separable in the audit log.
   | "season_create"
   | "season_open"
   | "season_close"
   | "season_schedule"
+  | "season_flip_cron"
   | "repeat_create"
   | "repeat_bulk_history"
   | "legacy_import";

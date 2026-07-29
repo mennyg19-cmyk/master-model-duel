@@ -92,16 +92,18 @@ export function OrderActions({
   async function repeatOrder() {
     setRepeatedRef(null);
     await run("repeat", async () => {
-      const result = await apiFetch<{ report?: { results: { outcome: string; reason?: string; draftRef?: string }[] } }>(
-        "/api/admin/orders/bulk",
-        { method: "POST", body: { action: "repeat", orderIds: [orderId] } },
-      );
-      const first = result.body.report?.results[0];
-      if (result.ok && first && first.outcome !== "skipped") {
-        setRepeatedRef(first.draftRef ?? null);
-        return result;
+      // One-click staff repeat: the repeat route with an empty body
+      // auto-confirms the plan server-side and works cross-season (the bulk
+      // list action stays open-season-only by design).
+      const response = await apiFetch<{ draftRef?: string }>(`/api/admin/orders/${orderId}/repeat`, {
+        method: "POST",
+        body: {},
+      });
+      if (response.ok && response.body.draftRef) {
+        setRepeatedRef(response.body.draftRef);
+        return response;
       }
-      return { ok: false, body: { error: first?.reason ?? result.body.error ?? "Could not repeat the order" } };
+      return { ok: false, body: { error: response.body.error ?? "Could not repeat the order" } };
     });
   }
 

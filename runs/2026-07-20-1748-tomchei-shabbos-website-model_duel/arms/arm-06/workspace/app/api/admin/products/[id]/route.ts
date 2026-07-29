@@ -86,8 +86,9 @@ export async function PATCH(request: Request, { params }: Props) {
         return NextResponse.json({ error: "Unknown replacement product" }, { status: 400 });
       }
       // Replacement chains walk forward (P10): the replacement must belong to
-      // a strictly newer season than the product being replaced.
-      if (target.season.name <= season.name) {
+      // a strictly newer season than the product being replaced. "Newer" is
+      // creation order — season names are free-form strings, not a recency key.
+      if (target.season.createdAt <= season.createdAt) {
         return NextResponse.json(
           { error: "A replacement product must belong to a newer season" },
           { status: 400 },

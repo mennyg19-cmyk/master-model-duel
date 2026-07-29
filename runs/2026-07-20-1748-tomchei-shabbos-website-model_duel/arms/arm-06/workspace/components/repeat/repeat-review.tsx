@@ -11,65 +11,20 @@ import { Card } from "@/components/ui/card";
 // this order" and the new draft. Shared by the customer flow
 // (/account/orders/[id]/repeat) and the staff flow (/admin/orders/[id]/repeat);
 // the only difference is the confirm endpoint.
+//
+// The plan types are `import type` from the server modules — erased at
+// compile time, so no server code reaches the client bundle and the plan
+// shape has one source of truth (lib/repeat/plan.ts + matcher.ts).
 
-export interface ReviewSuggestion {
-  productId: string;
-  name: string;
-  priceCents: number;
-  priceDeltaCents: number;
-}
+import type { PriceSuggestion as ReviewSuggestion } from "@/lib/repeat/matcher";
+import type {
+  RepeatPlanAddOn as ReviewAddOn,
+  RepeatPlanLine as ReviewLine,
+  RepeatPlanRecipient as ReviewRecipient,
+  RepeatReviewPlan as ReviewPlan,
+} from "@/lib/repeat/plan";
 
-export interface ReviewAddOn {
-  sourceLineId: string;
-  sourceName: string;
-  qty: number;
-  status: "auto" | "dropped";
-  addOnId: string | null;
-  unitPriceCents: number | null;
-  note: string | null;
-}
-
-export interface ReviewLine {
-  sourceLineId: string;
-  sourceName: string;
-  sourceUnitPriceCents: number;
-  sourceOptionLabel: string | null;
-  qty: number;
-  sourceRecipientId: string | null;
-  status: "auto" | "unmapped";
-  targetProductId: string | null;
-  targetName: string | null;
-  targetUnitPriceCents: number | null;
-  optionValueId: string | null;
-  optionLabel: string | null;
-  notes: string[];
-  suggestions?: ReviewSuggestion[];
-  addOns: ReviewAddOn[];
-}
-
-export interface ReviewRecipient {
-  sourceRecipientId: string;
-  name: string;
-  line1: string;
-  line2: string | null;
-  city: string;
-  region: string;
-  postalCode: string;
-  country: string;
-  matchedAddressId: string | null;
-  greeting: string;
-}
-
-export interface ReviewPlan {
-  sourceOrderId: string;
-  sourceOrderNumber: number | null;
-  sourceSeasonName: string;
-  targetSeasonId: string;
-  targetSeasonName: string;
-  lines: ReviewLine[];
-  recipients: ReviewRecipient[];
-  unmappedCount: number;
-}
+export type { ReviewAddOn, ReviewLine, ReviewPlan, ReviewRecipient, ReviewSuggestion };
 
 type LineAction = { action: "keep" | "remove" | "swap"; targetProductId?: string };
 

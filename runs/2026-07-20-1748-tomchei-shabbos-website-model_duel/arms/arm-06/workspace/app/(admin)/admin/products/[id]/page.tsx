@@ -47,7 +47,7 @@ export default async function EditProductPage({ params }: Props) {
     prisma.product.findMany({
       where: { id: { not: id } },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, season: { select: { name: true } } },
+      select: { id: true, name: true, season: { select: { name: true, createdAt: true } } },
     }),
   ]);
 
@@ -61,10 +61,11 @@ export default async function EditProductPage({ params }: Props) {
 
   // P10 (UR-007): show where this product's replacement chain lands in the
   // open season (what a repeat would resolve to), so a dead end is visible
-  // while mapping. Off-season (nothing open) falls back to the newest season.
-  const targetSeason =
-    (await prisma.season.findFirst({ where: { status: "OPEN" } })) ??
-    (await prisma.season.findFirst({ orderBy: { createdAt: "desc" } }));
+  // while mapping. OPEN sorts first by enum ordinal, so one query yields the
+  // open season or, off-season, the newest by creation.
+  const targetSeason = await prisma.season.findFirst({
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+  });
   const chainTargetSeasonName = targetSeason?.name ?? null;
   const chainPreview =
     targetSeason && product.seasonId !== targetSeason.id
@@ -72,10 +73,11 @@ export default async function EditProductPage({ params }: Props) {
       : null;
 
   // Replacement links point forward only (P10's repeat-order chain walk):
-  // the editor offers products from strictly newer seasons.
-  const productSeasonName = seasons.find((season) => season.id === product.seasonId)?.name ?? "";
+  // the editor offers products from strictly newer seasons. "Newer" is
+  // creation order — season names are free-form strings, not a recency key.
+  const productSeasonCreatedAt = seasons.find((season) => season.id === product.seasonId)?.createdAt;
   const replacementOptions = otherProducts
-    .filter((candidate) => candidate.season.name > productSeasonName)
+    .filter((candidate) => productSeasonCreatedAt !== undefined && candidate.season.createdAt > productSeasonCreatedAt)
     .map((candidate) => ({ id: candidate.id, name: candidate.name }));
 
   return (

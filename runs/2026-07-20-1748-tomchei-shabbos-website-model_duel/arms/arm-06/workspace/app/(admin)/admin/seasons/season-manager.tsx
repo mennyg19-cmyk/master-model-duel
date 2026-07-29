@@ -7,16 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import type { SeasonManagerRow } from "@/lib/seasons/queries";
 
-interface SeasonRow {
-  id: string;
-  name: string;
-  status: "OPEN" | "CLOSED";
+// Server type via `import type` (erased at compile time); the page serializes
+// Date → ISO at the boundary.
+type SeasonRow = Omit<SeasonManagerRow, "scheduledOpensAt" | "scheduledClosesAt"> & {
   scheduledOpensAt: string | null;
   scheduledClosesAt: string | null;
-  productCount: number;
-  orderCount: number;
-}
+};
 
 /** datetime-local ⇄ ISO: input shows local time, API stores UTC. */
 function toIso(local: string): string | null {
@@ -55,10 +53,10 @@ export function SeasonManager({ seasons }: { seasons: SeasonRow[] }) {
     setBusy(key);
     setError(null);
     setNote(null);
-    const result = await apiFetch(path, { method, body });
+    const response = await apiFetch(path, { method, body });
     setBusy(null);
-    if (!result.ok) {
-      setError(result.body.error ?? "Action failed");
+    if (!response.ok) {
+      setError(response.body.error ?? "Action failed");
       return false;
     }
     setNote(okNote);

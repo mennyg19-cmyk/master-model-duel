@@ -41,6 +41,7 @@ export interface ResolvedLine {
 export async function resolveDraftLines(
   tx: Prisma.TransactionClient,
   inputLines: DraftLineInput[],
+  seasonId: string,
 ): Promise<ResolvedLine[]> {
   if (inputLines.length === 0) {
     throw new DomainRuleError("Order must have at least one line");
@@ -96,6 +97,14 @@ export async function resolveDraftLines(
       }
       const product = products.get(line.productId);
       if (!product) throw new NotFoundError("Product", line.productId);
+      // The draft's season is the catalog boundary: a line priced from a
+      // prior-season, inactive, or otherwise out-of-catalog product is a
+      // price-integrity bypass (a repeat-swap target is client-supplied).
+      if (product.seasonId !== seasonId || !product.active) {
+        throw new DomainRuleError(
+          `Product ${product.slug} is not in this season's active catalog; expected an active product of season ${seasonId}`,
+        );
+      }
 
       let optionValueId: string | null = null;
       let optionLabel: string | null = null;

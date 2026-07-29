@@ -169,7 +169,7 @@ export async function saveDraft(input: {
     }
 
     const recipientIds = await writeRecipients(tx, order.id, input.customerId, recipients, input.allowBookWrites);
-    const resolved = input.lines.length === 0 ? [] : await resolveDraftLines(tx, input.lines);
+    const resolved = input.lines.length === 0 ? [] : await resolveDraftLines(tx, input.lines, season.id);
     await insertResolvedLines(tx, order.id, resolved, recipientIds);
 
     const totalCents = resolved.reduce((sum, line) => sum + line.lineTotalCents, 0);

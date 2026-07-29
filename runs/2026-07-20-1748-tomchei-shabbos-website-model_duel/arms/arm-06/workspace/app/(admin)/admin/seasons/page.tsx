@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requirePermission } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import { listSeasonManagerRows } from "@/lib/seasons/queries";
 import { SeasonManager } from "./season-manager";
 
 export const metadata: Metadata = { title: "Seasons" };
@@ -12,10 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function SeasonsPage() {
   await requirePermission("catalog.manage");
 
-  const seasons = await prisma.season.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { _count: { select: { products: true, orders: true } } },
-  });
+  const seasons = await listSeasonManagerRows();
 
   return (
     <div>
@@ -26,13 +23,9 @@ export default async function SeasonsPage() {
       </p>
       <SeasonManager
         seasons={seasons.map((season) => ({
-          id: season.id,
-          name: season.name,
-          status: season.status,
+          ...season,
           scheduledOpensAt: season.scheduledOpensAt?.toISOString() ?? null,
           scheduledClosesAt: season.scheduledClosesAt?.toISOString() ?? null,
-          productCount: season._count.products,
-          orderCount: season._count.orders,
         }))}
       />
     </div>

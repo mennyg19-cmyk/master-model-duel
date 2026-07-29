@@ -5,6 +5,7 @@
  * the plan is rebuilt server-side and the P4 draft engine re-snapshots every
  * price from the catalog, so nothing client-sent is trusted (R-149/R-150).
  */
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { DomainRuleError, NotFoundError } from "@/lib/errors";
 import { buildRepeatPlan, RepeatReviewPlan } from "@/lib/repeat/plan";
@@ -99,13 +100,11 @@ export function applyConfirmations(
 
     let targetProductId = planLine.targetProductId;
     let optionValueId = planLine.optionValueId;
-    let targetName = planLine.targetName;
     if (action === "swap") {
       if (!decision?.targetProductId) {
         throw new DomainRuleError(`Swap of "${planLine.sourceName}" is missing its replacement product`);
       }
       targetProductId = decision.targetProductId;
-      targetName = decision.targetProductId; // display name resolved by the draft engine
       optionValueId = null; // source option rarely survives a manual swap; engine validates
       summary.swapped.push({ from: planLine.sourceName, to: targetProductId });
     } else {
@@ -165,14 +164,26 @@ export function autoConfirmPlan(plan: RepeatReviewPlan): RepeatConfirmInput {
   };
 }
 
-export async function createDraftFromRepeat(input: RepeatConfirmInput): Promise<RepeatDraftResult> {
+/**
+ * Confirm decisions → draft. Server-side callers that already hold a plan
+ * (one-click, bulk history) pass it in so the N+1 chain walk runs once per
+ * order; the client confirm route omits it and the plan is rebuilt here —
+ * nothing client-sent is trusted (R-149/R-150).
+ */
+export async function createDraftFromRepeat(
+  input: RepeatConfirmInput,
+  builtPlan?: RepeatReviewPlan,
+): Promise<RepeatDraftResult> {
   const source = await prisma.order.findUnique({
     where: { id: input.sourceOrderId },
     select: { id: true, customerId: true },
   });
   if (!source) throw new NotFoundError("Order", input.sourceOrderId);
+  if (builtPlan && builtPlan.sourceOrderId !== input.sourceOrderId) {
+    throw new DomainRuleError("The plan belongs to a different source order");
+  }
 
-  const plan = await buildRepeatPlan(input.sourceOrderId);
+  const plan = builtPlan ?? (await buildRepeatPlan(input.sourceOrderId));
   const { lines, recipients, summary } = applyConfirmations(plan, input);
 
   // Swap display names: report the catalog name, not the raw id.
@@ -185,13 +196,27 @@ export async function createDraftFromRepeat(input: RepeatConfirmInput): Promise<
     for (const swap of summary.swapped) swap.to = nameById.get(swap.to) ?? swap.to;
   }
 
-  const draft = await saveDraft({
-    seasonId: plan.targetSeasonId,
-    customerId: source.customerId,
-    lines,
-    recipients,
-    allowBookWrites: false,
-    repeatedFromOrderId: source.id,
-  });
+  let draft: DraftWithContents;
+  try {
+    draft = await saveDraft({
+      seasonId: plan.targetSeasonId,
+      customerId: source.customerId,
+      lines,
+      recipients,
+      allowBookWrites: false,
+      repeatedFromOrderId: source.id,
+    });
+  } catch (error) {
+    // The repeat-lineage unique index settles concurrent repeats: the loser
+    // gets the same "already repeated" outcome the bulk skip reports.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002" &&
+      String((error.meta as { target?: unknown } | undefined)?.target ?? "").includes("repeatedFromOrderId")
+    ) {
+      throw new DomainRuleError("Order was already repeated into the open season");
+    }
+    throw error;
+  }
   return { draft, summary };
 }

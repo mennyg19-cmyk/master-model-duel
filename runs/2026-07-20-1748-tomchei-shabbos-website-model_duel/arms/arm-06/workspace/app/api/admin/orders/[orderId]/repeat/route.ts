@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiPermission } from "@/lib/auth";
-import { parseBody } from "@/lib/parse-body";
 import { mapDomainError } from "@/lib/http-errors";
 import { recordAudit } from "@/lib/audit";
-import { createDraftFromRepeat } from "@/lib/repeat/create";
+import { autoConfirmPlan, createDraftFromRepeat } from "@/lib/repeat/create";
 import { buildRepeatPlan } from "@/lib/repeat/plan";
 
 export const dynamic = "force-dynamic";
@@ -48,17 +47,44 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ord
   }
 }
 
-// P10 (R-057): staff repeat with review — same confirm contract as the
-// customer flow, gated on payments.manage like the P6 one-click bulk repeat.
+// P10 (R-057): staff repeat — two shapes, one route. A body with line and
+// recipient decisions is the review confirm (same contract as the customer
+// flow); an empty body is the one-click repeat, which auto-confirms the plan
+// server-side. Both work cross-season (no open-season scope, unlike the P6
+// bulk list action) and both are gated on payments.manage.
 export async function POST(request: Request, { params }: { params: Promise<{ orderId: string }> }) {
   const gate = await requireApiPermission("payments.manage");
   if (!gate.ok) return gate.response;
   const { orderId } = await params;
 
-  const parsed = await parseBody(request, confirmSchema, "Line and recipient decisions are required");
-  if (!parsed.ok) return parsed.response;
+  const raw = await request.json().catch(() => null);
+  const oneClick = raw === null || (typeof raw === "object" && !Array.isArray((raw as { lines?: unknown }).lines));
 
   try {
+    if (oneClick) {
+      const plan = await buildRepeatPlan(orderId);
+      const { draft, summary } = await createDraftFromRepeat(autoConfirmPlan(plan), plan);
+      await recordAudit({
+        ctx: gate.ctx,
+        action: "repeat_create",
+        targetType: "Order",
+        targetId: orderId,
+        metadata: {
+          draftRef: draft.draftRef,
+          kept: summary.kept.length,
+          swapped: 0,
+          removed: summary.removed.length,
+          staff: true,
+          oneClick: true,
+        },
+      });
+      return NextResponse.json({ ok: true, draftRef: draft.draftRef, summary });
+    }
+
+    const parsed = confirmSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Line and recipient decisions are required" }, { status: 400 });
+    }
     const { draft, summary } = await createDraftFromRepeat({
       sourceOrderId: orderId,
       lines: parsed.data.lines,

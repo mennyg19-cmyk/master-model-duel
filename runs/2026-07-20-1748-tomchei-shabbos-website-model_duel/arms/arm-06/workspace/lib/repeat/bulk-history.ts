@@ -6,6 +6,8 @@
  * the OPEN season's orders. This module only acts on CLOSED-season sources
  * and is idempotent: an order that already has a non-discarded repeat draft
  * in the open season is a skipped row, so a re-run never double-creates.
+ * Concurrency is settled by the orders_repeat_lineage_unique partial index —
+ * a racing second creator loses the insert and reports the same skip.
  */
 import { prisma } from "@/lib/db";
 import { DomainRuleError } from "@/lib/errors";
@@ -14,6 +16,9 @@ import { getOpenSeason } from "@/lib/seasons/queries";
 import { buildRepeatPlan } from "@/lib/repeat/plan";
 import { autoConfirmPlan, createDraftFromRepeat } from "@/lib/repeat/create";
 import { BULK_ACTION_LIMIT, BulkItemResult } from "@/lib/orders/bulk";
+
+/** The picker's candidate pool is wider than one run (capped at BULK_ACTION_LIMIT). */
+export const HISTORY_CANDIDATE_LIMIT = 500;
 
 export interface BulkHistoryRow {
   orderId: string;
@@ -60,7 +65,7 @@ export async function listBulkHistoryCandidates(input: {
       },
     },
     orderBy: [{ customer: { name: "asc" } }, { orderNumber: "asc" }],
-    take: 500,
+    take: HISTORY_CANDIDATE_LIMIT,
   });
 
   return {
@@ -131,8 +136,10 @@ export async function runBulkHistory(input: {
     }
 
     try {
+      // Plan built once per order and handed to the create step — the chain
+      // walk is N+1 per source line, so a rebuild would double the batch load.
       const plan = await buildRepeatPlan(orderId);
-      const { draft } = await createDraftFromRepeat(autoConfirmPlan(plan));
+      const { draft } = await createDraftFromRepeat(autoConfirmPlan(plan), plan);
       const dropped = plan.unmappedCount;
       results.push({
         orderId,

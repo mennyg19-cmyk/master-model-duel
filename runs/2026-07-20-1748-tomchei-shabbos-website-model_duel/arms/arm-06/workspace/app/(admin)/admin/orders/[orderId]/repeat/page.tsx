@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 
 // P10 (R-057): staff single-order repeat with the review step — replacement
 // picks and recipient confirmation land in a fresh draft on the customer's
-// account. The one-click repeat (no review) stays on the order page.
+// account. Finalized orders only (a DRAFT source is already current-season
+// state). The one-click repeat (no review) stays on the order page.
 export default async function AdminRepeatPage({ params }: { params: Promise<{ orderId: string }> }) {
   await requirePermission("payments.manage");
   const { orderId } = await params;
@@ -21,7 +22,7 @@ export default async function AdminRepeatPage({ params }: { params: Promise<{ or
     where: { id: orderId },
     select: { id: true, status: true, draftRef: true, wireFormat: true, customer: { select: { name: true } } },
   });
-  if (!order || order.status === "DISCARDED") notFound();
+  if (!order || order.status !== "FINALIZED") notFound();
 
   const openSeason = await getOpenSeason();
   if (!openSeason) {

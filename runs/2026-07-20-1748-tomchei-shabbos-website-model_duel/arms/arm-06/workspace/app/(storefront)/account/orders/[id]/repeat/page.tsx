@@ -12,8 +12,9 @@ export const dynamic = "force-dynamic";
 
 // P10 (UR-007/G-012): customer repeat — the middle review page. Replacements
 // (chain-resolved or price-smart picks) and recipients are confirmed here
-// before anything becomes a draft. Works on finalized orders AND drafts, and
-// on imported prior-year orders (no draftRef required).
+// before anything becomes a draft. Finalized orders only (including imported
+// prior-year orders — no draftRef required); a DRAFT source is already
+// current-season state and repeating it just duplicates the order.
 export default async function RepeatOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireCustomer();
   const { id } = await params;
@@ -22,7 +23,7 @@ export default async function RepeatOrderPage({ params }: { params: Promise<{ id
     where: { id },
     select: { id: true, customerId: true, status: true, draftRef: true, wireFormat: true },
   });
-  if (!order || order.customerId !== ctx.customer.id || order.status === "DISCARDED") notFound();
+  if (!order || order.customerId !== ctx.customer.id || order.status !== "FINALIZED") notFound();
 
   const openSeason = await getOpenSeason();
   if (!openSeason) {

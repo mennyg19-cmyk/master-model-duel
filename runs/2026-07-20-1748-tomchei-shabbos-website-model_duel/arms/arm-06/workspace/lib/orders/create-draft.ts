@@ -21,7 +21,7 @@ export async function createDraftOrder(input: {
   return prisma.$transaction(async (tx) => {
     const season = await assertOpenSeason(tx, input.seasonId);
 
-    const resolved = await resolveDraftLines(tx, input.lines);
+    const resolved = await resolveDraftLines(tx, input.lines, season.id);
     const draftRef = await claimDraftRef(tx, season.id, season.name);
     const totalCents = resolved.reduce((sum, line) => sum + line.lineTotalCents, 0);
 

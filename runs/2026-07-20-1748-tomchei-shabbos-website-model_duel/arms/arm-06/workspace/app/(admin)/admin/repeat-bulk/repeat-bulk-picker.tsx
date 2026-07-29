@@ -7,26 +7,14 @@ import { formatCents } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
+import type { BulkItemResult } from "@/lib/orders/bulk";
+import type { BulkHistoryRow } from "@/lib/repeat/bulk-history";
 
-interface CandidateRow {
-  orderId: string;
-  orderNumber: number | null;
-  customerId: string;
-  customerName: string;
-  customerEmail: string;
-  seasonName: string;
-  lineCount: number;
-  totalCents: number;
-  placedAt: string;
-  alreadyRepeated: boolean;
-}
-
-interface RunResult {
-  orderId: string;
-  outcome: "repeated" | "discarded" | "skipped";
-  reason?: string;
-  draftRef?: string;
-}
+// Server types via `import type` (erased at compile time) — the page
+// serializes Date → ISO at the boundary, everything else stays one source
+// of truth.
+type CandidateRow = Omit<BulkHistoryRow, "placedAt"> & { placedAt: string };
+type RunResult = BulkItemResult;
 
 export function RepeatBulkPicker({
   rows,
@@ -58,16 +46,16 @@ export function RepeatBulkPicker({
     setBusy(true);
     setError(null);
     setReport(null);
-    const result = await apiFetch<{ report?: { results: RunResult[] } }>("/api/admin/repeat-bulk", {
+    const response = await apiFetch<{ report?: { results: RunResult[] } }>("/api/admin/repeat-bulk", {
       method: "POST",
       body: { orderIds: [...selected] },
     });
     setBusy(false);
-    if (!result.ok || !result.body.report) {
-      setError(result.body.error ?? "Bulk repeat failed");
+    if (!response.ok || !response.body.report) {
+      setError(response.body.error ?? "Bulk repeat failed");
       return;
     }
-    setReport(result.body.report.results);
+    setReport(response.body.report.results);
     setSelected(new Set());
     router.refresh();
   }
@@ -116,10 +104,10 @@ export function RepeatBulkPicker({
         <Card className="mt-4 p-4" data-bulk-report>
           <h3 className="font-semibold text-stone-900">Last run</h3>
           <ul className="mt-2 flex flex-col gap-1 text-sm">
-            {report.map((result) => (
-              <li key={result.orderId} className={result.outcome === "skipped" ? "text-amber-800" : "text-green-800"}>
-                {result.outcome === "skipped" ? "Skipped" : `Repeated → ${result.draftRef}`}
-                {result.reason ? ` — ${result.reason}` : ""}
+            {report.map((runRow) => (
+              <li key={runRow.orderId} className={runRow.outcome === "skipped" ? "text-amber-800" : "text-green-800"}>
+                {runRow.outcome === "skipped" ? "Skipped" : `Repeated → ${runRow.draftRef}`}
+                {runRow.reason ? ` — ${runRow.reason}` : ""}
               </li>
             ))}
           </ul>

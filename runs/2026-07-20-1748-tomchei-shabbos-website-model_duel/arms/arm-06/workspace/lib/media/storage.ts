@@ -2,7 +2,7 @@
 // and only when BLOB_READ_WRITE_TOKEN is set — the same lazy-singleton
 // discipline as the Stripe seam (R-170). Local dev/smoke writes to .uploads/
 // and serves bytes through /uploads/<storedName>.
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { env } from "@/lib/env";
 
@@ -38,6 +38,30 @@ export async function putObject(input: {
   await mkdir(UPLOADS_DIR, { recursive: true });
   await writeFile(path.join(UPLOADS_DIR, input.storedName), input.bytes);
   return { url: `/uploads/${input.storedName}`, storedName: input.storedName, driver: "local" };
+}
+
+/**
+ * Duplicate a stored object under a fresh unique name. The season wizard's
+ * catalog copy uses this so the copied MediaAsset owns its own bytes —
+ * deleting either asset later never yanks the other season's photo. Blob
+ * sources read through their public URL; writes go through the CURRENT
+ * driver, so a blob→local dev copy works too.
+ */
+export async function copyObject(source: {
+  storedName: string;
+  url: string;
+  contentType: string;
+  driver: string;
+}): Promise<StoredObject> {
+  const bytes =
+    source.driver === "vercel-blob"
+      ? new Uint8Array(await (await fetch(source.url)).arrayBuffer())
+      : await readFile(path.join(UPLOADS_DIR, source.storedName));
+  return putObject({
+    storedName: `copy-${crypto.randomUUID()}-${source.storedName}`,
+    contentType: source.contentType,
+    bytes,
+  });
 }
 
 export async function deleteObject(storedName: string, driver: string): Promise<void> {

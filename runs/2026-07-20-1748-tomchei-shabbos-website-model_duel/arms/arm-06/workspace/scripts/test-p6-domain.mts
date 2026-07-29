@@ -260,9 +260,12 @@ const draftToDiscard = await saveDraft({
   allowBookWrites: false,
 });
 
+// The bulk leg needs its own untouched source: repeatSource was repeated
+// above, and P10's lineage rule refuses a second repeat of any order.
+const bulkRepeatSource = await makeFinalizedOrder(96004, [{ productId: product.id, qty: 1, name: "P6 Box" }]);
 const bulkReport = await runBulkOrderAction({
   action: "repeat",
-  orderIds: [repeatSource.id, repeatSource.id, draftToDiscard.id, "missing-id"],
+  orderIds: [bulkRepeatSource.id, bulkRepeatSource.id, draftToDiscard.id, "missing-id"],
   ctx,
 });
 check(
@@ -271,6 +274,12 @@ check(
     && bulkReport.results[1].reason?.includes("duplicate in batch")
     && bulkReport.results[2].reason?.includes("DRAFT")
     && bulkReport.results[3].reason === "not an order in the open season",
+);
+// M2: an order with a live repeat draft skips deterministically in bulk too.
+const bulkRerepeat = await runBulkOrderAction({ action: "repeat", orderIds: [repeatSource.id], ctx });
+check(
+  "bulk repeat of an already-repeated order skips with the lineage reason",
+  bulkRerepeat.counts.skipped === 1 && bulkRerepeat.results[0].reason?.includes("already repeated") === true,
 );
 const bulkDiscard = await runBulkOrderAction({ action: "discard", orderIds: [draftToDiscard.id], ctx });
 check(

@@ -71,8 +71,6 @@ export interface RepeatReviewPlan {
   unmappedCount: number;
 }
 
-type SourceOrder = NonNullable<Awaited<ReturnType<typeof loadSourceOrder>>>;
-
 async function loadSourceOrder(orderId: string) {
   return prisma.order.findUnique({
     where: { id: orderId },
@@ -122,8 +120,11 @@ async function mapAddOn(
 export async function buildRepeatPlan(orderId: string): Promise<RepeatReviewPlan> {
   const order = await loadSourceOrder(orderId);
   if (!order) throw new NotFoundError("Order", orderId);
-  if (order.status !== "FINALIZED" && order.status !== "DRAFT") {
-    throw new DomainRuleError(`Order is ${order.status}; only finalized orders or drafts can be repeated`);
+  // One gate for all three entry points (customer/staff review, one-click):
+  // only a finalized order is repeatable — repeating an in-progress draft
+  // would clone an unfinished cart.
+  if (order.status !== "FINALIZED") {
+    throw new DomainRuleError(`Order is ${order.status}; expected FINALIZED to repeat`);
   }
   const season = await getOpenSeason();
   if (!season) throw new DomainRuleError("No open season to repeat the order into");
@@ -269,6 +270,3 @@ export async function buildRepeatPlan(orderId: string): Promise<RepeatReviewPlan
     unmappedCount: lines.filter((line) => line.status === "unmapped").length,
   };
 }
-
-/** Source order for the review page: full plan above runs against this type. */
-export type { SourceOrder as RepeatSourceOrder };

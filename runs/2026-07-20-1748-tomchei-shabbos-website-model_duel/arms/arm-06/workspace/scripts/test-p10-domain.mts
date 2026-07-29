@@ -2,11 +2,14 @@
 // (auto map, price-smart suggestions, greeting prefill), confirm→draft with
 // lineage, staff one-click upgrade, bulk history idempotency, the season
 // wizard + manager flip + cron auto-flip, and the legacy import hook.
+// P10-fix-pass pins are labeled with their aggregate-review ids (M1…m17).
 
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { saveDraft } from "../lib/orders/drafts";
 import { repeatOrder } from "../lib/orders/repeat";
-import { resolveReplacementChain } from "../lib/repeat/chain";
+import { replacementChainPreview, resolveReplacementChain } from "../lib/repeat/chain";
 import { suggestByPrice } from "../lib/repeat/matcher";
 import { buildRepeatPlan } from "../lib/repeat/plan";
 import { createDraftFromRepeat, autoConfirmPlan } from "../lib/repeat/create";
@@ -141,6 +144,10 @@ check(
   "an inactive product in the target season is a dead end",
   (await resolveReplacementChain(inactive.id, s2027.id)).deadEnd,
 );
+check(
+  "chain preview lists each product once (M6)",
+  (await replacementChainPreview(oldBasket.id, s2027.id)) === "Old Basket → Mid Basket → New Basket",
+);
 
 // --- price-smart suggestions -----------------------------------------------------------
 const suggestions = await suggestByPrice(deadCandy.id, s2027.id);
@@ -267,6 +274,88 @@ check(
     summary.swapped.some((s) => s.from === "Dead Candy" && s.to === "Shalach Trio") &&
     summary.removed.includes("Fancy Box"),
 );
+// Gate fixtures: an unrelated FINALIZED order (M12 plan-mismatch target) and
+// an in-progress DRAFT (M3 — drafts are not repeatable sources).
+const deadOnly2 = await prisma.order.create({
+  data: {
+    seasonId: s2025.id,
+    customerId: customer.id,
+    status: "FINALIZED",
+    paymentStatus: "PAID",
+    orderNumber: 91006,
+    totalCents: 500,
+    lines: { create: [{ productId: deadCandy.id, productName: "Dead Candy", qty: 1, unitPriceCents: 500, lineTotalCents: 500 }] },
+  },
+});
+const draftSource = await prisma.order.create({
+  data: {
+    seasonId: s2027.id,
+    customerId: customer.id,
+    status: "DRAFT",
+    draftRef: `D-P10-GATE-${stamp}`,
+    totalCents: 0,
+  },
+});
+check(
+  "a second repeat of the same source is refused by the lineage guard (M2)",
+  await expectThrow(
+    () =>
+      createDraftFromRepeat({
+        sourceOrderId: sourceOrder.id,
+        lines: [
+          { sourceLineId: planBasket!.sourceLineId, action: "keep" },
+          { sourceLineId: planCandy!.sourceLineId, action: "swap", targetProductId: shalachTrio.id },
+          { sourceLineId: planFancy!.sourceLineId, action: "remove" },
+        ],
+        recipients: plan.recipients.map((r) => ({ sourceRecipientId: r.sourceRecipientId, action: "keep" as const })),
+      }),
+    DomainRuleError,
+  ),
+);
+check(
+  "a plan built for a different source order is refused (M12 guard)",
+  await expectThrow(
+    () => createDraftFromRepeat({ sourceOrderId: deadOnly2.id, lines: [], recipients: [] }, plan),
+    DomainRuleError,
+  ),
+);
+check(
+  "a DRAFT source cannot be repeated (M3 gate)",
+  await expectThrow(() => buildRepeatPlan(draftSource.id), DomainRuleError),
+);
+
+// --- recipient-less confirm (m9 edge) -------------------------------------------
+// Removing every recipient still lands a draft — lines go unassigned and the
+// checkout flow re-prompts assignment (never silently drops the gift).
+const recipientlessSource = await prisma.order.create({
+  data: {
+    seasonId: s2025.id,
+    customerId: customer.id,
+    status: "FINALIZED",
+    paymentStatus: "PAID",
+    orderNumber: 91005,
+    totalCents: 1800,
+    lines: {
+      create: [{ productId: oldBasket.id, productName: "Old Basket", qty: 1, unitPriceCents: 1800, lineTotalCents: 1800 }],
+    },
+    recipients: {
+      create: [{ name: "Bubby", line1: "9 Hilltop Rd", city: "Lakewood", region: "NJ", postalCode: "08701" }],
+    },
+  },
+  include: { lines: true, recipients: true },
+});
+const recipientlessPlan = await buildRepeatPlan(recipientlessSource.id);
+const { draft: recipientlessDraft } = await createDraftFromRepeat({
+  sourceOrderId: recipientlessSource.id,
+  lines: recipientlessPlan.lines.map((line) => ({ sourceLineId: line.sourceLineId, action: "keep" as const })),
+  recipients: recipientlessPlan.recipients.map((r) => ({ sourceRecipientId: r.sourceRecipientId, action: "remove" as const })),
+});
+check(
+  "removing all recipients lands a recipient-less draft with unassigned lines (m9)",
+  recipientlessDraft.recipients.length === 0 &&
+    recipientlessDraft.lines.length === 1 &&
+    recipientlessDraft.lines.every((line) => line.recipientId === null),
+);
 
 // --- staff one-click upgrade (P6 path, now chain-aware) ------------------------------------
 const inSeasonOrder = await prisma.order.create({
@@ -352,6 +441,23 @@ check(
 );
 
 // --- legacy import hook (runs while s2027's catalog is still the open one) ----
+// A recreated legacy-season product (mapped FORWARD to the 2027 catalog) so
+// the imported row exercises both the stub path and the known-product path.
+const legacySeason2024 = await prisma.season.upsert({
+  where: { name: "Legacy 2024" },
+  update: {},
+  create: { name: "Legacy 2024", status: "CLOSED" },
+});
+const legacyKnown = await prisma.product.create({
+  data: {
+    slug: `p10-legacy-chocolate-${stamp}`,
+    name: `Legacy Chocolate ${stamp}`,
+    basePriceCents: 750,
+    seasonId: legacySeason2024.id,
+    active: false,
+    replacedById: shalachTrio.id,
+  },
+});
 const legacy = await importLegacyOrders(
   [
     {
@@ -362,7 +468,10 @@ const legacy = await importLegacyOrders(
       recipients: [
         { name: "Bubby", line1: "9 Hilltop Rd", city: "Lakewood", region: "NJ", postalCode: "08701", greeting: "Legacy love" },
       ],
-      lines: [{ productName: `Unknown Legacy Basket ${stamp}`, qty: 1, recipientName: "Bubby" }],
+      lines: [
+        { productName: `Unknown Legacy Basket ${stamp}`, qty: 1, recipientName: "Bubby" },
+        { productName: legacyKnown.name, qty: 2 },
+      ],
     },
   ],
   { ctx },
@@ -372,17 +481,35 @@ const legacyOrder = await prisma.order.findFirstOrThrow({
   where: { wireFormat: `legacy-import:2024:row-1-${stamp}` },
   include: { lines: true, recipients: true },
 });
+const legacyStubLine = legacyOrder.lines.find((line) => line.productName.includes("Unknown Legacy Basket"));
+const legacyKnownLine = legacyOrder.lines.find((line) => line.productId === legacyKnown.id);
 check(
   "unknown legacy products become inactive stubs in a Legacy season",
-  legacyOrder.lines.length === 1 && legacyOrder.recipients.length === 1 &&
-    (await prisma.product.findUniqueOrThrow({ where: { id: legacyOrder.lines[0].productId! } })).active === false,
+  legacyOrder.lines.length === 2 && legacyOrder.recipients.length === 1 &&
+    legacyStubLine !== undefined &&
+    (await prisma.product.findUniqueOrThrow({ where: { id: legacyStubLine.productId! } })).active === false,
+);
+check(
+  "the imported order total reflects its lines, not a constant $0 (M9)",
+  legacyOrder.totalCents === 1500 && legacyKnownLine?.unitPriceCents === 750,
 );
 const legacyPlan = await buildRepeatPlan(legacyOrder.id);
+const legacyPlanStub = legacyPlan.lines.find((line) => line.sourceName.includes("Unknown Legacy Basket"));
 check(
   "imported order builds a repeat plan: stub is unmapped with suggestions, greeting resolves",
-  legacyPlan.lines[0].status === "unmapped" &&
-    (legacyPlan.lines[0].suggestions?.length ?? 0) > 0 &&
+  legacyPlanStub?.status === "unmapped" &&
+    (legacyPlanStub.suggestions?.length ?? 0) > 0 &&
     legacyPlan.recipients[0].greeting === "From the Cohens",
+);
+check(
+  "a recreated legacy product maps cleanly through its replacement link",
+  legacyPlan.lines.find((line) => line.sourceName === legacyKnown.name)?.status === "auto",
+);
+check(
+  "the import audit attributes each created row by customer + marker (m1)",
+  (await prisma.auditLog.findMany({ where: { action: "legacy_import" } })).some((row) =>
+    JSON.stringify(row.metadata).includes(`legacy-import:2024:row-1-${stamp}`),
+  ),
 );
 const reimport = await importLegacyOrders(
   [
@@ -399,6 +526,27 @@ const reimport = await importLegacyOrders(
 check("re-import of the same external key is a skip, not a dupe", reimport.created === 0 && reimport.skipped.length === 1);
 
 // --- season wizard + manager flip --------------------------------------------------------------
+// A media asset on the 2027 basket so the copy is exercised (M4): the wizard
+// must duplicate the bytes, not drop the row or share the stored object.
+const { putObject } = await import("../lib/media/storage");
+const mediaBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+const storedMedia = await putObject({
+  storedName: `p10-wizard-${stamp}.png`,
+  contentType: "image/png",
+  bytes: mediaBytes,
+});
+const sourceAsset = await prisma.mediaAsset.create({
+  data: {
+    url: storedMedia.url,
+    storedName: storedMedia.storedName,
+    filename: "basket.png",
+    contentType: "image/png",
+    sizeBytes: mediaBytes.length,
+    driver: storedMedia.driver,
+    productId: newBasket.id,
+  },
+});
+
 const wizard = await createSeasonWizard({
   name: `TEST-P10-2028-${stamp}`,
   copyCatalogFromSeasonId: s2027.id,
@@ -412,6 +560,32 @@ check(
   wizardSeason.products.length === 5 &&
     wizardSeason.products.every((p) => p.replacedById === null) &&
     wizardSeason.products.some((p) => p.slug.startsWith(`p10-new-basket-${stamp}`) && p.slug.endsWith(`-${getYear()}`)),
+);
+const copiedBasket = wizardSeason.products.find((p) => p.slug.startsWith(`p10-new-basket-${stamp}`));
+const copiedMedia = await prisma.mediaAsset.findMany({ where: { productId: copiedBasket!.id } });
+check(
+  "wizard copies product media with independently-owned bytes (M4)",
+  copiedMedia.length === 1 &&
+    copiedMedia[0].storedName !== sourceAsset.storedName &&
+    copiedMedia[0].filename === sourceAsset.filename &&
+    (copiedMedia[0].driver === "local" ? existsSync(path.join(process.cwd(), ".uploads", copiedMedia[0].storedName)) : true),
+);
+check(
+  "a second wizard copying the same catalog into the same year refuses cleanly (m17)",
+  await expectThrow(
+    () => createSeasonWizard({ name: `TEST-P10-2028-B-${stamp}`, copyCatalogFromSeasonId: s2027.id, ctx }),
+    DomainRuleError,
+  ) && (await prisma.season.count({ where: { name: `TEST-P10-2028-B-${stamp}` } })) === 0,
+);
+const collideSeason = await prisma.season.create({ data: { name: `TEST-P10-COLLIDE-${stamp}`, status: "CLOSED" } });
+await prisma.product.create({ data: { slug: `p10-duo-${stamp}-2025`, name: "Duo A", basePriceCents: 100, seasonId: collideSeason.id } });
+await prisma.product.create({ data: { slug: `p10-duo-${stamp}-2026`, name: "Duo B", basePriceCents: 100, seasonId: collideSeason.id } });
+check(
+  "source slugs collapsing to the same copy slug refuse up front (M11)",
+  await expectThrow(
+    () => createSeasonWizard({ name: `TEST-P10-COLLIDE-COPY-${stamp}`, copyCatalogFromSeasonId: collideSeason.id, ctx }),
+    DomainRuleError,
+  ) && (await prisma.season.count({ where: { name: `TEST-P10-COLLIDE-COPY-${stamp}` } })) === 0,
 );
 check(
   "duplicate season name refuses",
@@ -446,27 +620,69 @@ const flipSeasonB = await prisma.season.create({
   data: {
     name: `TEST-P10-FLIP-NEW-${stamp}`,
     status: "CLOSED",
+    scheduledOpensAt: new Date(Date.now() - 120_000),
+  },
+});
+const flipSeasonC = await prisma.season.create({
+  data: {
+    name: `TEST-P10-FLIP-LATER-${stamp}`,
+    status: "CLOSED",
     scheduledOpensAt: new Date(Date.now() - 60_000),
+  },
+});
+const flipSeasonStale = await prisma.season.create({
+  data: {
+    name: `TEST-P10-FLIP-STALE-${stamp}`,
+    status: "CLOSED",
+    scheduledOpensAt: new Date(Date.now() - 180_000),
+    scheduledClosesAt: new Date(Date.now() - 60_000),
   },
 });
 const flipResult = await runSeasonFlip();
 check(
-  "cron flip closes the due season and opens the scheduled one",
-  flipResult.closed.includes(flipSeasonA.name) && flipResult.opened.includes(flipSeasonB.name) &&
+  "cron flip closes the due season and opens the earliest scheduled one (one flip per tick, m11)",
+  flipResult.closed.join(",") === flipSeasonA.name &&
+    flipResult.opened.join(",") === flipSeasonB.name &&
     (await prisma.season.findUniqueOrThrow({ where: { id: flipSeasonB.id } })).status === "OPEN",
+);
+check(
+  "the second due season waits for the next tick with its schedule intact (m11)",
+  (await prisma.season.findUniqueOrThrow({ where: { id: flipSeasonC.id } })).status === "CLOSED" &&
+    (await prisma.season.findUniqueOrThrow({ where: { id: flipSeasonC.id } })).scheduledOpensAt !== null,
+);
+check(
+  "a stale schedule whose close already passed is cleared, not re-evaluated forever (m2)",
+  (await prisma.season.findUniqueOrThrow({ where: { id: flipSeasonStale.id } })).status === "CLOSED" &&
+    (await prisma.season.findUniqueOrThrow({ where: { id: flipSeasonStale.id } })).scheduledOpensAt === null,
 );
 check(
   "the flip left a CronRun row",
   (await prisma.cronRun.count({ where: { name: "season-flip", status: "OK" } })) >= 1,
 );
+const secondFlip = await runSeasonFlip();
+check(
+  "the waiting season opens on the next tick, closing yesterday's opener",
+  secondFlip.opened.includes(flipSeasonC.name) &&
+    (await prisma.season.findUniqueOrThrow({ where: { id: flipSeasonC.id } })).status === "OPEN" &&
+    (await prisma.season.findUniqueOrThrow({ where: { id: flipSeasonB.id } })).status === "CLOSED",
+);
+check(
+  "cron flips audit as season_flip_cron with the opened season as target (m10)",
+  (await prisma.auditLog.count({ where: { action: "season_flip_cron", targetId: flipSeasonC.id } })) >= 1,
+);
 const idleFlip = await runSeasonFlip();
-check("a second flip with nothing due is a no-op", idleFlip.closed.length === 0 && idleFlip.opened.length === 0);
+check("a flip with nothing due is a no-op", idleFlip.closed.length === 0 && idleFlip.opened.length === 0);
 
-// --- saveDraft greeting passthrough -----------------------------------------------------------------------
+// --- saveDraft greeting passthrough + season catalog boundary ---------------------------------------
+// flipSeasonC is the open season at this point; the draft's products must
+// belong to it (M1).
+const flipProductC = await prisma.product.create({
+  data: { slug: `p10-flip-c-${stamp}`, name: "Flip C Box", basePriceCents: 1200, seasonId: flipSeasonC.id },
+});
 const greetDraft = await saveDraft({
-  seasonId: flipSeasonB.id,
+  seasonId: flipSeasonC.id,
   customerId: customer.id,
-  lines: [{ productId: newBasket.id, qty: 1, recipientClientId: "r1" }],
+  lines: [{ productId: flipProductC.id, qty: 1, recipientClientId: "r1" }],
   recipients: [
     {
       clientId: "r1",
@@ -483,6 +699,37 @@ const greetDraft = await saveDraft({
 check(
   "saveDraft persists recipient greetings",
   greetDraft.recipients[0]?.greeting === "Passthrough greeting",
+);
+check(
+  "saveDraft rejects a product outside the draft's season (M1)",
+  await expectThrow(
+    () =>
+      saveDraft({
+        seasonId: flipSeasonC.id,
+        customerId: customer.id,
+        lines: [{ productId: newBasket.id, qty: 1 }],
+        recipients: [],
+        allowBookWrites: false,
+      }),
+    DomainRuleError,
+  ),
+);
+const inactiveFlipProduct = await prisma.product.create({
+  data: { slug: `p10-flip-inactive-${stamp}`, name: "Shelved Flip", basePriceCents: 100, seasonId: flipSeasonC.id, active: false },
+});
+check(
+  "saveDraft rejects an inactive product in the draft's season (M1)",
+  await expectThrow(
+    () =>
+      saveDraft({
+        seasonId: flipSeasonC.id,
+        customerId: customer.id,
+        lines: [{ productId: inactiveFlipProduct.id, qty: 1 }],
+        recipients: [],
+        allowBookWrites: false,
+      }),
+    DomainRuleError,
+  ),
 );
 
 function getYear(): number {

@@ -65,13 +65,20 @@ export async function replacementChainPreview(
   productId: string,
   targetSeasonId: string,
 ): Promise<string | null> {
-  const start = await prisma.product.findUnique({
-    where: { id: productId },
-    select: { name: true },
-  });
-  if (!start) return null;
+  // hops[0] IS the start product (the walker records the FROM side of each
+  // link), so the preview is hops + final — no duplicate start name, and no
+  // redundant start fetch when a chain actually walks.
   const chain = await resolveReplacementChain(productId, targetSeasonId);
-  const names = [start.name, ...chain.hops.map((h) => h.name)];
+  if (chain.hops.length === 0) {
+    // Already in the target season (final carries the start itself), or a
+    // dead end at the first step — one lookup for the start name so an
+    // unmapped product still previews as "Old A → (dead end)".
+    if (chain.final) return chain.final.name;
+    const start = await prisma.product.findUnique({ where: { id: productId }, select: { name: true } });
+    if (!start) return null;
+    return `${start.name} → (dead end)`;
+  }
+  const names = chain.hops.map((hop) => hop.name);
   if (chain.final) names.push(chain.final.name);
   return names.join(" → ") + (chain.deadEnd ? " → (dead end)" : "");
 }

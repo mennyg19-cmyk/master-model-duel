@@ -1,7 +1,9 @@
 // Unit checks for P6 pure helpers: CSV parse/serialize round-trip, order-list
-// + customer-directory param parsing and where-builders, the repeat planner,
-// and both import row parsers. DB-backed P6 behavior (imports commit, bulk
-// actions, POS checkout, refund, dashboard, scale) lives in test-p6-domain.mts.
+// + customer-directory param parsing and where-builders, and both import row
+// parsers. DB-backed P6 behavior (imports commit, bulk actions, POS checkout,
+// refund, dashboard, scale) lives in test-p6-domain.mts. (The P6 pure repeat
+// planner was removed in the P10 fix pass — repeats run through the
+// chain-aware pipeline covered by test-p10-domain.mts.)
 
 process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:4106/app";
 process.env.AUTH_SECRET ??= "0123456789abcdef0123456789abcdef";
@@ -105,62 +107,6 @@ check(
 const custWhere = buildCustomerWhere("rivka") as { OR: unknown[] };
 check("directory where matches name/email/phone", custWhere.OR.length === 3);
 check("directory where without query is empty", Object.keys(buildCustomerWhere(null)).length === 0);
-
-// --- repeat planner ----------------------------------------------------------------
-const { planRepeat } = await import("../lib/orders/repeat");
-
-const repeatOrderRow = {
-  id: "order-1",
-  lines: [
-    { id: "l1", productId: "p-live", addOnId: null, parentLineId: null, optionValueId: "ov-1", qty: 2, productName: "Live Box", recipientId: "r1" },
-    { id: "l1a", productId: null, addOnId: "a-live", parentLineId: "l1", optionValueId: null, qty: 2, productName: "Ribbon", recipientId: null },
-    { id: "l2", productId: "p-dead", addOnId: null, parentLineId: null, optionValueId: null, qty: 1, productName: "Gone Box", recipientId: "r2" },
-    { id: "l2a", productId: null, addOnId: "a-live", parentLineId: "l2", optionValueId: null, qty: 1, productName: "Ribbon", recipientId: null },
-    { id: "l3", productId: "p-live", addOnId: null, parentLineId: null, optionValueId: "ov-gone", qty: 1, productName: "Live Box", recipientId: null },
-    { id: "l4", productId: null, addOnId: "a-dead", parentLineId: null, optionValueId: null, qty: 1, productName: "Old Ribbon", recipientId: null },
-  ],
-  recipients: [
-    { id: "r1", name: "Bubby", line1: "9 Hilltop Rd", line2: null, city: "Lakewood", region: "NJ", postalCode: "08701", country: "US" },
-    { id: "r2", name: "Aunt Miriam", line1: "40 Faraway Ln", line2: "Apt 2", city: "Monsey", region: "NY", postalCode: "10952", country: "US" },
-  ],
-} as unknown as import("../lib/orders/drafts").DraftWithContents;
-
-const plan = planRepeat(repeatOrderRow, {
-  productIds: new Set(["p-live"]),
-  optionValueIds: new Set(["ov-1"]),
-  addOnIds: new Set(["a-live"]),
-});
-
-const keptL1 = plan.lines.find((line) => line.productId === "p-live" && line.recipientClientId === "r1");
-check("repeat keeps live product lines", keptL1 !== undefined && keptL1.optionValueId === "ov-1");
-check(
-  "kept lines get FRESH ids (old ids are rows in the source order)",
-  plan.lines.every((line) => line.id === undefined || !repeatOrderRow.lines.some((old) => old.id === line.id)),
-);
-check(
-  "kept add-on re-points at its parent's fresh id",
-  plan.lines.some((line) => line.addOnId === "a-live" && line.parentLineId === keptL1?.id),
-);
-check(
-  "repeat skips the dead product AND its add-on child (one reason)",
-  plan.skipped.filter((skip) => skip.productName === "Gone Box").length === 1
-    && plan.lines.filter((line) => line.addOnId === "a-live").length === 1,
-);
-check(
-  "repeat skips a line whose option is gone, with its own reason",
-  plan.skipped.some((skip) => skip.reason.includes("option")),
-);
-check("repeat skips a dead add-on", plan.skipped.some((skip) => skip.productName === "Old Ribbon"));
-check(
-  "repeat maps recipients one-to-one and never re-links the book",
-  plan.recipients.length === 2
-    && plan.recipients.every((recipient) => recipient.saveToBook === false)
-    && plan.recipients[0].clientId === "r1",
-);
-check(
-  "empty catalog skips everything",
-  planRepeat(repeatOrderRow, { productIds: new Set(), optionValueIds: new Set(), addOnIds: new Set() }).lines.length === 0,
-);
 
 // --- import row parsers ---------------------------------------------------------
 const { customersImport } = await import("../lib/imports/customers");

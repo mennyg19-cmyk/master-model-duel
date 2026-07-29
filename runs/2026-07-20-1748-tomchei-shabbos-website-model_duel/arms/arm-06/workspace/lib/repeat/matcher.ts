@@ -24,13 +24,45 @@ export async function suggestByPrice(
   });
   if (!source) return [];
 
-  const candidates = await prisma.product.findMany({
-    where: { seasonId: targetSeasonId, active: true },
-    select: { id: true, name: true, basePriceCents: true, category: true },
-    orderBy: { basePriceCents: "asc" },
-  });
+  // Bounded pool (m16): the nearest-priced products on both sides of the
+  // source price — overall and within the source's category — instead of the
+  // whole season catalog. The final sort still prefers same-category, so the
+  // category side is pooled separately to stay eligible.
+  const POOL_PER_SIDE = 12;
+  const select = { id: true, name: true, basePriceCents: true, category: true } as const;
+  const scope = { seasonId: targetSeasonId, active: true };
+  const [overallAbove, overallBelow, categoryAbove, categoryBelow] = await Promise.all([
+    prisma.product.findMany({
+      where: { ...scope, basePriceCents: { gte: source.basePriceCents } },
+      select,
+      orderBy: { basePriceCents: "asc" },
+      take: POOL_PER_SIDE,
+    }),
+    prisma.product.findMany({
+      where: { ...scope, basePriceCents: { lt: source.basePriceCents } },
+      select,
+      orderBy: { basePriceCents: "desc" },
+      take: POOL_PER_SIDE,
+    }),
+    prisma.product.findMany({
+      where: { ...scope, category: source.category, basePriceCents: { gte: source.basePriceCents } },
+      select,
+      orderBy: { basePriceCents: "asc" },
+      take: POOL_PER_SIDE,
+    }),
+    prisma.product.findMany({
+      where: { ...scope, category: source.category, basePriceCents: { lt: source.basePriceCents } },
+      select,
+      orderBy: { basePriceCents: "desc" },
+      take: POOL_PER_SIDE,
+    }),
+  ]);
+  const pool = new Map<string, (typeof overallAbove)[number]>();
+  for (const candidate of [...overallAbove, ...overallBelow, ...categoryAbove, ...categoryBelow]) {
+    pool.set(candidate.id, candidate);
+  }
 
-  return candidates
+  return [...pool.values()]
     .map((c) => ({
       productId: c.id,
       name: c.name,
