@@ -699,3 +699,4 @@
 2026-07-29T21:52:48Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-06,T5,residual_clean_code,glm-5.2-high,3ce2d062-eef3-4fe1-b553-bc9f97edd610,,,,,,,,T5 residual clean-code; usage_missing_pending_export
 2026-07-29T21:56:02Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-06,T5,residual_aggregate,glm-5.2-high,392468e2-41a1-4ef0-8414-5c39cc30cc5f,,,,,,,,T5 residual aggregate of 4 specialists; usage_missing_pending_export
 2026-07-29T22:06:14Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,6,arm-06,T6,detect,kimi-k3-max,62fcdb2a-96a9-4774-baaa-9799ea6fe905,,,,,,,,T6 detect on arm-02 clone + B1-B5; usage_missing_pending_export
+2026-07-29T22:15:41Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,6,arm-06,T6,vague_fix,kimi-k3-max,288a373e-32fd-4b58-81cf-31ec142c140a,,,,,,,,T6 vague fix after detect 8/8; usage_missing_pending_export
