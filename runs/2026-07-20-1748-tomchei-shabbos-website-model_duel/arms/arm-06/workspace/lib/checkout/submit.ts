@@ -48,7 +48,9 @@ export async function submitCheckout(
   input: CheckoutSubmitInput,
   access: DraftAccess,
 ): Promise<CheckoutSummary | null> {
-  if (input.method !== "card") throw new OfflinePaymentForbiddenError();
+  // R-127: offline methods stay staff-only (POS) — the staff flag is only
+  // constructible server-side behind requirePermission("payments.manage").
+  if (input.method !== "card" && !access.staff) throw new OfflinePaymentForbiddenError();
 
   const [fees, deliveryDays, deliveryZips] = await Promise.all([
     getSetting("delivery.fees"),

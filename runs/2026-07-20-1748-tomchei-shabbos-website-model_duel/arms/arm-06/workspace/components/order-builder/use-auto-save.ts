@@ -78,6 +78,9 @@ export function useAutoSave(input: {
   viewer: ViewerContext;
   serverDraftRef: string | null;
   onSaved: (result: { draftRef: string }) => void;
+  /** POS: alternate save endpoint + extra body fields (customerId). */
+  saveUrl?: string;
+  bodyExtra?: Record<string, unknown>;
 }): { status: SaveStatus } {
   const [status, setStatus] = useState<SaveStatus>("idle");
   const dirtyRef = useRef(false);
@@ -111,9 +114,10 @@ export function useAutoSave(input: {
         return;
       }
       setStatus("saving");
-      const saveResult = await apiFetch<{ draftRef?: string }>("/api/drafts", {
+      const saveResult = await apiFetch<{ draftRef?: string }>(input.saveUrl ?? "/api/drafts", {
         method: "POST",
         body: {
+          ...input.bodyExtra,
           ...(input.serverDraftRef ? { draftRef: input.serverDraftRef } : {}),
           lines: linesPayload(snapshot),
           recipients: recipientsPayload(snapshot.recipients),

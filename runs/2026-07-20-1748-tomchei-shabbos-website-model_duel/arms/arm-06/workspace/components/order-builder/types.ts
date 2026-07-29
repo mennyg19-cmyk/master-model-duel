@@ -92,3 +92,14 @@ export interface ViewerContext {
   name?: string;
   email?: string;
 }
+
+/**
+ * P6 POS wiring (R-031): the shell keeps one code path; the POS swaps the
+ * save endpoint, the checkout destination, and injects the counter customer
+ * into every save body. Undefined = the storefront behavior, untouched.
+ */
+export interface PosConfig {
+  customerId: string;
+  saveUrl: string;
+  checkoutUrl: string;
+}

@@ -87,6 +87,17 @@ enum CronRunStatus {
   FAILED
 }
 
+enum ImportKind {
+  CUSTOMERS
+  PRODUCTS
+}
+
+enum ImportStatus {
+  STAGED
+  COMMITTED
+  DISCARDED
+}
+
 model StaffUser {
   id            String               @id @default(cuid())
   email         String               @unique
@@ -179,6 +190,8 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([action, createdAt])
+  // P6: the order-detail audit trail looks rows up by target.
+  @@index([targetType, targetId])
   @@map("audit_logs")
 }
 
@@ -367,6 +380,8 @@ model Order {
   updatedAt      DateTime              @updatedAt
 
   @@unique([seasonId, orderNumber])
+  // P6 (G-024): the admin order list filters + sorts on exactly these columns.
+  @@index([seasonId, status, paymentStatus, createdAt])
   @@map("orders")
 }
 
@@ -506,6 +521,9 @@ model Payment {
   // P5: Stripe payment-intent id on web payments (refund sync R-168 finds
   // the row to void from a charge.refunded event); null on POS payments.
   externalRef  String?
+  // P6 (R-054): Stripe refund id on refunded card payments; null on the
+  // keyless seam (no live keys on this host) and on offline refunds.
+  refundRef    String?
   voidedAt     DateTime?
   voidReason   String?
   createdAt    DateTime            @default(now())
@@ -630,6 +648,29 @@ model GeocodeCache {
   expiresAt  DateTime
 
   @@map("geocode_cache")
+}
+
+// R-063/R-143: staged CSV imports. payload holds the parsed rows with their
+// staged verdicts; the commit re-validates against the live database inside
+// one transaction, so a half-applied import can never exist.
+model ImportBatch {
+  id            String       @id @default(cuid())
+  kind          ImportKind
+  status        ImportStatus @default(STAGED)
+  filename      String
+  payload       Json
+  totalRows     Int          @default(0)
+  validRows     Int          @default(0)
+  duplicateRows Int          @default(0)
+  invalidRows   Int          @default(0)
+  committedRows Int          @default(0)
+  actorId       String?
+  actorEmail    String?
+  committedAt   DateTime?
+  createdAt     DateTime     @default(now())
+
+  @@index([kind, createdAt])
+  @@map("import_batches")
 }
 
 // R-163: every cron execution leaves a row.

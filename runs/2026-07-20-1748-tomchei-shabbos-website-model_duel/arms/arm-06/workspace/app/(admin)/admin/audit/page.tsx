@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requirePermission } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 
@@ -19,8 +20,26 @@ const actionTones: Record<string, "brand" | "green" | "amber" | "red" | "stone">
   client_error: "stone",
 };
 
+// Donor/staff PII written into metadata stays hidden unless the viewer
+// holds customers.manage — same bar as the customers directory.
+const SENSITIVE_METADATA_KEYS = new Set(["resetToken", "phone", "address", "email"]);
+
+function redactMetadata(metadata: unknown, allowPii: boolean): string {
+  if (metadata === null || typeof metadata !== "object") {
+    return metadata === null ? "—" : String(metadata);
+  }
+  const cleaned = Object.fromEntries(
+    Object.entries(metadata as Record<string, unknown>).map(([key, value]) => [
+      key,
+      !allowPii && SENSITIVE_METADATA_KEYS.has(key) ? "[redacted]" : value,
+    ]),
+  );
+  return JSON.stringify(cleaned);
+}
+
 export default async function AuditLogPage() {
-  await requirePermission("audit.view");
+  const ctx = await requirePermission("audit.view");
+  const allowPii = hasPermission(ctx.staff, "customers.manage");
   const entries = await prisma.auditLog.findMany({
     orderBy: { createdAt: "desc" },
     take: 200,
@@ -54,7 +73,7 @@ export default async function AuditLogPage() {
                   {entry.targetType ? `${entry.targetType} ${entry.targetId ?? ""}` : "—"}
                 </td>
                 <td className="max-w-xs truncate px-4 py-2.5 text-xs text-stone-500">
-                  {entry.metadata === null ? "—" : JSON.stringify(entry.metadata)}
+                  {redactMetadata(entry.metadata, allowPii)}
                 </td>
               </tr>
             ))}

@@ -7,7 +7,8 @@ import { DomainRuleError, NotFoundError } from "@/lib/errors";
 // printing. Forward-only inside the method's list; terminal stage ends it.
 export class IllegalStageTransitionError extends Error {
   constructor(from: PackageStage, to: PackageStage, methodCode: string) {
-    super(`Illegal package stage transition on ${methodCode}: ${from} → ${to}`);
+    // ASCII arrow (WIN1252-encoded embedded DB — see IllegalTransitionError).
+    super(`Illegal package stage transition on ${methodCode}: ${from} -> ${to}`);
     this.name = "IllegalStageTransitionError";
   }
 }

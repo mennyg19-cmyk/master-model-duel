@@ -641,3 +641,10 @@
 2026-07-28T23:15:04Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P5,review_aggregate,glm-5.2-high,18522ffb-1dde-42ac-be64-d40927e63dac,,,,,,,,P5 aggregate of 4 specialists; usage_missing_pending_export
 2026-07-28T23:17:51Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P5,contestant_fix,kimi-k3-max,92b8c6d5-4a8c-4969-ac3a-289920124820,,,,,,,,P5 fix pass after aggregate 0B/4M/19m; usage_missing_pending_export
 2026-07-29T00:02:07Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P6,contestant_build,kimi-k3-max,f841ddee-4334-4e00-a1d2-d929a294469f,,,,,,,,P6 admin ops hub initial build; usage_missing_pending_export
+2026-07-29T01:04:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P6,review_security,glm-5.2-high,0bf76953-a3d3-40b5-82cc-acb784d2b5e5,,,,,,,,P6 security review; usage_missing_pending_export
+2026-07-29T01:04:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P6,review_quality,glm-5.2-high,e23f6200-a6c4-43df-979b-448242864383,,,,,,,,P6 quality review; usage_missing_pending_export
+2026-07-29T01:04:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P6,review_rules,glm-5.2-high,ea19f05c-eb6b-4d0e-b88f-730f85850693,,,,,,,,P6 rules review; usage_missing_pending_export
+2026-07-29T01:04:46Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P6,review_clean_code,glm-5.2-high,f418cdaa-7695-48c5-9313-00de478b55af,,,,,,,,P6 clean-code review; usage_missing_pending_export
+2026-07-29T01:08:31Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P6,review_aggregate,glm-5.2-high,61b55d4b-55f9-43ea-b76d-2238e1fc9135,,,,,,,,P6 aggregate of 4 specialists; usage_missing_pending_export
+2026-07-29T01:10:59Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P6,contestant_fix,kimi-k3-max,86ffd53c-f21b-402a-8dc6-9c3a18b9101d,,,,,,,,P6 fix pass after aggregate 0B/5M/21m; usage_missing_pending_export
+2026-07-29T02:02:18Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P7,contestant_build,kimi-k3-max,7dc989f0-3aba-4662-b251-ac2dea17cfe6,,,,,,,,P7 package board initial build; usage_missing_pending_export

@@ -1,6 +1,7 @@
 import { Order, OrderStatus, Prisma } from "@prisma/client";
 import { prisma, reloadOrThrow } from "@/lib/db";
 import { DomainRuleError, NotFoundError } from "@/lib/errors";
+import { AuditContextLike, recordAudit } from "@/lib/audit";
 import { claimOrderNumber, formatWireFormat } from "@/lib/orders/numbers";
 import { releaseOrderReservation } from "@/lib/checkout/reservations";
 
@@ -13,7 +14,9 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
 
 export class IllegalTransitionError extends Error {
   constructor(from: OrderStatus, to: OrderStatus) {
-    super(`Illegal order transition: ${from} → ${to}`);
+    // ASCII arrow: this text lands in audit metadata, and the embedded DB is
+    // WIN1252-encoded — a Unicode arrow would fail the audit insert.
+    super(`Illegal order transition: ${from} -> ${to}`);
     this.name = "IllegalTransitionError";
   }
 }
@@ -72,8 +75,11 @@ export async function finalizeOrder(orderId: string): Promise<Order> {
 
 // Discard uses the same conditional-UPDATE guard as finalize (WHERE status =
 // DRAFT): a discard that raced a finalize is a no-op row count → throw →
-// rollback, so a finalized order can never be clobbered to DISCARDED.
-export async function discardOrder(orderId: string): Promise<Order> {
+// rollback, so a finalized order can never be clobbered to DISCARDED. With an
+// audit context, the order_discard row commits in the same transaction as the
+// mutation (UR-011 discipline — a discard is destructive and must never go
+// un-audited, even when the caller's summary audit fails afterwards).
+export async function discardOrder(orderId: string, audit?: { ctx: AuditContextLike }): Promise<Order> {
   return prisma.$transaction(async (tx) => {
     const order = await tx.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundError("Order", orderId);
@@ -86,6 +92,18 @@ export async function discardOrder(orderId: string): Promise<Order> {
       data: { status: "DISCARDED", version: { increment: 1 } },
     });
     if (updated.count === 0) throw new OrderConcurrencyError(orderId);
+    if (audit) {
+      await recordAudit(
+        {
+          ctx: audit.ctx,
+          action: "order_discard",
+          targetType: "Order",
+          targetId: orderId,
+          metadata: { orderLabel: order.wireFormat ?? order.draftRef },
+        },
+        tx,
+      );
+    }
     return reloadOrThrow(() => tx.order.findUnique({ where: { id: orderId } }), "Order", orderId);
   });
 }

@@ -2,32 +2,19 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-fetch";
-import { formatCents } from "@/lib/money";
+import { dollarsToCents, formatCents } from "@/lib/money";
 import { isDeliverable, normalizePostalCode } from "@/lib/storefront/delivery";
 import { bulkAddressKey } from "@/lib/checkout/fulfillment";
+import { CheckoutRecipientProps } from "@/lib/checkout/recipient-props";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 
 type Choice = "PICKUP" | "BULK_DELIVERY" | "PER_PACKAGE_DELIVERY";
-
-interface RecipientProps {
-  id: string;
-  name: string;
-  addressLine: string;
-  line1: string;
-  city: string;
-  region: string;
-  postalCode: string;
-  country: string;
-  rememberedGreeting: string | null;
-  initialChoice: string | null;
-  initialDeliveryDay: string | null;
-  initialGreeting: string | null;
-  lines: { id: string; label: string; addOns: string[]; lineTotalCents: number }[];
-}
+type PosMethod = "cash" | "check";
 
 interface ConflictReport {
   priceConflicts: { productName: string; storedCents: number; freshCents: number }[];
@@ -52,6 +39,8 @@ export function CheckoutForm({
   deliveryZips,
   recipients,
   unassignedCount,
+  builderHref,
+  pos,
 }: {
   draftRef: string;
   greetingDefault: string | null;
@@ -59,9 +48,15 @@ export function CheckoutForm({
   feeRules: { bulkPerDestinationCents: number; perPackagePerRecipientCents: number };
   deliveryDays: string[];
   deliveryZips: string[];
-  recipients: RecipientProps[];
+  recipients: CheckoutRecipientProps[];
   unassignedCount: number;
+  /** Back-to-builder link when lines are unassigned (defaults to storefront). */
+  builderHref?: string;
+  /** P6 POS: one-click counter checkout — submit + finalize + post offline
+   *  payment in a single staff-gated call instead of the Stripe handoff. */
+  pos?: { completeUrl: string; orderHref: (orderId: string) => string };
 }) {
+  const router = useRouter();
   const [choices, setChoices] = useState<Record<string, Choice>>(
     Object.fromEntries(
       recipients.map((recipient) => [
@@ -88,6 +83,8 @@ export function CheckoutForm({
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictReport | null>(null);
   const [paymentUnavailable, setPaymentUnavailable] = useState<string | null>(null);
+  const [posMethod, setPosMethod] = useState<PosMethod>("cash");
+  const [posAmount, setPosAmount] = useState<string | null>(null);
 
   // Bulk dedupe mirror: first recipient on a shared address carries the fee.
   // The key IS the server's bulkAddressKey on the same structured fields, so
@@ -111,8 +108,54 @@ export function CheckoutForm({
     return { feesByRecipient, feesCents, totalCents: subtotalCents + feesCents };
   }, [choices, recipients, feeRules, subtotalCents]);
 
-  function perPackageBlocked(recipient: RecipientProps): boolean {
+  function perPackageBlocked(recipient: CheckoutRecipientProps): boolean {
     return !isDeliverable(deliveryZips, recipient.postalCode);
+  }
+
+  function checkoutBody() {
+    return {
+      draftRef,
+      greetingDefault: orderGreeting || null,
+      expectedTotalCents: totalCents,
+      recipients: recipients.map((recipient) => ({
+        recipientId: recipient.id,
+        fulfillmentChoice: choices[recipient.id] ?? "PICKUP",
+        deliveryDay:
+          (choices[recipient.id] ?? "PICKUP") === "PER_PACKAGE_DELIVERY"
+            ? days[recipient.id] || null
+            : null,
+        greeting: greetings[recipient.id] || null,
+      })),
+    };
+  }
+
+  // POS: one staff call submits checkout, finalizes, and posts cash/check.
+  async function completePosSale() {
+    if (!pos) return;
+    setIsSubmitting(true);
+    setError(null);
+    setConflict(null);
+
+    const amountCents = posAmount === null ? totalCents : dollarsToCents(Number(posAmount));
+    if (amountCents === null) {
+      setIsSubmitting(false);
+      setError("Amount must be a clean dollar-and-cents amount");
+      return;
+    }
+    const result = await apiFetch<{ conflict?: ConflictReport; orderId?: string }>(pos.completeUrl, {
+      method: "POST",
+      body: { ...checkoutBody(), method: posMethod, amountCents },
+    });
+    setIsSubmitting(false);
+    if (!result.ok || !result.body.orderId) {
+      if (result.status === 409 && result.body.conflict) {
+        setConflict(result.body.conflict);
+      } else {
+        setError(result.body.error ?? "Could not complete the sale");
+      }
+      return;
+    }
+    router.push(pos.orderHref(result.body.orderId));
   }
 
   async function submitAndPay() {
@@ -123,20 +166,7 @@ export function CheckoutForm({
 
     const submit = await apiFetch<{ conflict?: ConflictReport }>("/api/checkout/submit", {
       method: "POST",
-      body: {
-        draftRef,
-        greetingDefault: orderGreeting || null,
-        expectedTotalCents: totalCents,
-        recipients: recipients.map((recipient) => ({
-          recipientId: recipient.id,
-          fulfillmentChoice: choices[recipient.id] ?? "PICKUP",
-          deliveryDay:
-            (choices[recipient.id] ?? "PICKUP") === "PER_PACKAGE_DELIVERY"
-              ? days[recipient.id] || null
-              : null,
-          greeting: greetings[recipient.id] || null,
-        })),
-      },
+      body: checkoutBody(),
     });
     if (!submit.ok) {
       setIsSubmitting(false);
@@ -277,7 +307,7 @@ export function CheckoutForm({
         <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           {unassignedCount} item{unassignedCount === 1 ? " isn’t" : "s aren’t"} assigned to a
           recipient yet —{" "}
-          <Link href={`/order?draft=${draftRef}`} className="underline">
+          <Link href={builderHref ?? `/order?draft=${draftRef}`} className="underline">
             back to the builder
           </Link>
           .
@@ -342,19 +372,57 @@ export function CheckoutForm({
         </p>
       )}
 
-      <div className="mt-6">
-        <Button
-          onClick={submitAndPay}
-          disabled={isSubmitting || unassignedCount > 0}
-          data-pay-button
-        >
-          {isSubmitting ? "Working…" : `Pay ${formatCents(totalCents)}`}
-        </Button>
-        <p className="mt-2 text-xs text-stone-500">
-          Card checkout runs on Stripe&apos;s hosted page — we never see card numbers. Offline
-          methods (cash/check) are staff-only.
-        </p>
-      </div>
+      {pos ? (
+        <div className="mt-6 flex flex-wrap items-end gap-4" data-pos-checkout>
+          <div>
+            <Label htmlFor="pos-method">Payment method</Label>
+            <Select
+              id="pos-method"
+              className="mt-1"
+              value={posMethod}
+              onChange={(event) => setPosMethod(event.target.value as PosMethod)}
+              data-pos-method
+            >
+              <option value="cash">Cash</option>
+              <option value="check">Check</option>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="pos-amount">Amount collected</Label>
+            <Input
+              id="pos-amount"
+              className="mt-1 w-28"
+              type="number"
+              step="0.01"
+              min="0"
+              value={posAmount ?? (totalCents / 100).toFixed(2)}
+              onChange={(event) => setPosAmount(event.target.value)}
+              data-pos-amount
+            />
+          </div>
+          <Button
+            onClick={completePosSale}
+            disabled={isSubmitting || unassignedCount > 0}
+            data-pos-complete
+          >
+            {isSubmitting ? "Working…" : `Complete sale — ${formatCents(totalCents)}`}
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-6">
+          <Button
+            onClick={submitAndPay}
+            disabled={isSubmitting || unassignedCount > 0}
+            data-pay-button
+          >
+            {isSubmitting ? "Working…" : `Pay ${formatCents(totalCents)}`}
+          </Button>
+          <p className="mt-2 text-xs text-stone-500">
+            Card checkout runs on Stripe&apos;s hosted page — we never see card numbers. Offline
+            methods (cash/check) are staff-only.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

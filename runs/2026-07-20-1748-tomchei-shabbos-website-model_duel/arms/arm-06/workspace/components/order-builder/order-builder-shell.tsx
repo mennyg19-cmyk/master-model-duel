@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-fetch";
-import { BookAddress, BuilderProduct, CartLine, DraftState, ViewerContext } from "./types";
+import { BookAddress, BuilderProduct, CartLine, DraftState, PosConfig, ViewerContext } from "./types";
 import { cartTotalCents, draftReducer, EMPTY_DRAFT } from "./draft-reducer";
 import {
   linesPayload,
@@ -33,11 +33,13 @@ export function OrderBuilderShell({
   bookAddresses: initialBookAddresses,
   viewer,
   initialDraft,
+  pos,
 }: {
   products: BuilderProduct[];
   bookAddresses: BookAddress[];
   viewer: ViewerContext;
   initialDraft: LoadedDraft | null;
+  pos?: PosConfig;
 }) {
   const router = useRouter();
   const [state, dispatch] = useReducer(draftReducer, EMPTY_DRAFT);
@@ -76,14 +78,17 @@ export function OrderBuilderShell({
     viewer,
     serverDraftRef,
     onSaved: ({ draftRef }) => setServerDraftRef(draftRef),
+    saveUrl: pos?.saveUrl,
+    bodyExtra: pos ? { customerId: pos.customerId } : undefined,
   });
 
   const addLine = useCallback((line: CartLine) => dispatch({ type: "add-line", line }), []);
 
   async function saveNow(extra?: { guest?: GuestIdentity }): Promise<{ draftRef: string }> {
-    const saveResult = await apiFetch<{ draftRef?: string }>("/api/drafts", {
+    const saveResult = await apiFetch<{ draftRef?: string }>(pos?.saveUrl ?? "/api/drafts", {
       method: "POST",
       body: {
+        ...(pos ? { customerId: pos.customerId } : {}),
         ...(serverDraftRef ? { draftRef: serverDraftRef } : {}),
         ...(extra?.guest ? { guest: extra.guest } : {}),
         lines: linesPayload(state),
@@ -102,7 +107,8 @@ export function OrderBuilderShell({
     try {
       const { draftRef } = await save();
       setServerDraftRef(draftRef);
-      router.push(`/checkout?ref=${encodeURIComponent(draftRef)}`);
+      const destination = pos ? pos.checkoutUrl : "/checkout";
+      router.push(`${destination}?ref=${encodeURIComponent(draftRef)}`);
     } catch (error) {
       setCheckoutError(error instanceof Error ? error.message : "Checkout failed");
     } finally {

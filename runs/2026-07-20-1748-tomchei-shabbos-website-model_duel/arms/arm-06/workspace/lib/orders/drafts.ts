@@ -181,11 +181,19 @@ export interface DraftAccess {
   customerId?: string;
   /** Raw guest token (guest path). */
   guestToken?: string;
+  /**
+   * P6 POS: staff act on behalf of a customer at the counter. Only set
+   * server-side after a requirePermission("payments.manage") gate — never
+   * from request input.
+   */
+  staff?: boolean;
 }
 
 // Exported for the P5 checkout engine — every draft/order route runs the
-// same ownership check (session match or guest token hash).
+// same ownership check (session match, guest token hash, or the gated
+// staff override).
 export async function canAccess(order: Order, access: DraftAccess): Promise<boolean> {
+  if (access.staff) return true;
   if (access.customerId && order.customerId === access.customerId) return true;
   if (access.guestToken) return verifyGuestToken(access.guestToken, order.guestTokenHash);
   return false;

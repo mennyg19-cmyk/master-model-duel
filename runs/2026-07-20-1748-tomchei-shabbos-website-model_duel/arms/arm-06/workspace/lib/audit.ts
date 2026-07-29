@@ -24,9 +24,17 @@ export type AuditAction =
   | "address_update"
   | "address_delete"
   | "order_finalize"
+  | "order_discard"
   | "payment_post"
   | "payment_void"
-  | "payment_auto_refund";
+  | "payment_auto_refund"
+  | "payment_refund"
+  | "customer_create"
+  | "customer_update"
+  | "import_stage"
+  | "import_commit"
+  | "import_discard"
+  | "bulk_action";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

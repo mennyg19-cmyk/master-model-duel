@@ -581,8 +581,12 @@ await prisma.order.deleteMany({ where: { seasonId: season.id } });
 await prisma.address.delete({ where: { id: bookAddress.id } });
 // Slug-pattern sweep (not just this run's two items): an interrupted earlier
 // run leaves p5-* products behind, and deleting a product whose inventory row
-// survives trips the XOR check on the nulled productId.
+// survives trips the XOR check on the nulled productId. Smoke fixtures in the
+// seeded season (S2A3-style lines) pin p5-* products too — drop those lines
+// (children before parents, RESTRICT) before the product sweep.
 await prisma.inventoryItem.deleteMany({ where: { product: { slug: { contains: "p5-" } } } });
+await prisma.orderLine.deleteMany({ where: { parentLine: { product: { slug: { contains: "p5-" } } } } });
+await prisma.orderLine.deleteMany({ where: { product: { slug: { contains: "p5-" } } } });
 await prisma.product.deleteMany({ where: { slug: { contains: `p5-` } } });
 await prisma.customer.deleteMany({ where: { id: { in: [customer.id, otherCustomer.id] } } });
 await prisma.season.delete({ where: { id: season.id } });

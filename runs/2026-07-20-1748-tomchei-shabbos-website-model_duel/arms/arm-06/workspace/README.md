@@ -1,4 +1,4 @@
-# Tomchei Shabbos — Mishloach Manos platform (arm-06, phase P5)
+# Tomchei Shabbos — Mishloach Manos platform (arm-06, phase P6)
 
 Public storefront + admin catalog/settings on the P2 domain core: Next.js (App Router, RSC) + Prisma + Postgres.
 
@@ -51,6 +51,15 @@ Copy `.env.example` to `.env` and fill values. A missing/invalid variable fails 
 - **POS payments** — staff-only cash/check/comp posting + voiding (`payments.manage`) with `payment_post`/`payment_void`/`order_finalize` audit rows; cached `paymentStatus` recomputes on every write. Offline methods are schema-refused on POS and 403-refused publicly.
 - **Public guards** — same-origin check, 20/min IP rate limit, and zod on both checkout endpoints; guest draft ownership still 404-on-miss (R-121/R-122).
 
+## What P6 ships
+
+- **Admin order ops** — `/admin/orders` list (status/season/search filters, pagination) and `/admin/orders/[orderId]` detail with money panel (post cash/check/comp, void, Stripe refund) and repeat/discard actions.
+- **Bulk repeat/discard** (`lib/orders/bulk.ts`) — bounded runner (≤50 ids) scoped to the open season, deterministic per-row report (duplicates and out-of-season ids are named skips), per-discard transactional audit rows plus one `bulk_action` summary carrying the full outcome list.
+- **Refunds** — `lib/payments/refund.ts` voids the posted payment and reopens outstanding balance only after the Stripe refund succeeds; on a keyless host the refund is refused up front (refund in the Stripe dashboard; the local row voids itself when the refund webhook lands) instead of faking a local void.
+- **POS counter flow** — `/admin/pos` customer lookup → shared order builder → POS checkout; amount may not exceed the order total, and unknown methods refuse loudly.
+- **CSV imports** (`lib/imports/`) — staged-atomic engine: stage → preview (valid/duplicate/invalid with reasons) → commit in one transaction. Customers dedupe on email **and** normalized phone, both in-file and against the DB; products dedupe on slug. Permission-scoped batch lists (`customers.manage` vs `catalog.manage`).
+- **Admin dashboard & directory** — `/admin` counts + open-season money, `/admin/customers` searchable directory, `/admin/audit` log (PII metadata redacted unless the viewer holds `customers.manage`).
+
 ## Customer auth (dev-auth seam, same shape as staff)
 
 Customer sessions mirror the staff mechanism: HMAC-signed cookie naming a server-side `CustomerSession` row (12h, revocable). `/dev-login` now has a customer section when `DEV_AUTH_BYPASS=true`; `POST/DELETE /api/dev-auth-customer` issues/revokes. Every ownership check runs against the real `Customer` row — there is no client-trusted identity.
@@ -90,6 +99,10 @@ The active driver is shown on `/admin/media` and the Developer settings tab.
 | Settings | typed key-value store (`lib/settings.ts`) — each key has its own zod schema |
 | Catalog queries | `catalogProductInclude` (`lib/storefront/catalog.ts`) shared by grid/quick-view/detail |
 | Concurrency | optimistic `version` column on `StaffUser` and `InventoryItem` |
+| CSV imports | staged-atomic engine (`lib/imports/engine.ts`) — stage rows, preview verdicts, commit in one tx; per-kind handlers own schema + dedupe keys |
+| Bulk order actions | bounded runner (`lib/orders/bulk.ts`) — open-season scoped, deterministic per-row report, transactional per-discard audit + one summary row |
+| Admin list controls | `lib/admin/order-list.ts` param parsing + `buildListHref`; `components/admin/pagination-nav.tsx` owns pagination chrome |
+| Dashboard queries | `lib/admin/dashboard.ts` — one query module per dashboard card, no inline Prisma in the page |
 
 ## Navigation exceptions
 

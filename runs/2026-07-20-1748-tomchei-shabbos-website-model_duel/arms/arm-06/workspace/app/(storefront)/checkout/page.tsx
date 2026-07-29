@@ -6,6 +6,7 @@ import { getSetting } from "@/lib/settings";
 import { formatCents } from "@/lib/money";
 import { loadOrderForCheckout } from "@/lib/orders/drafts";
 import { checkoutAccess } from "@/lib/checkout/access";
+import { buildCheckoutRecipients } from "@/lib/checkout/recipient-props";
 import { ClosedNotice } from "@/components/storefront/closed-notice";
 import { ClearGuestDraftOnSuccess } from "@/components/storefront/clear-guest-draft";
 import { ZipCheckForm } from "@/app/(storefront)/checkout/zip-check-form";
@@ -115,10 +116,10 @@ export default async function CheckoutPage({
     where: { id: { in: order.recipients.map((recipient) => recipient.addressId).filter((id): id is string => !!id) } },
     select: { id: true, lastGreeting: true },
   });
-  const rememberedGreetings = new Map(remembered.map((row) => [row.id, row.lastGreeting]));
-
-  const productLines = order.lines.filter((line) => line.productId !== null);
-  const addOnLines = order.lines.filter((line) => line.addOnId !== null);
+  const { recipients, unassignedCount, subtotalCents } = buildCheckoutRecipients(
+    order,
+    new Map(remembered.map((row) => [row.id, row.lastGreeting])),
+  );
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-16">
@@ -129,41 +130,14 @@ export default async function CheckoutPage({
       <CheckoutForm
         draftRef={order.draftRef!}
         greetingDefault={order.greetingDefault}
-        subtotalCents={order.lines.reduce((sum, line) => sum + line.lineTotalCents, 0)}
+        subtotalCents={subtotalCents}
         feeRules={
           fees ?? { bulkPerDestinationCents: 0, perPackagePerRecipientCents: 0 }
         }
         deliveryDays={deliveryDays ?? []}
         deliveryZips={deliveryZips}
-        recipients={order.recipients.map((recipient) => ({
-          id: recipient.id,
-          name: recipient.name,
-          addressLine: `${recipient.line1}${recipient.line2 ? `, ${recipient.line2}` : ""}, ${recipient.city}, ${recipient.region} ${recipient.postalCode}`,
-          line1: recipient.line1,
-          city: recipient.city,
-          region: recipient.region,
-          postalCode: recipient.postalCode,
-          country: recipient.country,
-          rememberedGreeting: recipient.addressId ? rememberedGreetings.get(recipient.addressId) ?? null : null,
-          initialChoice: recipient.fulfillmentChoice,
-          initialDeliveryDay: recipient.deliveryDay,
-          initialGreeting: recipient.greeting,
-          lines: productLines
-            .filter((line) => line.recipientId === recipient.id)
-            .map((line) => ({
-              id: line.id,
-              label: `${line.qty} × ${line.productName}${line.optionLabel ? ` (${line.optionLabel})` : ""}`,
-              addOns: addOnLines
-                .filter((addOn) => addOn.parentLineId === line.id)
-                .map((addOn) => `${addOn.qty} × ${addOn.productName}`),
-              lineTotalCents:
-                line.lineTotalCents +
-                addOnLines
-                  .filter((addOn) => addOn.parentLineId === line.id)
-                  .reduce((sum, addOn) => sum + addOn.lineTotalCents, 0),
-            })),
-        }))}
-        unassignedCount={productLines.filter((line) => !line.recipientId).length}
+        recipients={recipients}
+        unassignedCount={unassignedCount}
       />
     </main>
   );

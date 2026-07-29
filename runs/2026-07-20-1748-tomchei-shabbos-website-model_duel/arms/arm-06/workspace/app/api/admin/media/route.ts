@@ -43,9 +43,20 @@ export async function POST(request: Request) {
   const productIdRaw = form.get("productId");
   const productId = typeof productIdRaw === "string" && productIdRaw ? productIdRaw : null;
   if (productId) {
-    const product = await prisma.product.findUnique({ where: { id: productId } });
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { season: { select: { name: true, status: true } } },
+    });
     if (!product) {
       return NextResponse.json({ error: "Unknown product for the photo assignment" }, { status: 400 });
+    }
+    // Same open-season gate as ordering/imports: catalog edits target the
+    // live season, never a closed one.
+    if (product.season.status !== "OPEN") {
+      return NextResponse.json(
+        { error: `Season ${product.season.name} is ${product.season.status.toLowerCase()}; photos attach to open-season products` },
+        { status: 422 },
+      );
     }
   }
 
