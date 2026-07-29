@@ -26,6 +26,22 @@ export const ENV_SPEC = [
     secret: false,
   },
   {
+    key: "STRIPE_SECRET_KEY",
+    description:
+      "Stripe secret key for hosted Checkout + refunds (P5). Optional: without it, card checkout returns 503 'not configured' and every other checkout step still works.",
+    example: "sk_test_xxxx",
+    schema: z.string().min(1).optional(),
+    secret: true,
+  },
+  {
+    key: "STRIPE_WEBHOOK_SECRET",
+    description:
+      "Stripe webhook signing secret (whsec_…) for /api/webhooks/stripe. Optional locally: without it the webhook route 503s. Set a dev value to exercise the webhook with signed fixtures.",
+    example: "whsec_xxxx",
+    schema: z.string().min(1).optional(),
+    secret: true,
+  },
+  {
     key: "BLOB_READ_WRITE_TOKEN",
     description:
       "Vercel Blob token for media uploads (R-180). Optional: without it, uploads use the local .uploads/ driver.",

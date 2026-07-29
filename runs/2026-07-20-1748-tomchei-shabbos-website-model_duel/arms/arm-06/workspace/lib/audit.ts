@@ -22,7 +22,11 @@ export type AuditAction =
   | "settings_update"
   | "address_create"
   | "address_update"
-  | "address_delete";
+  | "address_delete"
+  | "order_finalize"
+  | "payment_post"
+  | "payment_void"
+  | "payment_auto_refund";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).
@@ -43,7 +47,10 @@ export interface AuditEntry {
   metadata?: Prisma.InputJsonValue;
 }
 
-export async function recordAudit(entry: AuditEntry): Promise<void> {
+// Pass a tx client when the audit row must commit in the same transaction as
+// the mutation it records (payment verbs) — a crash between commit and audit
+// would otherwise leave a payment mutation with no durable trail.
+export async function recordAudit(entry: AuditEntry, tx?: Prisma.TransactionClient): Promise<void> {
   const actor = entry.actor ?? (entry.ctx ? (entry.ctx.impersonator ?? entry.ctx.staff) : null);
   const impersonatedAs = entry.ctx?.impersonator
     ? { id: entry.ctx.staff.id, email: entry.ctx.staff.email }
@@ -58,7 +65,7 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
         ? { ...(entry.metadata as Record<string, unknown>), impersonatedAs }
         : entry.metadata;
 
-  await prisma.auditLog.create({
+  await (tx ?? prisma).auditLog.create({
     data: {
       actorId: actor?.id ?? null,
       actorEmail: actor?.email ?? null,

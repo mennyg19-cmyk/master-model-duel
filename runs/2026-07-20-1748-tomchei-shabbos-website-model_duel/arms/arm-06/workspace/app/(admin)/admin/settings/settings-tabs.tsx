@@ -13,6 +13,8 @@ interface ShippingState {
   deliveryZips: string[];
   rates: { name: string; feeCents: number }[];
   rules: { name: string; description: string }[];
+  fees: { bulkPerDestinationCents: number; perPackagePerRecipientCents: number };
+  days: string[];
 }
 
 interface OrdersState {
@@ -58,6 +60,9 @@ export function SettingsTabs({
   const [zipsText, setZipsText] = useState(shipping.deliveryZips.join(", "));
   const [rateName, setRateName] = useState("");
   const [rateFee, setRateFee] = useState("");
+  const [bulkFee, setBulkFee] = useState((shipping.fees.bulkPerDestinationCents / 100).toFixed(2));
+  const [perPackageFee, setPerPackageFee] = useState((shipping.fees.perPackagePerRecipientCents / 100).toFixed(2));
+  const [daysText, setDaysText] = useState(shipping.days.join("\n"));
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,6 +110,36 @@ export function SettingsTabs({
       setRateName("");
       setRateFee("");
     }
+  }
+
+  async function saveDeliveryFees(event: FormEvent) {
+    event.preventDefault();
+    const bulkPerDestinationCents = dollarsToCents(Number(bulkFee));
+    const perPackagePerRecipientCents = dollarsToCents(Number(perPackageFee));
+    if (bulkPerDestinationCents === null || perPackagePerRecipientCents === null) {
+      setError("Fees must be clean dollar-and-cents amounts");
+      setStatus(null);
+      return;
+    }
+    reportSaveResult(
+      await apiFetch("/api/admin/settings", {
+        method: "POST",
+        body: { key: "delivery.fees", value: { bulkPerDestinationCents, perPackagePerRecipientCents } },
+      }),
+      "Checkout delivery fees saved.",
+    );
+  }
+
+  async function saveDeliveryDays(event: FormEvent) {
+    event.preventDefault();
+    const days = daysText
+      .split("\n")
+      .map((day) => day.trim())
+      .filter(Boolean);
+    reportSaveResult(
+      await apiFetch("/api/admin/settings", { method: "POST", body: { key: "delivery.days", value: days } }),
+      "Delivery days saved — per-package checkout offers this list live.",
+    );
   }
 
   async function addPackageType(event: FormEvent<HTMLFormElement>) {
@@ -272,6 +307,54 @@ export function SettingsTabs({
                 className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
               <Button type="submit" size="sm" className="mt-2">Save ZIPs</Button>
+            </form>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-semibold">Checkout delivery (P5)</h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Bulk delivery bills once per destination; per-package delivery bills per recipient and
+              is hard-blocked outside the ZIP allowlist.
+            </p>
+            <form onSubmit={saveDeliveryFees} className="mt-3 flex flex-wrap items-end gap-2">
+              <div>
+                <Label htmlFor="bulk-fee">Bulk / destination</Label>
+                <Input
+                  id="bulk-fee"
+                  value={bulkFee}
+                  onChange={(event) => setBulkFee(event.target.value)}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  className="max-w-[7rem]"
+                />
+              </div>
+              <div>
+                <Label htmlFor="per-package-fee">Per-package / recipient</Label>
+                <Input
+                  id="per-package-fee"
+                  value={perPackageFee}
+                  onChange={(event) => setPerPackageFee(event.target.value)}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  className="max-w-[7rem]"
+                />
+              </div>
+              <Button type="submit" size="sm">Save fees</Button>
+            </form>
+            <form onSubmit={saveDeliveryDays} className="mt-4">
+              <Label htmlFor="delivery-days">Purim-week delivery days (one per line)</Label>
+              <textarea
+                id="delivery-days"
+                value={daysText}
+                onChange={(event) => setDaysText(event.target.value)}
+                rows={4}
+                className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              />
+              <Button type="submit" size="sm" className="mt-2">Save days</Button>
             </form>
           </section>
 

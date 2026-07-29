@@ -9,7 +9,13 @@ export const dynamic = "force-dynamic";
 
 // Keys the settings hub may write, whitelisted so this route can never become
 // a generic settings backdoor.
-const WRITABLE_KEYS = ["shipping.deliveryZips", "shipping.rates", "shipping.rules"] as const;
+const WRITABLE_KEYS = [
+  "shipping.deliveryZips",
+  "shipping.rates",
+  "shipping.rules",
+  "delivery.fees",
+  "delivery.days",
+] as const;
 type WritableKey = (typeof WRITABLE_KEYS)[number];
 
 const postSchema = z.object({

@@ -13,14 +13,17 @@ export const dynamic = "force-dynamic";
 export default async function AdminSettingsPage() {
   await requirePermission("settings.manage");
 
-  const [deliveryZips, rates, rules, packageTypes, pickupLocations, openSeason] = await Promise.all([
-    getSetting("shipping.deliveryZips"),
-    getSetting("shipping.rates"),
-    getSetting("shipping.rules"),
-    prisma.packageType.findMany({ orderBy: { name: "asc" } }),
-    prisma.pickupLocation.findMany({ orderBy: { name: "asc" } }),
-    getOpenSeason(),
-  ]);
+  const [deliveryZips, rates, rules, deliveryFees, deliveryDays, packageTypes, pickupLocations, openSeason] =
+    await Promise.all([
+      getSetting("shipping.deliveryZips"),
+      getSetting("shipping.rates"),
+      getSetting("shipping.rules"),
+      getSetting("delivery.fees"),
+      getSetting("delivery.days"),
+      prisma.packageType.findMany({ orderBy: { name: "asc" } }),
+      prisma.pickupLocation.findMany({ orderBy: { name: "asc" } }),
+      getOpenSeason(),
+    ]);
 
   return (
     <div>
@@ -31,6 +34,8 @@ export default async function AdminSettingsPage() {
           deliveryZips: deliveryZips ?? [],
           rates: rates ?? [],
           rules: rules ?? [],
+          fees: deliveryFees ?? { bulkPerDestinationCents: 0, perPackagePerRecipientCents: 0 },
+          days: deliveryDays ?? [],
         }}
         orders={{
           packageTypes: packageTypes.map((packageType) => ({

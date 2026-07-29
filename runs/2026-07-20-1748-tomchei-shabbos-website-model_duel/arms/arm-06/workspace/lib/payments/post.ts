@@ -2,6 +2,37 @@ import { Payment, PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma, reloadOrThrow } from "@/lib/db";
 import { DomainRuleError, NotFoundError } from "@/lib/errors";
 
+// Checkout/POS engines post and void inside their own transactions, so the
+// verbs take the tx client; the standalone wrappers keep P2 callers.
+export async function postPaymentTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    orderId: string;
+    method: PaymentMethod;
+    amountCents: number;
+    postedById?: string;
+    externalRef?: string | null;
+  },
+): Promise<Payment> {
+  if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) {
+    throw new DomainRuleError(`amountCents must be a positive integer; got ${input.amountCents}`);
+  }
+  // Payments only exist against submitted orders (R-160): posting on a DRAFT
+  // inflates a cart, posting on a DISCARDED order resurrects its status.
+  await requireFinalizedOrder(tx, input.orderId);
+  const payment = await tx.payment.create({
+    data: {
+      orderId: input.orderId,
+      method: input.method,
+      amountCents: input.amountCents,
+      postedById: input.postedById ?? null,
+      externalRef: input.externalRef ?? null,
+    },
+  });
+  await recomputePaymentStatus(tx, input.orderId);
+  return payment;
+}
+
 // R-160: payments post and void; the order's paymentStatus is a cache of
 // sum(posted) vs total, recomputed inside the same transaction.
 export async function postPayment(input: {
@@ -9,47 +40,43 @@ export async function postPayment(input: {
   method: PaymentMethod;
   amountCents: number;
   postedById?: string;
+  externalRef?: string | null;
 }): Promise<Payment> {
-  if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) {
-    throw new DomainRuleError(`amountCents must be a positive integer; got ${input.amountCents}`);
-  }
-  return prisma.$transaction(async (tx) => {
-    // Payments only exist against submitted orders (R-160): posting on a DRAFT
-    // inflates a cart, posting on a DISCARDED order resurrects its status.
-    await requireFinalizedOrder(tx, input.orderId);
-    const payment = await tx.payment.create({
-      data: {
-        orderId: input.orderId,
-        method: input.method,
-        amountCents: input.amountCents,
-        postedById: input.postedById ?? null,
-      },
-    });
-    await recomputePaymentStatus(tx, input.orderId);
-    return payment;
+  return prisma.$transaction((tx) => postPaymentTx(tx, input));
+}
+
+export async function voidPaymentTx(
+  tx: Prisma.TransactionClient,
+  paymentId: string,
+  voidReason?: string,
+): Promise<Payment> {
+  const existing = await tx.payment.findUnique({ where: { id: paymentId } });
+  if (!existing) throw new NotFoundError("Payment", paymentId);
+  await requireFinalizedOrder(tx, existing.orderId);
+  const updated = await tx.payment.updateMany({
+    where: { id: paymentId, status: "POSTED" },
+    data: { status: "VOIDED", voidedAt: new Date(), voidReason: voidReason ?? null },
   });
+  if (updated.count === 0) {
+    throw new DomainRuleError(`Payment ${paymentId} is already voided; expected POSTED`);
+  }
+  const payment = await reloadOrThrow(
+    () => tx.payment.findUnique({ where: { id: paymentId } }),
+    "Payment",
+    paymentId,
+  );
+  await recomputePaymentStatus(tx, payment.orderId);
+  return payment;
 }
 
 export async function voidPayment(paymentId: string, voidReason?: string): Promise<Payment> {
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.payment.findUnique({ where: { id: paymentId } });
-    if (!existing) throw new NotFoundError("Payment", paymentId);
-    await requireFinalizedOrder(tx, existing.orderId);
-    const updated = await tx.payment.updateMany({
-      where: { id: paymentId, status: "POSTED" },
-      data: { status: "VOIDED", voidedAt: new Date(), voidReason: voidReason ?? null },
-    });
-    if (updated.count === 0) {
-      throw new DomainRuleError(`Payment ${paymentId} is already voided; expected POSTED`);
-    }
-    const payment = await reloadOrThrow(
-      () => tx.payment.findUnique({ where: { id: paymentId } }),
-      "Payment",
-      paymentId,
-    );
-    await recomputePaymentStatus(tx, payment.orderId);
-    return payment;
-  });
+  return prisma.$transaction((tx) => voidPaymentTx(tx, paymentId, voidReason));
+}
+
+// R-036: recompute the cached payment status after an order change (called
+// from any path that mutates totals or payments outside post/void).
+export async function recalculatePaymentStatus(orderId: string): Promise<PaymentStatus> {
+  return prisma.$transaction((tx) => recomputePaymentStatus(tx, orderId));
 }
 
 async function requireFinalizedOrder(

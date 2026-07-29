@@ -1,33 +1,34 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { prisma } from "@/lib/db";
 import { getOpenSeason } from "@/lib/seasons/queries";
 import { getSetting } from "@/lib/settings";
 import { formatCents } from "@/lib/money";
-import { getCustomerContext } from "@/lib/customers/session";
 import { loadOrderForCheckout } from "@/lib/orders/drafts";
-import { readGuestDraftToken } from "@/lib/orders/guest-draft-cookie";
+import { checkoutAccess } from "@/lib/checkout/access";
 import { ClosedNotice } from "@/components/storefront/closed-notice";
 import { ClearGuestDraftOnSuccess } from "@/components/storefront/clear-guest-draft";
 import { ZipCheckForm } from "@/app/(storefront)/checkout/zip-check-form";
+import { CheckoutForm } from "@/app/(storefront)/checkout/checkout-form";
 
 export const metadata: Metadata = { title: "Checkout" };
 export const dynamic = "force-dynamic";
 
-// P4 checkout: the draft handoff. ?ref=<draftRef> shows the recipient/line
-// summary with ownership enforced (session or the guest's httpOnly cookie —
-// a miss renders "not found", never a hint). Payment capture, fulfillment
-// methods, and Stripe arrive in P5; the delivery-ZIP probe stays.
+// P5 checkout: per-recipient fulfillment (UR-009), greeting default +
+// overrides (UR-013), stale-total conflict UI (R-034/R-037), hosted Stripe
+// handoff (R-166). Ownership stays session-or-guest-cookie; a miss renders
+// "not found", never a hint (R-121).
 export default async function CheckoutPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ref?: string }>;
+  searchParams: Promise<{ ref?: string; paid?: string }>;
 }) {
   const openSeason = await getOpenSeason();
   if (!openSeason) {
     return <ClosedNotice attempted="Checkout" />;
   }
 
-  const { ref } = await searchParams;
+  const { ref, paid } = await searchParams;
   const deliveryZips = (await getSetting("shipping.deliveryZips")) ?? [];
 
   if (!ref) {
@@ -35,8 +36,8 @@ export default async function CheckoutPage({
       <main className="mx-auto max-w-3xl px-4 py-16">
         <h1 className="text-2xl font-bold text-stone-900">Checkout</h1>
         <p className="mt-4 text-stone-600">
-          Payment and fulfillment arrive with the checkout release. You can already check whether an
-          address is inside this season&apos;s delivery area.
+          Open a draft from the order builder to check out. You can already check whether an address
+          is inside this season&apos;s delivery area.
         </p>
         <ZipCheckForm />
         <p className="mt-3 text-xs text-stone-500">
@@ -47,11 +48,7 @@ export default async function CheckoutPage({
     );
   }
 
-  const customerCtx = await getCustomerContext();
-  const order = await loadOrderForCheckout(ref, {
-    customerId: customerCtx?.customer.id,
-    guestToken: await readGuestDraftToken(ref),
-  });
+  const order = await loadOrderForCheckout(ref, await checkoutAccess(ref));
 
   if (!order) {
     return (
@@ -70,8 +67,6 @@ export default async function CheckoutPage({
     );
   }
 
-  const productLines = order.lines.filter((line) => line.productId !== null);
-
   if (order.status === "DISCARDED") {
     return (
       <main className="mx-auto max-w-3xl px-4 py-16">
@@ -88,7 +83,8 @@ export default async function CheckoutPage({
   }
 
   if (order.status === "FINALIZED") {
-    // Success state: the guest's local draft copy clears here and only here.
+    // Success state (R-035): the guest's local draft copy clears here and
+    // only here.
     return (
       <main className="mx-auto max-w-3xl px-4 py-16">
         <ClearGuestDraftOnSuccess shouldClear />
@@ -101,67 +97,74 @@ export default async function CheckoutPage({
     );
   }
 
-  // DRAFT: review summary. The clear marker renders OFF — refreshing checkout
-  // must not wipe the guest's working draft (S2).
+  // Returned from hosted Stripe but the webhook hasn't landed yet.
+  if (paid === "1" && order.stripeSessionId) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-16">
+        <h1 className="text-2xl font-bold text-stone-900">Confirming your payment</h1>
+        <p className="mt-4 text-stone-600" data-payment-processing>
+          Stripe accepted the card and we&apos;re confirming the order — refresh in a few seconds.
+          If it hasn&apos;t updated after a minute, contact us and mention {order.draftRef}.
+        </p>
+      </main>
+    );
+  }
+
+  const [fees, deliveryDays] = await Promise.all([getSetting("delivery.fees"), getSetting("delivery.days")]);
+  const remembered = await prisma.address.findMany({
+    where: { id: { in: order.recipients.map((recipient) => recipient.addressId).filter((id): id is string => !!id) } },
+    select: { id: true, lastGreeting: true },
+  });
+  const rememberedGreetings = new Map(remembered.map((row) => [row.id, row.lastGreeting]));
+
+  const productLines = order.lines.filter((line) => line.productId !== null);
+  const addOnLines = order.lines.filter((line) => line.addOnId !== null);
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-16">
       <ClearGuestDraftOnSuccess shouldClear={false} />
       <h1 className="text-2xl font-bold text-stone-900">Review your order</h1>
       <p className="mt-2 text-sm text-stone-500">Draft {order.draftRef}</p>
 
-      <ul className="mt-6 flex flex-col gap-4" data-checkout-summary>
-        {order.recipients.map((recipient) => {
-          const lines = productLines.filter((line) => line.recipientId === recipient.id);
-          return (
-            <li key={recipient.id} className="rounded-lg border border-stone-200 p-4" data-checkout-recipient={recipient.name}>
-              <h2 className="font-semibold text-stone-900">{recipient.name}</h2>
-              <p className="text-sm text-stone-500">
-                {recipient.line1}
-                {recipient.line2 ? `, ${recipient.line2}` : ""}, {recipient.city}, {recipient.region}{" "}
-                {recipient.postalCode}
-              </p>
-              <ul className="mt-2 flex flex-col gap-1">
-                {lines.map((line) => (
-                  <li key={line.id} className="flex justify-between text-sm text-stone-700">
-                    <span>
-                      {line.qty} × {line.productName}
-                      {line.optionLabel ? ` (${line.optionLabel})` : ""}
-                    </span>
-                    <span>{formatCents(line.lineTotalCents)}</span>
-                  </li>
-                ))}
-              </ul>
-            </li>
-          );
-        })}
-        {productLines.some((line) => !line.recipientId) && (
-          <li className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            Some items aren&apos;t assigned to a recipient yet —{" "}
-            <Link href={`/order?draft=${order.draftRef}`} className="underline">
-              back to the builder
-            </Link>
-            .
-          </li>
-        )}
-      </ul>
-
-      <div className="mt-6 flex items-center justify-between border-t border-stone-200 pt-4 text-lg font-semibold text-stone-900">
-        <span>Total</span>
-        <span data-checkout-total>{formatCents(order.totalCents)}</span>
-      </div>
-
-      <p className="mt-6 rounded-md bg-stone-100 p-4 text-sm text-stone-600">
-        Payment opens with the next release — your draft is saved and nothing is charged yet.
-        Fulfillment method and delivery scheduling arrive with payment.
-      </p>
-
-      <div className="mt-6">
-        <h2 className="text-sm font-semibold text-stone-900">Check delivery availability</h2>
-        <ZipCheckForm />
-        <p className="mt-2 text-xs text-stone-500">
-          Delivering to {deliveryZips.length} ZIP code{deliveryZips.length === 1 ? "" : "s"} this season.
-        </p>
-      </div>
+      <CheckoutForm
+        draftRef={order.draftRef!}
+        greetingDefault={order.greetingDefault}
+        subtotalCents={order.lines.reduce((sum, line) => sum + line.lineTotalCents, 0)}
+        feeRules={
+          fees ?? { bulkPerDestinationCents: 0, perPackagePerRecipientCents: 0 }
+        }
+        deliveryDays={deliveryDays ?? []}
+        deliveryZips={deliveryZips}
+        recipients={order.recipients.map((recipient) => ({
+          id: recipient.id,
+          name: recipient.name,
+          addressLine: `${recipient.line1}${recipient.line2 ? `, ${recipient.line2}` : ""}, ${recipient.city}, ${recipient.region} ${recipient.postalCode}`,
+          line1: recipient.line1,
+          city: recipient.city,
+          region: recipient.region,
+          postalCode: recipient.postalCode,
+          country: recipient.country,
+          rememberedGreeting: recipient.addressId ? rememberedGreetings.get(recipient.addressId) ?? null : null,
+          initialChoice: recipient.fulfillmentChoice,
+          initialDeliveryDay: recipient.deliveryDay,
+          initialGreeting: recipient.greeting,
+          lines: productLines
+            .filter((line) => line.recipientId === recipient.id)
+            .map((line) => ({
+              id: line.id,
+              label: `${line.qty} × ${line.productName}${line.optionLabel ? ` (${line.optionLabel})` : ""}`,
+              addOns: addOnLines
+                .filter((addOn) => addOn.parentLineId === line.id)
+                .map((addOn) => `${addOn.qty} × ${addOn.productName}`),
+              lineTotalCents:
+                line.lineTotalCents +
+                addOnLines
+                  .filter((addOn) => addOn.parentLineId === line.id)
+                  .reduce((sum, addOn) => sum + addOn.lineTotalCents, 0),
+            })),
+        }))}
+        unassignedCount={productLines.filter((line) => !line.recipientId).length}
+      />
     </main>
   );
 }

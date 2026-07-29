@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { DomainRuleError, NotFoundError } from "@/lib/errors";
 import { parseBody } from "@/lib/parse-body";
+import { mapDomainError } from "@/lib/http-errors";
+import { assertSameOrigin } from "@/lib/public-guard";
 import { clientIp } from "@/lib/client-ip";
 import { draftSaveRateLimit } from "@/lib/rate-limit";
 import { getOpenSeason } from "@/lib/seasons/queries";
@@ -57,6 +58,10 @@ const saveSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // R-122 public-guard triad, same as the checkout mutations: same-origin,
+  // IP rate limit, zod.
+  const originBlock = assertSameOrigin(request);
+  if (originBlock) return originBlock;
   if (!draftSaveRateLimit(clientIp(request.headers) ?? "unknown")) {
     return NextResponse.json({ error: "Too many saves; wait a moment and try again" }, { status: 429 });
   }
@@ -148,12 +153,8 @@ export async function POST(request: Request) {
     }
     return response;
   } catch (error) {
-    if (error instanceof DomainRuleError) {
-      return NextResponse.json({ error: error.message }, { status: 422 });
-    }
-    if (error instanceof NotFoundError) {
-      return NextResponse.json({ error: error.message }, { status: 404 });
-    }
+    const mapped = mapDomainError(error);
+    if (mapped) return mapped;
     throw error;
   }
 }

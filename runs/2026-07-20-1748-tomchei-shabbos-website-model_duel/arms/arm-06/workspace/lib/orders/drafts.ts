@@ -9,6 +9,7 @@ import {
 } from "@/lib/orders/resolve-lines";
 import { hashGuestToken, verifyGuestToken } from "@/lib/orders/guest-token";
 import { saveAddress } from "@/lib/customers/addresses";
+import { releaseOrderReservation } from "@/lib/checkout/reservations";
 
 // P4 draft engine: save (create-or-replace), load, and cancel web drafts with
 // recipient assignment + address-book autosave. Ownership is enforced here
@@ -117,7 +118,7 @@ function assertRecipientReferences(lines: DraftLineInput[], recipients: DraftRec
 
 // Create-or-replace: an existing draft's lines + recipients are swapped for
 // the new contents in one transaction (price snapshots refresh on every save;
-// stale-price refusal at payment time is P5 checkout validation). An empty
+// stale-price refusal at payment time lives in checkout validation). An empty
 // lines array is a full clear — the emptied-cart autosave persists here
 // instead of silently keeping the stale lines. `allowBookWrites` gates
 // saveToBook: only verified customer sessions may write to an address book.
@@ -142,6 +143,9 @@ export async function saveDraft(input: {
       if (!existing || existing.status !== "DRAFT" || existing.customerId !== input.customerId) {
         throw new NotFoundError("Draft", input.draftOrderId);
       }
+      // Editing after checkout started returns the reservation and kills the
+      // session — the rewritten draft must re-submit before it can pay.
+      await releaseOrderReservation(tx, existing.id);
       await tx.orderLine.deleteMany({ where: { orderId: existing.id } });
       await tx.draftRecipient.deleteMany({ where: { orderId: existing.id } });
       order = existing;
@@ -164,7 +168,9 @@ export async function saveDraft(input: {
     const totalCents = resolved.reduce((sum, line) => sum + line.lineTotalCents, 0);
     return tx.order.update({
       where: { id: order.id },
-      data: { totalCents, version: { increment: 1 } },
+      // Rewritten contents invalidate any prior checkout submit (fees and
+      // greeting default were frozen against the old lines).
+      data: { totalCents, deliveryFeesCents: 0, greetingDefault: null, version: { increment: 1 } },
       include: { lines: true, recipients: true },
     });
   });
@@ -177,7 +183,9 @@ export interface DraftAccess {
   guestToken?: string;
 }
 
-async function canAccess(order: Order, access: DraftAccess): Promise<boolean> {
+// Exported for the P5 checkout engine — every draft/order route runs the
+// same ownership check (session match or guest token hash).
+export async function canAccess(order: Order, access: DraftAccess): Promise<boolean> {
   if (access.customerId && order.customerId === access.customerId) return true;
   if (access.guestToken) return verifyGuestToken(access.guestToken, order.guestTokenHash);
   return false;
@@ -210,11 +218,15 @@ export async function loadOrderForCheckout(
   return order;
 }
 
-// R-040: cancel = DISCARDED (terminal in the P2 state machine).
+// R-040: cancel = DISCARDED (terminal in the P2 state machine). A
+// checkout-started draft releases its stock reservation on the way out.
 export async function cancelDraft(draftRef: string, access: DraftAccess): Promise<boolean> {
   const order = await prisma.order.findUnique({ where: { draftRef } });
   if (!order || order.status !== "DRAFT") return false;
   if (!(await canAccess(order, access))) return false;
-  await prisma.order.update({ where: { id: order.id }, data: { status: "DISCARDED" } });
+  await prisma.$transaction(async (tx) => {
+    await releaseOrderReservation(tx, order.id);
+    await tx.order.update({ where: { id: order.id }, data: { status: "DISCARDED" } });
+  });
   return true;
 }

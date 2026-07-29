@@ -634,3 +634,10 @@
 2026-07-28T21:40:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P4,review_aggregate,glm-5.2-high,d125a09f-a3f3-4373-870f-96e77c54b5bf,,,,,,,,P4 aggregate of 4 specialists; usage_missing_pending_export
 2026-07-28T21:42:09Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P4,contestant_fix,kimi-k3-max,ae96da9a-1478-4df5-a259-b320e39dc934,,,,,,,,P4 fix pass after aggregate 0B/10M/19m; usage_missing_pending_export
 2026-07-28T22:18:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P5,contestant_build,kimi-k3-max,9ad680ab-a6c7-4c82-9306-2fb773bb7fd6,,,,,,,,P5 checkout initial build; usage_missing_pending_export
+2026-07-28T23:11:56Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P5,review_security,glm-5.2-high,1a9fc49d-685a-4682-ae10-aaa71acdf4c7,,,,,,,,P5 security review; usage_missing_pending_export
+2026-07-28T23:11:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P5,review_quality,glm-5.2-high,98eff3f7-9590-4ca2-8b81-e1d1aa295117,,,,,,,,P5 quality review; usage_missing_pending_export
+2026-07-28T23:11:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P5,review_rules,glm-5.2-high,b6aa42bf-1e90-4b92-b8b3-65576bf878cb,,,,,,,,P5 rules review; usage_missing_pending_export
+2026-07-28T23:11:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P5,review_clean_code,glm-5.2-high,4e581732-921c-4ac4-8bf3-0286a8c78223,,,,,,,,P5 clean-code review; usage_missing_pending_export
+2026-07-28T23:15:04Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P5,review_aggregate,glm-5.2-high,18522ffb-1dde-42ac-be64-d40927e63dac,,,,,,,,P5 aggregate of 4 specialists; usage_missing_pending_export
+2026-07-28T23:17:51Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P5,contestant_fix,kimi-k3-max,92b8c6d5-4a8c-4969-ac3a-289920124820,,,,,,,,P5 fix pass after aggregate 0B/4M/19m; usage_missing_pending_export
+2026-07-29T00:02:07Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P6,contestant_build,kimi-k3-max,f841ddee-4334-4e00-a1d2-d929a294469f,,,,,,,,P6 admin ops hub initial build; usage_missing_pending_export

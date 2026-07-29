@@ -1,4 +1,4 @@
-# Tomchei Shabbos — Mishloach Manos platform (arm-06, phase P4)
+# Tomchei Shabbos — Mishloach Manos platform (arm-06, phase P5)
 
 Public storefront + admin catalog/settings on the P2 domain core: Next.js (App Router, RSC) + Prisma + Postgres.
 
@@ -41,6 +41,15 @@ Copy `.env.example` to `.env` and fill values. A missing/invalid variable fails 
 - **Autosave drafts** — signed-in customers: debounced server save (`POST /api/drafts`, ownership by session). Guests: local-storage draft that becomes a server draft with a one-time guest access token at checkout (R-023). Draft URLs without a valid owner session/token return 404 (anti-enumeration).
 - **Account area** — `/account` dashboard (drafts + recent orders + address count), `/account/orders` history, `/account/orders/[id]` detail with per-recipient line grouping, continue/pay/cancel actions for drafts, `/account/profile` (name/email/phone), `/account/addresses`.
 - **Checkout draft view** — `/checkout?ref=…(&token=…)` renders the draft summary (lines by recipient, totals) ahead of P5 payment; FINALIZED orders show confirmation, DISCARDED 404s.
+
+## What P5 ships
+
+- **Per-recipient fulfillment at checkout** — each recipient picks pickup (free), bulk delivery (one fee per destination address — two recipients on the same normalized address share it), or per-package delivery (fee per recipient, hard ZIP-allowlist block with no override, manager-set Purim-week day). Fees come from typed settings (`delivery.fees`, `delivery.days`) — the placeholder rate-resolution seam live Shippo rates occupy in P8.
+- **Checkout submit/pay engine** (`lib/checkout/`) — server re-prices every line and re-checks stock at submit; any drift or a tampered `expectedTotalCents` is a 409 conflict with fresh totals, never a stale charge. Submit freezes fee/greeting snapshots and reserves stock; finalize (Stripe webhook or POS) commits it; discard/draft-edit/session-expiry releases it.
+- **Greetings** — order-level default + per-recipient override; the effective greeting is remembered on the recipient's address-book row (`Address.lastGreeting`) and prefilled next season (G-020).
+- **Hosted Stripe Checkout** — hand-rolled on native `fetch` + `node:crypto` (no stripe dependency, ponytail ladder): `mode=payment` immediate capture against the frozen server total, HMAC-verified webhook (`/api/webhooks/stripe`), idempotency via one `StripeWebhookEvent` row per event id, charged-amount safety check with auto-refund + audit on any mismatch, and `charge.refunded` sync that voids the posted payment. No live keys on this host: `/api/checkout/pay` answers an explicit 503 and the smoke drives the webhook with fixtures signed exactly the Stripe way.
+- **POS payments** — staff-only cash/check/comp posting + voiding (`payments.manage`) with `payment_post`/`payment_void`/`order_finalize` audit rows; cached `paymentStatus` recomputes on every write. Offline methods are schema-refused on POS and 403-refused publicly.
+- **Public guards** — same-origin check, 20/min IP rate limit, and zod on both checkout endpoints; guest draft ownership still 404-on-miss (R-121/R-122).
 
 ## Customer auth (dev-auth seam, same shape as staff)
 
@@ -88,5 +97,5 @@ The active driver is shown on `/admin/media` and the Developer settings tab.
 
 ## CI
 
-`npm run ci` = lint + typecheck + migration-guard + unit tests (`scripts/test-*.mts`: permissions, grouping, state machine, P3 helpers, P4 helpers — session codec, guest tokens, address dedupe/geocode, cart reducer, rate limiters) + DB-integration tests (order numbers, inventory race, payments, package stages, constraints — needs the embedded DB running).
+`npm run ci` = lint + typecheck + migration-guard + unit tests (`scripts/test-*.mts`: permissions, grouping, state machine, P3 helpers, P4 helpers — session codec, guest tokens, address dedupe/geocode, cart reducer, rate limiters — P5 helpers: webhook signatures, fulfillment choices, fee math, greetings, same-origin guard) + DB-integration tests (order numbers, inventory race, payments, package stages, constraints, checkout engine — needs the embedded DB running).
 `npm run concurrency-smoke` (app running): 10 concurrent versioned updates → 1 win, 9 conflicts.

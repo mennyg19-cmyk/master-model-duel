@@ -1,0 +1,63 @@
+# P5 Rules review — arm-06 (blind)
+
+**Phase:** P5 — Checkout: delivery rules, fees, Stripe hosted, order lifecycle, payments
+**Rules checked:** `arms/arm-06/.cursor/rules/{clean-code,ponytail,workflow,vocabulary,codegraph}.mdc`
+**Reference:** `shared/phases/PHASE-P5-EXPECTED.md` (8 must-be-true items, S1–S5 smoke)
+**Scope:** `arms/arm-06/workspace/` — P5 deliverables only (`lib/checkout/`, `lib/payments/`, `lib/orders/{state-machine,numbers,drafts,guest-token,guest-draft-cookie}.ts`, `lib/inventory/reserve.ts`, `lib/public-guard.ts`, `lib/rate-limit.ts`, `app/api/{checkout,webhooks/stripe,admin/orders,admin/payments}/**`, `app/(storefront)/checkout/**`, `prisma/schema.prisma` Payment/StripePaymentIntent/StripeWebhookEvent models). P3/P4 domain core read only for context.
+**Method:** Findings only, no fixes. Blind to model name. Severity: Blocker / Major / Minor.
+
+## Adherence summary (rules honored)
+
+- **clean-code — one pattern per concern:** the P5 checkout engine follows the documented README patterns — `apiFetch` for client mutations, `parseBody` + zod on every JSON body, `recordAudit` on every staff payment/finalize mutation, integer cents via `lib/money.ts`, conditional `updateMany` for status transitions, `$transaction`-scoped reserve/commit/post. The Stripe path is hand-rolled on native `fetch` + `node:crypto` with a documented no-keys seam (503, never a fake paid state) — no competing payment pattern introduced.
+- **clean-code — god files:** none. Largest P5 file is `lib/checkout/checkout.ts` at 436 lines; `lib/orders/drafts.ts` 233; `lib/checkout/validate.ts` 125. All split by concern (fulfillment rules, repricing, reservations, state machine, payments post, stripe client).
+- **clean-code — comments:** comments carry non-obvious intent (R-IDs/G-IDs, anti-enumeration rationale, HMAC purpose-prefix `guest-draft:`, the bulk "first recipient carries the fee" rule, the `wasReserved` commit branch, the deliberate non-storage of the Stripe `clientSecret`). No narration, no change-explanation comments.
+- **clean-code — error handling:** no swallowed errors. `CheckoutConflictError` carries the fresh totals so the client can re-render; `OfflinePaymentForbiddenError` separates the public refusal from the POS path; `StripeNotConfiguredError` is the explicit seam. Error messages state what failed and the expected state.
+- **clean-code — anti-AI-tics:** no redundant try/catch around non-throwing code; the `as unknown as Parameters<...>[0]` casts in the webhook route are the unavoidable boundary between the parsed Stripe payload and the engine signature and are commented as such. No "just in case" branches — every safety branch in `completeCheckoutSession` names a real failure mode.
+- **clean-code — UI consistency:** checkout page reuses the storefront shell (`max-w-3xl`, `text-stone-900`, `ClosedNotice`, `Link` to `/order`), the `Input`/`Button`/`Label` ui kit, and the `formatCents` money helper. Back navigation is explicit (reload-for-fresh-totals, return-to-builder link). See m-3 for the one exception.
+- **ponytail — ladder:** no new runtime dependency for P5. `package.json` diff carries no `stripe` package — hosted Checkout + refund + webhook signature verify are all native `fetch` + `node:crypto`. The geocode/dev-auth seams from P3/P4 are reused unchanged. Ladder respected.
+- **workflow — expectation files / gate discipline:** the committed CI scripts `scripts/test-p5.mts` (unit: webhook signatures, fulfillment validation, fee math, bulk dedupe keys, greetings, submit schema, rate limiter, same-origin guard) and `scripts/test-checkout.mts` (DB integration: submit happy path, price/stock conflicts, zip block, offline refusal, anti-enumeration across customers, guest-token ownership, pay seam, webhook complete/expire/refund, POS finalize, reservation release on discard/edit) cover every EXPECTED must-be-true and S1–S5 smoke. `npm run ci` wires lint + typecheck + migration-guard + both test tiers. (`.scratch/PHASE-P5-SMOKE.md` is gitignored so not visible in this review snapshot; the committed scripts are the durable evidence.)
+- **workflow — security basics:** `.env` in `.gitignore`; `.env.example` has placeholders for every P5 secret (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) and is regenerable from `lib/env-spec.ts`. HMAC constant-time compare for both staff/customer sessions and guest draft tokens; raw guest token issued once, HMAC hash stored only. Webhook signature verified on the RAW body with a 5-minute replay window, timing-safe. See m-1 for the `.gitignore` gap.
+- **codegraph:** `.codegraph/` present and healthy (P4 review reported 77 files / 567 nodes / 762 edges; P5 added `lib/checkout/`, `lib/payments/`, and the new routes — index growth consistent with the phase, no regression flagged).
+- **vocabulary:** no refactor/rebuild/redesign commands mis-scoped in P5. The 503 "card payment not configured" seam is a documented scope boundary (P8 live Shippo rates), not a silent scope shrink.
+
+## Findings
+
+### M-1 — Public guard triad applied unevenly across the public mutation surface (clean-code: Consistency; workflow: Security Basics; P5 EXPECTED item 5)
+**Severity:** Major
+**Where:** `app/api/checkout/{submit,pay}/route.ts` carry all three P5 guards (same-origin via `assertSameOrigin`, 20/min IP rate limit via `checkoutRateLimit`, zod via `parseBody`). Compare `app/api/drafts/route.ts` (POST: rate-limit + zod, **no same-origin**) and `app/api/drafts/[draftRef]/route.ts` (GET + DELETE: **no same-origin, no rate limit, no zod**).
+**Rule:** `clean-code.mdc` "Consistency — one error-handling approach per project … every subsequent session follows established patterns, never introduces a competing one" and `workflow.mdc` Security Basics. P5 EXPECTED item 5: "public endpoint guards (same-origin, rate limit, Zod)". The README § "What P5 ships" scopes the guards to "both checkout endpoints," but the drafts endpoints are equally public mutation endpoints that carry the same anti-enumeration ownership (R-121/R-122) and stock side-effects — `DELETE /api/drafts/[draftRef]` releases a stock reservation; `POST /api/drafts` creates drafts and issues guest tokens.
+**Detail:** The same-origin guard's stated purpose (`lib/public-guard.ts` comment) is "kills CSRF-style replays of the checkout endpoints." A cross-site POST to `POST /api/drafts` or a logged-in customer's `DELETE /api/drafts/[draftRef]` is equally CSRF-able. Ownership checks (session match or httpOnly guest-token cookie) contain the cross-customer blast radius — a CSRF attacker can only touch the authenticated victim's own drafts, and guest drafts have no session to ride — which is why this is Major and not Blocker. But the documented P5 guard pattern is one pattern per concern, and the drafts surface implements an inconsistent subset of it. Either apply the triad to the drafts routes or record a README § Rule Preferences entry narrowing "public endpoint guards" to checkout-only with the reason.
+
+### m-1 — `.gitignore` ignores `.env` only, not `.env*` (workflow: Security Basics)
+**Severity:** Minor
+**Where:** `workspace/.gitignore:3` — `.env` (single entry).
+**Rule:** `workflow.mdc` Security Basics: "`.env*` in `.gitignore`". `.env.example` is correctly NOT ignored (and is committed as a regenerable artifact). But `.env.local`, `.env.production`, `.env.development`, etc. are not matched by the single `.env` line and could be `git add`ed by accident.
+**Detail:** One-character fix (`.env` → `.env*`); `.env.example` keeps rendering as a tracked file under both patterns. The P5 secrets (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) are the most sensitive values this phase introduced, so the glob tightening is timely.
+
+### m-2 — Auto-refund does not cover "season closed before finalize" (P5 EXPECTED item 4; clean-code: one error-handling approach)
+**Severity:** Minor
+**Where:** `lib/checkout/checkout.ts:302–328` (`completeCheckoutSession`) calls `finalizeOrderTx` (`lib/orders/state-machine.ts:41`), which throws `DomainRuleError("Season … is closed; expected OPEN to finalize")` when the season closed between submit and the webhook landing.
+**Rule:** P5 EXPECTED item 4: "charged-amount safety + auto-refund of stale/failed; refund sync." `completeCheckoutSession` safety-refunds on status mismatch, session-id mismatch, amount mismatch, no reservation, and paid-for-discarded — but a payment that lands after the season closed fails inside `finalizeOrderTx` rather than in the safety-refund branch.
+**Detail:** The webhook route's outer catch turns the `DomainRuleError` into a 500 + idempotency-row delete, so Stripe retries indefinitely; the captured charge is never refunded and the reservation stays held. "Failed" in the EXPECTED wording covers this case in spirit but not in code. A `season.status !== "OPEN"` check before the finalize attempt (routing to `safetyRefund` with a "season closed before finalize" reason) would close the gap. Narrow real-world window (seconds between submit and webhook), hence Minor. Related to m-3, which is the upstream trigger.
+
+### m-3 — `payCheckout` skips the open-season gate (clean-code: Consistency; P5 EXPECTED)
+**Severity:** Minor
+**Where:** `lib/checkout/checkout.ts:217–241` (`payCheckout`) checks `order.status === "DRAFT"`, `stockReserved`, and fulfillment choices, but not `order.season.status === "OPEN"`. Compare `submitCheckout` (`:95`) and `finalizePosOrder` (`:414`), both of which assert the open season inside their transactions.
+**Rule:** `clean-code.mdc` "Consistency — one pattern per concern." The other two checkout entry points gate on the open season; `payCheckout` is the odd one out.
+**Detail:** A session created for a just-closed season captures a card payment that the webhook then can't finalize (this is what triggers m-2). The window is small (submit already gated the season), but the gate is cheap and the consistency is worth it — same `DomainRuleError("Season … is closed; expected OPEN to check out")` the submit path raises.
+
+### m-4 — Dead `Select` ui component + hand-rolled `<select>` in checkout form (clean-code: dead code, Rule of 2, UI Consistency)
+**Severity:** Minor
+**Where:** `components/ui/select.tsx` (a 1-line `<select>` wrapper with no logic) has zero call sites across the workspace. `app/(storefront)/checkout/checkout-form.tsx:190–212` and `:222–236` hand-roll `<select>` with Tailwind classes (`mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm`) instead of using it.
+**Rule:** `clean-code.mdc` "Rule of 2 — needs 2+ real call sites right now," "No wrapper components under 5 lines of JSX with no logic — inline it," and "UI Consistency — one styling approach per project." The component satisfies the deletion criteria on both counts (0 call sites, sub-5-line no-logic wrapper).
+**Detail:** The checkout form already uses the shared `Input`/`Button`/`Label` from `components/ui/`, so the kit is the chosen styling approach for this screen; the select is the one exception. Either delete `select.tsx` (the hand-rolled version is the live pattern) or adopt it and drop the inline classes. The current state is two styling approaches for the same element plus a dead file.
+
+## Severity counts
+
+| Severity | Count |
+|---|---|
+| Blocker | 0 |
+| Major | 1 |
+| Minor | 4 |
+
+No rule violation blocks the P5 gate. The one Major (M-1) is a consistency gap in the documented P5 public-guard triad: both `/api/checkout/*` endpoints carry same-origin + rate-limit + zod, but the equally public `/api/drafts/*` mutation endpoints carry an inconsistent subset (POST missing same-origin; GET/DELETE missing all three). Cross-customer damage is contained by the ownership checks (session match or httpOnly guest-token cookie), so it is not a Blocker — but the pattern should be reconciled before the gate closes. The four Minors: the `.gitignore` glob should be `.env*` not `.env`; the auto-refund branch should cover season-closed-before-finalize; `payCheckout` should mirror the open-season gate the other two checkout entry points enforce; and the dead `Select` ui component plus hand-rolled checkout `<select>` is a dead-code / one-styling-approach cleanup. The arm's P5 tree otherwise honors its selected catalog rules: one pattern per concern documented and followed, no god files, no new deps (Stripe hand-rolled on native fetch + node:crypto, ponytail ladder), expectation evidence committed in the CI scripts (test-p5.mts + test-checkout.mts covering all 8 EXPECTED items and S1–S5), security basics in place (HMAC sessions, constant-time compare, anti-enumeration 404s, audited staff mutations, RAW-body webhook signature with replay window), codegraph healthy and grown with the phase.

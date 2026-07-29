@@ -60,6 +60,12 @@ enum PaymentRecordStatus {
   VOIDED
 }
 
+enum FulfillmentChoice {
+  PICKUP
+  BULK_DELIVERY
+  PER_PACKAGE_DELIVERY
+}
+
 enum PackageStage {
   NEW
   PRINTED
@@ -310,6 +316,9 @@ model Address {
   lat           Float?
   lng           Float?
   geocodedAt    DateTime?
+  // G-020: the greeting this recipient got last time; written at order
+  // finalize and prefilled on the next checkout.
+  lastGreeting  String?
   packages      Package[]
   recipients    DraftRecipient[]
   createdAt     DateTime       @default(now())
@@ -337,11 +346,21 @@ model Order {
   guestTokenHash String?               @unique
   paymentStatus  PaymentStatus         @default(UNPAID)
   totalCents     Int                   @default(0)
+  // P5 checkout: fee/greeting/session snapshots. totalCents = lines +
+  // deliveryFeesCents, frozen at submit so a paid order can never be
+  // repriced by a later staff method change. stockReserved marks that
+  // inventory rows were reserved at submit and must be committed on
+  // finalize or released on discard/expiry.
+  deliveryFeesCents Int                @default(0)
+  greetingDefault  String?
+  stripeSessionId  String?             @unique
+  stockReserved    Boolean             @default(false)
   version        Int                   @default(1)
   lines          OrderLine[]
   recipients     DraftRecipient[]
   payments       Payment[]
   stripeIntents  StripePaymentIntent[]
+  webhookEvents  StripeWebhookEvent[]
   shippingQuotes ShippingQuote[]
   packages       Package[]
   createdAt      DateTime              @default(now())
@@ -368,6 +387,14 @@ model DraftRecipient {
   country     String      @default("US")
   address     Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
   addressId   String?
+  // Per-recipient fulfillment (UR-009) + greeting override (UR-013).
+  // deliveryFeeCents is the paid snapshot (bulk = per destination,
+  // per-package = per recipient); deliveryDay is the manager-set
+  // Purim-week day choice required for per-package delivery.
+  fulfillmentChoice FulfillmentChoice?
+  deliveryDay       String?
+  deliveryFeeCents  Int         @default(0)
+  greeting          String?
   lines       OrderLine[]
   createdAt   DateTime    @default(now())
 
@@ -476,6 +503,9 @@ model Payment {
   status       PaymentRecordStatus @default(POSTED)
   amountCents  Int
   postedById   String?
+  // P5: Stripe payment-intent id on web payments (refund sync R-168 finds
+  // the row to void from a charge.refunded event); null on POS payments.
+  externalRef  String?
   voidedAt     DateTime?
   voidReason   String?
   createdAt    DateTime            @default(now())
@@ -500,6 +530,19 @@ model StripePaymentIntent {
   updatedAt   DateTime @updatedAt
 
   @@map("stripe_payment_intents")
+}
+
+// R-125 idempotency: one row per processed webhook event; the unique eventId
+// makes a replay a no-op row-count instead of a second finalize/payment.
+model StripeWebhookEvent {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  type        String
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId     String?
+  processedAt DateTime @default(now())
+
+  @@map("stripe_webhook_events")
 }
 
 // R-155: quote options expire — checkout must re-quote after expiresAt.

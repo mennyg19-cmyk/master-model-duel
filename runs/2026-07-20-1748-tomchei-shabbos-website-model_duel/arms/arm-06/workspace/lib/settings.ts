@@ -13,6 +13,15 @@ const settingSchemas = {
   "shipping.deliveryZips": z.array(zipSchema),
   "shipping.rates": z.array(z.object({ name: z.string().min(1), feeCents: z.number().int().nonnegative() })),
   "shipping.rules": z.array(z.object({ name: z.string().min(1), description: z.string() })),
+  // P5 delivery rules (UR-009/G-015): placeholder rate resolution — bulk is
+  // one fee per destination, per-package one fee per recipient. P8 swaps
+  // these for live Shippo rates behind the same resolver seam.
+  "delivery.fees": z.object({
+    bulkPerDestinationCents: z.number().int().nonnegative(),
+    perPackagePerRecipientCents: z.number().int().nonnegative(),
+  }),
+  // Manager-set Purim-week day choices offered for per-package delivery.
+  "delivery.days": z.array(z.string().min(1)),
 } as const;
 
 export type SettingKey = keyof typeof settingSchemas;

@@ -28,12 +28,15 @@ export async function hmacSha256(secret: string, message: string): Promise<strin
 }
 
 // Constant-time compare: signature checks must not short-circuit on the first
-// differing byte (timing side-channel).
+// differing byte, and must not return early on a length mismatch either
+// (timing length oracle). The loop always runs the longer length, cycling the
+// shorter string so every index is defined; unequal lengths flip diff up
+// front and the loop's cost stays independent of WHERE the difference is.
 export function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  let diff = a.length === b.length ? 0 : 1;
+  const comparedLength = Math.max(a.length, b.length);
+  for (let i = 0; i < comparedLength; i++) {
+    diff |= a.charCodeAt(i % a.length) ^ b.charCodeAt(i % b.length);
   }
   return diff === 0;
 }

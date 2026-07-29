@@ -175,6 +175,25 @@ async function main() {
     create: { key: "shipping.deliveryZips", value: ["08701"] },
   });
 
+  // P5 placeholder rate rules (UR-009/G-015): bulk fee per destination,
+  // per-package fee per recipient, manager-set Purim-week day choices.
+  await prisma.setting.upsert({
+    where: { key: "delivery.fees" },
+    update: {},
+    create: {
+      key: "delivery.fees",
+      value: { bulkPerDestinationCents: 1000, perPackagePerRecipientCents: 500 },
+    },
+  });
+  await prisma.setting.upsert({
+    where: { key: "delivery.days" },
+    update: {},
+    create: {
+      key: "delivery.days",
+      value: ["Purim week — Sunday", "Purim week — Monday", "Purim day"],
+    },
+  });
+
   // Data-driven fulfillment methods (R-153/R-154).
   await prisma.fulfillmentMethod.upsert({
     where: { code: "DELIVERY" },

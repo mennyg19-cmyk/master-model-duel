@@ -9,11 +9,12 @@ const SUBSCRIBE_LIMIT = 10;
 const DELIVERY_CHECK_LIMIT = 60;
 const ADDRESS_VALIDATE_LIMIT = 30;
 const DRAFT_SAVE_LIMIT = 60;
+const CHECKOUT_LIMIT = 20;
 const MAX_KEYS = 10_000;
 
 const buckets = new Map<string, { windowStart: number; count: number }>();
 
-function hit(key: string, limit: number, now: number): boolean {
+function tryConsume(key: string, limit: number, now: number): boolean {
   if (buckets.size >= MAX_KEYS) {
     for (const [bucketKey, bucket] of buckets) {
       if (now - bucket.windowStart >= WINDOW_MS) buckets.delete(bucketKey);
@@ -29,17 +30,21 @@ function hit(key: string, limit: number, now: number): boolean {
 }
 
 export function newsletterRateLimit(clientIp: string, now: number = Date.now()): boolean {
-  return hit(`subscribe:${clientIp}`, SUBSCRIBE_LIMIT, now);
+  return tryConsume(`subscribe:${clientIp}`, SUBSCRIBE_LIMIT, now);
 }
 
 export function deliveryCheckRateLimit(clientIp: string, now: number = Date.now()): boolean {
-  return hit(`delivery-check:${clientIp}`, DELIVERY_CHECK_LIMIT, now);
+  return tryConsume(`delivery-check:${clientIp}`, DELIVERY_CHECK_LIMIT, now);
 }
 
 export function addressValidateRateLimit(clientIp: string, now: number = Date.now()): boolean {
-  return hit(`address-validate:${clientIp}`, ADDRESS_VALIDATE_LIMIT, now);
+  return tryConsume(`address-validate:${clientIp}`, ADDRESS_VALIDATE_LIMIT, now);
 }
 
 export function draftSaveRateLimit(clientIp: string, now: number = Date.now()): boolean {
-  return hit(`draft-save:${clientIp}`, DRAFT_SAVE_LIMIT, now);
+  return tryConsume(`draft-save:${clientIp}`, DRAFT_SAVE_LIMIT, now);
+}
+
+export function checkoutRateLimit(clientIp: string, now: number = Date.now()): boolean {
+  return tryConsume(`checkout:${clientIp}`, CHECKOUT_LIMIT, now);
 }
