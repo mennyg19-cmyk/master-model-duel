@@ -13,6 +13,10 @@ export interface PackageGroupInput {
   recipientAddressId: string | null;
   fulfillmentMethodCode: string;
   greeting: string | null;
+  // P8: SHIPPED guests have no address-book row — the caller passes a
+  // normalized inline-address key so two same-named recipients at different
+  // addresses can never merge into one label.
+  addressKey?: string;
 }
 
 // Fields are JSON-encoded, not delimiter-joined: recipient/greeting are
@@ -20,7 +24,7 @@ export interface PackageGroupInput {
 // would split differently across a delimiter must never share a key.
 export function buildGroupingKey(input: PackageGroupInput): string {
   const recipient = normalizeWhitespace(input.recipientName).toLowerCase();
-  const address = input.recipientAddressId ?? PICKUP_ADDRESS_SENTINEL;
+  const address = input.addressKey ?? input.recipientAddressId ?? PICKUP_ADDRESS_SENTINEL;
   const greeting = input.greeting ? normalizeWhitespace(input.greeting).toLowerCase() : "";
   return JSON.stringify([recipient, address, input.fulfillmentMethodCode, greeting]);
 }

@@ -1,6 +1,6 @@
 import { FulfillmentChoice, Prisma } from "@prisma/client";
 import { DomainRuleError } from "@/lib/errors";
-import { effectiveGreeting } from "@/lib/checkout/fulfillment";
+import { bulkAddressKey, effectiveGreeting } from "@/lib/checkout/fulfillment";
 import { groupPackageInputs } from "@/lib/packages/grouping";
 import { PackageEventAction } from "@/lib/packages/stages";
 
@@ -12,9 +12,12 @@ import { PackageEventAction } from "@/lib/packages/stages";
 // stock commit roll back together.
 
 // Checkout choices map onto the data-driven methods (R-153): both delivery
-// flavors run the DELIVERY stage list, pickup runs PICKUP.
+// flavors run the DELIVERY stage list, pickup runs PICKUP, carrier shipping
+// (P8) runs SHIPPED.
 export function methodCodeForChoice(choice: FulfillmentChoice): string {
-  return choice === "PICKUP" ? "PICKUP" : "DELIVERY";
+  if (choice === "PICKUP") return "PICKUP";
+  if (choice === "SHIPPED") return "SHIPPED";
+  return "DELIVERY";
 }
 
 export async function materializePackagesTx(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
@@ -48,6 +51,14 @@ export async function materializePackagesTx(tx: Prisma.TransactionClient, orderI
     .map((entry) => ({
       recipientName: entry.recipient.name,
       recipientAddressId: entry.recipient.fulfillmentChoice === "PICKUP" ? null : entry.recipient.addressId,
+      // SHIPPED keys on the inline address snapshot, not the book id — guest
+      // recipients share `addressId: null`, and one label can never cover two
+      // addresses. Book-addressed recipients produce the same key the id
+      // would have grouped them under.
+      addressKey:
+        entry.recipient.fulfillmentChoice === "SHIPPED"
+          ? bulkAddressKey(entry.recipient)
+          : undefined,
       fulfillmentMethodCode: methodCodeForChoice(entry.recipient.fulfillmentChoice!),
       greeting: effectiveGreeting(entry.recipient.greeting, order.greetingDefault),
       recipient: entry.recipient,

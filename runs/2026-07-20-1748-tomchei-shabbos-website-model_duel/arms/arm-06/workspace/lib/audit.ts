@@ -38,7 +38,9 @@ export type AuditAction =
   | "package_split"
   | "package_regroup"
   | "print_batch_run"
-  | "print_batch_reprint";
+  | "print_batch_reprint"
+  | "label_buy"
+  | "label_void";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

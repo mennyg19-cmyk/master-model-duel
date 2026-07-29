@@ -10,6 +10,7 @@ export const CHANNEL_LABELS: Record<FulfillmentChoice, string> = {
   PICKUP: "Pickup",
   BULK_DELIVERY: "Bulk delivery",
   PER_PACKAGE_DELIVERY: "Per-package delivery",
+  SHIPPED: "Carrier shipping",
 };
 
 export interface ChannelSummary {

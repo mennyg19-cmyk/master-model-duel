@@ -4,6 +4,7 @@ import { getSetting } from "@/lib/settings";
 import { DraftAccess } from "@/lib/orders/drafts";
 import { reserveStockTx } from "@/lib/inventory/reserve";
 import { getStripeConfig } from "@/lib/payments/stripe";
+import { quoteRecipientShipping } from "@/lib/checkout/shipping-quotes";
 import {
   bulkAddressKey,
   CheckoutSubmitInput,
@@ -111,12 +112,26 @@ export async function submitCheckout(
     const { freshSubtotalCents, priceConflicts, stockIssues } = await repriceAndCheckStock(tx, order.lines);
 
     // G-015: bulk = one fee per destination address; per-package = one per
-    // recipient; pickup = free. Fees snapshot per recipient.
+    // recipient; pickup = free; SHIPPED = live Shippo quote re-resolved at
+    // submit (R-032) so a stale page lands a 409, never a wrong charge.
     const seenBulkAddresses = new Set<string>();
     const feeByRecipient = new Map<string, number>();
     for (const recipient of order.recipients) {
       const choice = choiceByRecipient.get(recipient.id)!;
-      let feeCents = resolveDeliveryFeeCents(choice.fulfillmentChoice, feeRules);
+      let feeCents = 0;
+      if (choice.fulfillmentChoice === "SHIPPED") {
+        try {
+          const quote = await quoteRecipientShipping(tx, { orderId: order.id, recipient });
+          feeCents = quote.chargedCents;
+        } catch (error) {
+          // A quote failure refuses the submit with a clean 422 (R-032) —
+          // the frozen fee can never be a guess.
+          if (error instanceof Error) throw new DomainRuleError(`${recipient.name}: ${error.message}`);
+          throw error;
+        }
+      } else {
+        feeCents = resolveDeliveryFeeCents(choice.fulfillmentChoice, feeRules);
+      }
       if (choice.fulfillmentChoice === "BULK_DELIVERY") {
         const key = bulkAddressKey(recipient);
         if (seenBulkAddresses.has(key)) feeCents = 0;

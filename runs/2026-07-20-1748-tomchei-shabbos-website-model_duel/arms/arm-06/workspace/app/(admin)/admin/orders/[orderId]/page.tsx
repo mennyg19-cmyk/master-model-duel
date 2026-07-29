@@ -41,6 +41,11 @@ export default async function AdminOrderDetailPage({
           stage: true,
           channel: true,
           fulfillmentMethod: { select: { label: true } },
+          shipments: {
+            where: { status: "PURCHASED" },
+            select: { trackingNumber: true, carrier: true, trackingStatus: true },
+            take: 1,
+          },
           _count: { select: { lines: true } },
         },
       },
@@ -157,6 +162,13 @@ export default async function AdminOrderDetailPage({
             channelLabel: CHANNEL_LABELS[pkg.channel],
             methodLabel: pkg.fulfillmentMethod.label,
             lineCount: pkg._count.lines,
+            tracking: pkg.shipments[0]?.trackingNumber
+              ? {
+                  number: pkg.shipments[0].trackingNumber,
+                  carrier: pkg.shipments[0].carrier ?? "",
+                  status: pkg.shipments[0].trackingStatus,
+                }
+              : null,
           }))}
         />
       </div>

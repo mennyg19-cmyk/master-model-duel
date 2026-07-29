@@ -57,6 +57,62 @@ export const ENV_SPEC = [
     schema: z.string().min(1).optional(),
     secret: true,
   },
+  {
+    key: "SHIPPO_API_TOKEN",
+    description:
+      "Shippo API token (P8; R-173/R-183). Optional: without it, carrier shipping answers 503 'not configured' and every other checkout path still works.",
+    example: "shippo_test_xxxx",
+    schema: z.string().min(1).optional(),
+    secret: true,
+  },
+  {
+    key: "SHIPPO_BASE_URL",
+    description:
+      "Shippo API base URL override. Defaults to https://api.goshippo.com. Local seam: point at the in-app dev double (/api/dev/shippo-fixture) to exercise the wrapper without a live account — the double only serves when DEV_AUTH_BYPASS=true.",
+    example: "http://127.0.0.1:3106/api/dev/shippo-fixture",
+    schema: z.string().url().optional(),
+    secret: false,
+  },
+  {
+    key: "SHIPPO_FEDEX_ACCOUNT_ID",
+    description:
+      "Shippo carrier-account object id for the org's negotiated FedEx account (resolution 6). Optional: omitted from rate requests when unset.",
+    example: "a1b2c3d4e5f6",
+    schema: z.string().min(1).optional(),
+    secret: false,
+  },
+  {
+    key: "SHIPPO_UPS_ACCOUNT_ID",
+    description:
+      "Shippo carrier-account object id for the org's negotiated UPS account (resolution 6). Optional: omitted from rate requests when unset.",
+    example: "f6e5d4c3b2a1",
+    schema: z.string().min(1).optional(),
+    secret: false,
+  },
+  {
+    key: "SHIPPO_INCLUDE_USPS",
+    description:
+      "Include USPS rates in the margin engine where applicable (true/false, default false). Org accounts are FedEx + UPS; USPS comes through Shippo's default account when enabled.",
+    example: "false",
+    schema: z.enum(["true", "false"]).default("false"),
+    secret: false,
+  },
+  {
+    key: "UPS_CLIENT_ID",
+    description:
+      "R-184 DECLARATION ONLY: direct UPS API credentials are declared so ops can provision them, but no code path uses them — all UPS shipping runs through the org's Shippo carrier account (resolution 6).",
+    example: "declared-not-implemented",
+    schema: z.string().min(1).optional(),
+    secret: true,
+  },
+  {
+    key: "UPS_CLIENT_SECRET",
+    description:
+      "R-184 DECLARATION ONLY: see UPS_CLIENT_ID — declared for provisioning, never read by code.",
+    example: "declared-not-implemented",
+    schema: z.string().min(1).optional(),
+    secret: true,
+  },
 ] as const;
 
 export type EnvKey = (typeof ENV_SPEC)[number]["key"];

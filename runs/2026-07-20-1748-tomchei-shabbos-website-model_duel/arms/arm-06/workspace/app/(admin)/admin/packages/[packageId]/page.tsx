@@ -9,6 +9,7 @@ import { Card, CardTitle } from "@/components/ui/card";
 import { BackLink } from "@/components/admin/back-link";
 import { PackageStageBadge } from "@/components/admin/order-badges";
 import { PackageActions } from "@/app/(admin)/admin/packages/[packageId]/package-actions";
+import { PackageLabelActions } from "@/app/(admin)/admin/packages/[packageId]/label-actions";
 import type { PackageStage } from "@prisma/client";
 
 export const metadata: Metadata = { title: "Package detail" };
@@ -42,6 +43,7 @@ export default async function AdminPackageDetailPage({
         orderBy: { id: "desc" },
         include: { batch: { select: { id: true, filingGroup: true, trigger: true, createdAt: true } } },
       },
+      shipments: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 5 },
     },
   });
   if (!pkg) notFound();
@@ -152,6 +154,14 @@ export default async function AdminPackageDetailPage({
           label: `${sibling.recipientName} — ${sibling.stage}, ${sibling._count.lines} line(s)`,
         }))}
       />
+
+      {pkg.channel === "SHIPPED" && (
+        <PackageLabelActions
+          packageId={pkg.id}
+          isTerminal={pkg.stage === pkg.fulfillmentMethod.terminalStage}
+          shipments={pkg.shipments}
+        />
+      )}
 
       <Card className="mt-6 p-5">
         <CardTitle>Event trail</CardTitle>

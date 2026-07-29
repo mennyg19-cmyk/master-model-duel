@@ -7,6 +7,7 @@ import { formatCents } from "@/lib/money";
 import { loadOrderForCheckout } from "@/lib/orders/drafts";
 import { checkoutAccess } from "@/lib/checkout/access";
 import { buildCheckoutRecipients } from "@/lib/checkout/recipient-props";
+import { quoteCheckoutShipping } from "@/lib/checkout/shipping-quotes";
 import { ClosedNotice } from "@/components/storefront/closed-notice";
 import { ClearGuestDraftOnSuccess } from "@/components/storefront/clear-guest-draft";
 import { ZipCheckForm } from "@/app/(storefront)/checkout/zip-check-form";
@@ -120,6 +121,9 @@ export default async function CheckoutPage({
     order,
     new Map(remembered.map((row) => [row.id, row.lastGreeting])),
   );
+  // P8 (R-032): live Shippo display quotes so the SHIPPED option shows its
+  // real price before submit. Failures degrade the option, not the page.
+  const shippingQuotes = await quoteCheckoutShipping({ orderId: order.id, recipients });
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-16">
@@ -138,6 +142,7 @@ export default async function CheckoutPage({
         deliveryZips={deliveryZips}
         recipients={recipients}
         unassignedCount={unassignedCount}
+        shippingQuotes={shippingQuotes}
       />
     </main>
   );

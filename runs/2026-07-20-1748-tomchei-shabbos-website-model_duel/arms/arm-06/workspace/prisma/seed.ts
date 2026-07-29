@@ -215,6 +215,59 @@ async function main() {
       terminalStage: "PICKED_UP",
     },
   });
+  // P8: carrier shipping via Shippo (UR-003). Same stage shape as DELIVERY;
+  // terminal SENT means the carrier has it (labels become unvoidable).
+  await prisma.fulfillmentMethod.upsert({
+    where: { code: "SHIPPED" },
+    update: {},
+    create: {
+      code: "SHIPPED",
+      label: "Carrier shipping",
+      stages: ["NEW", "PRINTED", "PACKED", "SENT"],
+      terminalStage: "SENT",
+    },
+  });
+
+  // P8 shipping origin (the org's shipping address; labels quote from here)
+  // and the boxes shipments go out in (R-081 bin packing / R-157).
+  await prisma.setting.upsert({
+    where: { key: "shipping.origin" },
+    update: {},
+    create: {
+      key: "shipping.origin",
+      value: {
+        name: "Tomchei Shabbos of Lakewood",
+        line1: "100 Orchard Street",
+        city: "Lakewood",
+        region: "NJ",
+        postalCode: "08701",
+        country: "US",
+      },
+    },
+  });
+  const packageTypes = [
+    { name: "Small package", lengthMm: 250, widthMm: 200, heightMm: 150, weightGrams: 1800 },
+    { name: "Large package", lengthMm: 400, widthMm: 300, heightMm: 250, weightGrams: 4200 },
+  ];
+  for (const type of packageTypes) {
+    await prisma.packageType.upsert({
+      where: { name: type.name },
+      update: {},
+      create: type,
+    });
+  }
+  const boxes = [
+    { name: "Small carton", lengthMm: 300, widthMm: 250, heightMm: 200, tareWeightGrams: 250 },
+    { name: "Medium carton", lengthMm: 450, widthMm: 350, heightMm: 300, tareWeightGrams: 500 },
+    { name: "Large carton", lengthMm: 600, widthMm: 450, heightMm: 400, tareWeightGrams: 900 },
+  ];
+  for (const box of boxes) {
+    await prisma.shipmentBox.upsert({
+      where: { name: box.name },
+      update: {},
+      create: box,
+    });
+  }
 
   await prisma.pickupLocation.upsert({
     where: { id: "seed-pickup-main-shul" },

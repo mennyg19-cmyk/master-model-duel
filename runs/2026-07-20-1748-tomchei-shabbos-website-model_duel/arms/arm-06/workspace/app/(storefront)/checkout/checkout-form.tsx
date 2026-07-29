@@ -13,8 +13,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 
-type Choice = "PICKUP" | "BULK_DELIVERY" | "PER_PACKAGE_DELIVERY";
+type Choice = "PICKUP" | "BULK_DELIVERY" | "PER_PACKAGE_DELIVERY" | "SHIPPED";
 type PosMethod = "cash" | "check";
+
+export type ShippingQuoteProp =
+  | { available: true; chargedCents: number; serviceLabel: string }
+  | { available: false; reason: string };
 
 interface ConflictReport {
   priceConflicts: { productName: string; storedCents: number; freshCents: number }[];
@@ -26,6 +30,7 @@ const CHOICE_LABELS: Record<Choice, string> = {
   PICKUP: "Pickup (free)",
   BULK_DELIVERY: "Bulk delivery",
   PER_PACKAGE_DELIVERY: "Per-package delivery",
+  SHIPPED: "Carrier shipping",
 };
 
 // The client mirrors the server's fee math for display only — the server
@@ -41,6 +46,7 @@ export function CheckoutForm({
   unassignedCount,
   builderHref,
   pos,
+  shippingQuotes,
 }: {
   draftRef: string;
   greetingDefault: string | null;
@@ -50,6 +56,8 @@ export function CheckoutForm({
   deliveryZips: string[];
   recipients: CheckoutRecipientProps[];
   unassignedCount: number;
+  /** P8 live Shippo display quotes per recipient (server-quoted at page load). */
+  shippingQuotes: Record<string, ShippingQuoteProp>;
   /** Back-to-builder link when lines are unassigned (defaults to storefront). */
   builderHref?: string;
   /** P6 POS: one-click counter checkout — submit + finalize + post offline
@@ -101,12 +109,15 @@ export function CheckoutForm({
         seen.add(key);
       } else if (choice === "PER_PACKAGE_DELIVERY") {
         fee = feeRules.perPackagePerRecipientCents;
+      } else if (choice === "SHIPPED") {
+        const quote = shippingQuotes[recipient.id];
+        if (quote?.available) fee = quote.chargedCents;
       }
       feesByRecipient[recipient.id] = fee;
     }
     const feesCents = Object.values(feesByRecipient).reduce((sum, fee) => sum + fee, 0);
     return { feesByRecipient, feesCents, totalCents: subtotalCents + feesCents };
-  }, [choices, recipients, feeRules, subtotalCents]);
+  }, [choices, recipients, feeRules, subtotalCents, shippingQuotes]);
 
   function perPackageBlocked(recipient: CheckoutRecipientProps): boolean {
     return !isDeliverable(deliveryZips, recipient.postalCode);
@@ -202,6 +213,7 @@ export function CheckoutForm({
         {recipients.map((recipient) => {
           const choice = choices[recipient.id] ?? "PICKUP";
           const blocked = perPackageBlocked(recipient);
+          const shippingQuote = shippingQuotes[recipient.id];
           return (
             <li
               key={recipient.id}
@@ -234,19 +246,24 @@ export function CheckoutForm({
                     }
                     data-fulfillment-choice={recipient.id}
                   >
-                    {(Object.keys(CHOICE_LABELS) as Choice[]).map((option) => (
-                      <option
-                        key={option}
-                        value={option}
-                        disabled={option === "PER_PACKAGE_DELIVERY" && blocked}
-                      >
-                        {CHOICE_LABELS[option]}
-                        {option === "BULK_DELIVERY" ? ` (${formatCents(feeRules.bulkPerDestinationCents)}/destination)` : ""}
-                        {option === "PER_PACKAGE_DELIVERY"
-                          ? ` (${formatCents(feeRules.perPackagePerRecipientCents)})${blocked ? " — unavailable here" : ""}`
-                          : ""}
-                      </option>
-                    ))}
+                    {(Object.keys(CHOICE_LABELS) as Choice[]).map((option) => {
+                      const optionBlocked =
+                        (option === "PER_PACKAGE_DELIVERY" && blocked) ||
+                        (option === "SHIPPED" && shippingQuote?.available === false);
+                      return (
+                        <option key={option} value={option} disabled={optionBlocked}>
+                          {CHOICE_LABELS[option]}
+                          {option === "BULK_DELIVERY" ? ` (${formatCents(feeRules.bulkPerDestinationCents)}/destination)` : ""}
+                          {option === "PER_PACKAGE_DELIVERY"
+                            ? ` (${formatCents(feeRules.perPackagePerRecipientCents)})${blocked ? " — unavailable here" : ""}`
+                            : ""}
+                          {option === "SHIPPED" && shippingQuote?.available === true
+                            ? ` (${formatCents(shippingQuote.chargedCents)})`
+                            : ""}
+                          {option === "SHIPPED" && shippingQuote?.available === false ? " — unavailable" : ""}
+                        </option>
+                      );
+                    })}
                   </Select>
                   {choice === "PER_PACKAGE_DELIVERY" && blocked && (
                     <p className="mt-1 text-sm text-red-700" data-zip-blocked={recipient.id}>
@@ -274,9 +291,19 @@ export function CheckoutForm({
                       </Select>
                     </div>
                   )}
+                  {choice === "SHIPPED" && shippingQuote?.available === true && (
+                    <p className="mt-1 text-sm text-stone-600" data-shipping-quote={recipient.id}>
+                      Ships via {shippingQuote.serviceLabel} — tracking is emailed when the label prints.
+                    </p>
+                  )}
+                  {choice === "SHIPPED" && shippingQuote?.available === false && (
+                    <p className="mt-1 text-sm text-red-700" data-shipping-unavailable={recipient.id}>
+                      {shippingQuote.reason}
+                    </p>
+                  )}
                   {feesByRecipient[recipient.id] > 0 && (
                     <p className="mt-1 text-sm text-stone-600" data-recipient-fee={recipient.id}>
-                      Delivery fee: {formatCents(feesByRecipient[recipient.id])}
+                      {choice === "SHIPPED" ? "Shipping" : "Delivery fee"}: {formatCents(feesByRecipient[recipient.id])}
                     </p>
                   )}
                 </div>

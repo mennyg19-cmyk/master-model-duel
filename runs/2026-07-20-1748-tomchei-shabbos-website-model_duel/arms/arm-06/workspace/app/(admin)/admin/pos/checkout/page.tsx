@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSetting } from "@/lib/settings";
 import { loadOrderForCheckout } from "@/lib/orders/drafts";
 import { buildCheckoutRecipients } from "@/lib/checkout/recipient-props";
+import { quoteCheckoutShipping } from "@/lib/checkout/shipping-quotes";
 import { BackLink } from "@/components/admin/back-link";
 import { CheckoutForm } from "@/app/(storefront)/checkout/checkout-form";
 
@@ -76,6 +77,7 @@ export default async function AdminPosCheckoutPage({
     order,
     new Map(remembered.map((row) => [row.id, row.lastGreeting])),
   );
+  const shippingQuotes = await quoteCheckoutShipping({ orderId: order.id, recipients });
 
   return (
     <div className="max-w-3xl">
@@ -94,6 +96,7 @@ export default async function AdminPosCheckoutPage({
         deliveryZips={deliveryZips ?? []}
         recipients={recipients}
         unassignedCount={unassignedCount}
+        shippingQuotes={shippingQuotes}
         builderHref={`/admin/pos`}
         pos={{ completeUrl: "/api/admin/pos/checkout", orderHref: (orderId) => `/admin/orders/${orderId}` }}
       />

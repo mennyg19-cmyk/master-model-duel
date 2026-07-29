@@ -24,7 +24,18 @@ export class PackageConcurrencyError extends Error {
 // PackageEvent action discriminator — typed union mirroring AuditAction in
 // lib/audit.ts (one typing discipline per concern). Every event write uses a
 // member of this union; new event kinds extend it here.
-export type PackageEventAction = "materialize" | "split" | "regroup" | "stage_advance" | "print";
+export type PackageEventAction =
+  | "materialize"
+  | "split"
+  | "regroup"
+  | "stage_advance"
+  | "print"
+  // P8 carrier label lifecycle (R-055/R-175/R-176/R-177).
+  | "label_buy"
+  | "label_failed"
+  | "label_void"
+  | "tracking_refresh"
+  | "address_validate";
 
 const PACKAGE_STAGES: readonly PackageStage[] = ["NEW", "PRINTED", "PACKED", "SENT", "PICKED_UP"];
 

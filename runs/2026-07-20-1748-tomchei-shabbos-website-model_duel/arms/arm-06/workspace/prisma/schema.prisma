@@ -64,6 +64,8 @@ enum FulfillmentChoice {
   PICKUP
   BULK_DELIVERY
   PER_PACKAGE_DELIVERY
+  // P8: carrier shipping via Shippo (UR-003) — the out-of-area path.
+  SHIPPED
 }
 
 enum PackageStage {
@@ -102,6 +104,13 @@ enum PrintBatchTrigger {
   NIGHTLY
   REPRINT_GROUP
   REPRINT_ORDER
+}
+
+enum ShipmentStatus {
+  PURCHASING
+  PURCHASED
+  VOIDED
+  FAILED
 }
 
 model StaffUser {
@@ -485,6 +494,7 @@ model Package {
   events               PackageEvent[]
   batchItems           PrintBatchItem[]
   shippingQuotes       ShippingQuote[]
+  shipments            Shipment[]
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
 
@@ -646,6 +656,42 @@ model ShippingQuote {
   @@map("shipping_quotes")
 }
 
+// P8 (R-055, UR-003): one label purchase attempt per row. The money triple
+// charged/cost/margin is the reconciliation ledger (P12 reports on it):
+// charged = the shipping fee the customer paid (frozen at checkout), cost =
+// what the carrier label actually cost, margin = the spread the org keeps.
+// A partial unique index (migration SQL) guarantees one active
+// (PURCHASING|PURCHASED) shipment per package.
+model Shipment {
+  id                  String         @id @default(cuid())
+  package             Package        @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId           String
+  status              ShipmentStatus @default(PURCHASING)
+  shippoShipmentId    String?
+  shippoTransactionId String?
+  rateId              String?
+  carrier             String?
+  serviceLevel        String?
+  trackingNumber      String?
+  trackingStatus      String?
+  trackingStatusAt    DateTime?
+  labelUrl            String?
+  chargedCents        Int
+  costCents           Int?
+  marginCents         Int?
+  // The parcels the label was bought for (bin-packing snapshot, R-081).
+  parcels             Json?
+  // R-175: Shippo's failure reason lives here; the order's paid total is
+  // never mutated by a label failure (documented compensation rule).
+  error               String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  voidedAt            DateTime?
+
+  @@index([packageId, status])
+  @@map("shipments")
+}
+
 // R-156
 model PickupLocation {
   id         String   @id @default(cuid())
@@ -661,13 +707,16 @@ model PickupLocation {
   @@map("pickup_locations")
 }
 
-// R-157: package types and the boxes shipments go out in.
+// R-157: package types and the boxes shipments go out in. weightGrams (P8) is
+// the typical packed weight — the bin-packing fallback for products without
+// their own dims/weight never under-declares a parcel.
 model PackageType {
   id              String   @id @default(cuid())
   name            String   @unique
   lengthMm        Int
   widthMm         Int
   heightMm        Int
+  weightGrams     Int      @default(0)
   maxWeightGrams  Int?
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())

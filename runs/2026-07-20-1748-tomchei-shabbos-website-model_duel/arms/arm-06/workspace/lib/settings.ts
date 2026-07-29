@@ -22,6 +22,17 @@ const settingSchemas = {
   }),
   // Manager-set Purim-week day choices offered for per-package delivery.
   "delivery.days": z.array(z.string().min(1)),
+  // P8: the org's shipping origin — carrier labels and rate quotes ship FROM
+  // here. Editable in the settings hub (P12); seeded for Lakewood.
+  "shipping.origin": z.object({
+    name: z.string().min(1),
+    line1: z.string().min(1),
+    line2: z.string().optional(),
+    city: z.string().min(1),
+    region: z.string().min(1),
+    postalCode: zipSchema,
+    country: z.string().length(2),
+  }),
 } as const;
 
 export type SettingKey = keyof typeof settingSchemas;

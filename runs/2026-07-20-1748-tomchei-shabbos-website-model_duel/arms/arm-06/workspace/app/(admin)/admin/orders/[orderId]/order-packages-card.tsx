@@ -15,6 +15,8 @@ export interface OrderPackageRow {
   channelLabel: string;
   methodLabel: string;
   lineCount: number;
+  /** P8: carrier tracking chip for SHIPPED packages with a purchased label. */
+  tracking: { number: string; carrier: string; status: string | null } | null;
 }
 
 // UR-001: the order's materialized packages, plus the per-order packing slip
@@ -59,6 +61,12 @@ export function OrderPackagesCard({ orderId, packages }: { orderId: string; pack
             <span className="text-xs text-stone-500">
               {pkg.channelLabel} · {pkg.methodLabel} · {pkg.lineCount} line(s)
             </span>
+            {pkg.tracking && (
+              <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700" data-tracking-chip>
+                {pkg.tracking.carrier} {pkg.tracking.number}
+                {pkg.tracking.status ? ` · ${pkg.tracking.status}` : ""}
+              </span>
+            )}
           </li>
         ))}
         {packages.length === 0 && (

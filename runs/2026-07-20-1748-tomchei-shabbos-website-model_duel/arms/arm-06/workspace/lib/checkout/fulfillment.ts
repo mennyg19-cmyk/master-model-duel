@@ -9,7 +9,10 @@ import { normalizeWhitespace } from "@/lib/text";
 //   PER_PACKAGE_DELIVERY — own delivery on a manager-set Purim-week day; one
 //                          fee per recipient; hard ZIP allowlist block with
 //                          no manager override (G-014).
-export const FULFILLMENT_CHOICES = ["PICKUP", "BULK_DELIVERY", "PER_PACKAGE_DELIVERY"] as const;
+//   SHIPPED              — FedEx/UPS via Shippo (P8, R-055); live rate quoted
+//                          per recipient, charge = highest eligible quote
+//                          (UR-003). No ZIP gate — carriers go anywhere.
+export const FULFILLMENT_CHOICES = ["PICKUP", "BULK_DELIVERY", "PER_PACKAGE_DELIVERY", "SHIPPED"] as const;
 export type FulfillmentChoice = (typeof FULFILLMENT_CHOICES)[number];
 
 export interface DeliveryFees {
@@ -55,6 +58,11 @@ export function validateFulfillmentChoice(input: {
     // per-package rule (G-014), not a bulk one.
     return { ok: true };
   }
+  if (input.choice === "SHIPPED") {
+    // Carriers go anywhere — the only SHIPPED gate is a live quote, which the
+    // submit path resolves (a failed quote refuses the submit, R-032).
+    return { ok: true };
+  }
   if (!isDeliverable(input.deliveryZips, input.postalCode)) {
     return {
       ok: false,
@@ -70,8 +78,8 @@ export function validateFulfillmentChoice(input: {
   return { ok: true };
 }
 
-// R-032 placeholder rate resolution: fees come from typed settings; P8 swaps
-// in live Shippo rates behind this same function.
+// R-032 rate resolution for the two settings-priced channels. SHIPPED never
+// passes through here — submit.ts resolves its fee from a live Shippo quote.
 export function resolveDeliveryFeeCents(choice: FulfillmentChoice, fees: DeliveryFees): number {
   if (choice === "BULK_DELIVERY") return fees.bulkPerDestinationCents;
   if (choice === "PER_PACKAGE_DELIVERY") return fees.perPackagePerRecipientCents;
