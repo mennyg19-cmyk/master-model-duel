@@ -25,7 +25,7 @@ Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominato
 
 ## Cost (from COST-LEDGER.csv)
 
-Backfilled 2026-07-27 from Cursor usage export (`usage-events-2026-07-27.csv`); arm-05 backfilled 2026-07-28 from `usage-events-2026-07-28.csv`. `verify-cost-ledger.ps1 -RequireUsage` → **ok=true**.
+Backfilled 2026-07-27 from Cursor usage export (`usage-events-2026-07-27.csv`); arm-05 backfilled 2026-07-28 from `usage-events-2026-07-28.csv`; arm-06 (kimi-k3-max + glm panel) backfilled 2026-07-29 from `usage-events-2026-07-29.csv`. `verify-cost-ledger.ps1 -RequireUsage` → **ok=true**.
 
 | Arm | Builder $ | Full pipeline $ | Solo TCO (T5 lineage) |
 |---|---:|---:|---:|
@@ -34,8 +34,9 @@ Backfilled 2026-07-27 from Cursor usage export (`usage-events-2026-07-27.csv`); 
 | arm-03 | Included* | 33.72† | Included* |
 | arm-04 | 622.27 | 663.03 | 607.98 |
 | arm-05 | 63.49 | 97.65 | 63.49‡ |
+| arm-06 | 128.75§ | 164.75 | — (T5 pending) |
 
-\* Grok contestant rows export as `Included` (no dollar amount). † arm-03 full pipeline $ is **reviewer (glm) billed only**. ‡ arm-05 T4+T5 only; Solo TCO = Terra contestant lineage (no 1a/1b/2/6); full pipeline includes glm residual/panel.
+\* Grok contestant rows export as `Included` (no dollar amount). † arm-03 full pipeline $ is **reviewer (glm) billed only**. ‡ arm-05 T4+T5 only; Solo TCO = Terra contestant lineage (no 1a/1b/2/6); full pipeline includes glm residual/panel. § arm-06 Builder $ = kimi-k3-max rows attributed in COST-LEDGER (1:1 backfill). Cursor export bills **$174.03** across 65 On-Demand kimi events (Jul 28–29); ~$45 is multi-event agent burn not 1:1-attributed to spawn rows — use export total for true spend.
 
 ## Headlines (Option D)
 
