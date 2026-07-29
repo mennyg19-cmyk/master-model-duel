@@ -9,7 +9,7 @@ Fill as tests complete. Arms are blind labels until FINAL-REPORT.
 | arm-03 | **6** | **8** | **15** | | **18.0** | **11.0** | **11.0** | **69.0** | inv_novel=2; bonus_plan | **yes** (join after Test 6) |
 | arm-04 | **7** | **8** | **15** | | **18.0** | **14.0** | **11.0** | **73.0** | inv_novel=6; bonus_plan | **yes** (join after Test 6; Opus 5 high; T6 rerun) |
 | arm-05 | — | — | — | | **18.0** | **12.0** | — | **30.0** | — | **yes** (Terra high; T4+T5 only) |
-| arm-06 | **7** | **6.5** | **15** | | **18.0** | **13.0** | | | inv_novel=4; bonus_plan | **yes** (Kimi K3 max; full suite) |
+| arm-06 | **7** | **6.5** | **15** | | **18.0** | **13.0** | **15.0** | **74.5** | inv_novel=4; bonus_plan | **yes** (Kimi K3 max; full suite) |
 
 Grill on — 1a scored /7 per rubric. **Re-graded** with full 192-row denominator (see DEVIATIONS.md).
 
@@ -117,7 +117,7 @@ Backfilled 2026-07-27 from Cursor usage export (`usage-events-2026-07-27.csv`); 
 - **Clone source:** arm-02 headline winner; identical tree + 5 seeds (B1–B5)
 - **Detect:** arm-01/02 **5/5** → **8/8** — [arm-01](4d486d13-886f-4e9d-bd21-ede97965422f) · [arm-02](8f8af929-9a3e-41f3-bd6f-29bbced13b4f); **arm-03 rerun** **4/5** (missed B3 public-guard) — [2a87b30a-2e82-41a4-9ca9-e21cd519d794](2a87b30a-2e82-41a4-9ca9-e21cd519d794) → **4/8**; **arm-04 rerun** **4/5** (missed B4 checkout/start) — [1feaa88e-ac98-41bd-a258-8b90cbf34a04](1feaa88e-ac98-41bd-a258-8b90cbf34a04) → **4/8**
 - **Vague fix:** arm-01/02 **5/5**, CI **78/78** — [arm-01](c11bc26e-bb16-4036-9549-da9d27fa013a) · [arm-02](fa93c308-33b1-4d9e-aea4-6325d91b828a); **arm-03 rerun** **5/5** symptoms, CI **78/78** — [903d309c-809f-4681-8611-c77814aab9d0](903d309c-809f-4681-8611-c77814aab9d0) → **7/7**; **arm-04 rerun** **5/5** symptoms, CI **82/82** — [b2113824-99f3-46f1-b3d5-87d77ad41987](b2113824-99f3-46f1-b3d5-87d77ad41987) → **7/7**
-- **Test 6 score:** arm-01/02 **15.0/15** (frozen); **arm-03 rerun 11.0/15** (4+7); **arm-04 rerun 11.0/15** (4+7) — [DETECT](arms/arm-04/results/DETECT.md) · [grade](arms/arm-04/results/DETECT-GRADE.md) · [vague fix](arms/arm-04/results/VAGUE-FIX-NOTES.md) · [score](arms/arm-04/results/TEST6-SCORE.md)
+- **Test 6 score:** arm-01/02 **15.0/15** (frozen); **arm-03 rerun 11.0/15** (4+7); **arm-04 rerun 11.0/15** (4+7); **arm-06 rerun 15.0/15** (8+7) — [DETECT](arms/arm-06/results/DETECT.md) · [grade](arms/arm-06/results/DETECT-GRADE.md) · [vague fix](arms/arm-06/results/VAGUE-FIX-NOTES.md) · [score](arms/arm-06/results/TEST6-SCORE.md)
 
 ## Test 5 notes
 

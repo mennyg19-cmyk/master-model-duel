@@ -1,12 +1,12 @@
 ﻿# Run snapshot — `2026-07-20-1748-tomchei-shabbos-website-model_duel`
 
-**UTC snapshot:** 2026-07-29T22:00:00Z (approx)
+**UTC snapshot:** 2026-07-29T22:20:00Z (approx)
 
-## Status — arm-06 late join in progress (full suite)
+## Status — arm-06 late join **COMPLETE** (full suite)
 
 | | |
 |---|---|
-| Late join arm-06 | `kimi-k3-max` · 1a **7** · 1b **6.5** · 2 **15** · T4 **18.0** · T5 **13.0** · Test 6 detect starting |
+| Late join arm-06 | `kimi-k3-max` · 1a **7** · 1b **6.5** · 2 **15** · T4 **18.0** · T5 **13.0** · T6 **15.0** · **Total 74.5/100** |
 | Bonus | inv_novel=4; bonus_plan |
 | Prior late join arm-05 | T4 **18.0** · T5 **12.0** · scoped **30.0** (complete) |
 
@@ -20,8 +20,8 @@
 | 3 | skipped (all arms) |
 | 4 | **complete** **18.0/20** |
 | 5 | **complete** **13.0/15** |
-| 6 | **in progress** — rerun_same_seeds (clone arm-02 + B1–B5) |
+| 6 | **complete** **15.0/15** (detect 8/8 · vague fix 7/7) |
 
-Cost ledger: later rows need usage CSV refresh before final Cost fill.
+Cost ledger: post-2026-07-29 rows still need usage CSV backfill before final Cost fill (`verify -RequireUsage`).
 
 See [SCOREBOARD.md](./SCOREBOARD.md)

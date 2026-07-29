@@ -1,35 +1,39 @@
-import { NextResponse } from "next/server";
-import { clientIp } from "@/lib/client-ip";
-import { checkoutRateLimit } from "@/lib/rate-limit";
+﻿import { env } from "@/lib/env";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 
-// R-122 shared guard for public mutation endpoints: a cross-site POST can
-// send no Origin (curl) or a matching one (same-site form/fetch); anything
-// else is refused. Browsers always send Origin on cross-origin fetches, so
-// this kills CSRF-style replays of the checkout endpoints without touching
-// legitimate same-origin and non-browser callers.
-export function assertSameOrigin(request: Request): NextResponse | null {
+// Public endpoint guard (R-122): state-changing routes reachable without a
+// staff session get same-origin + IP rate limit here; Zod stays at each
+// route's own boundary. Webhooks are exempt from same-origin â€” Stripe posts
+// cross-origin by design and is authenticated by signature instead.
+
+/** Same-origin check via Origin (fall back to Referer). Requests with neither header are refused. */
+export function isSameOrigin(request: Request): boolean {
+  const allowed = new URL(env.APP_URL).origin;
   const origin = request.headers.get("origin");
-  if (!origin) return null;
-  let originHost: string;
-  try {
-    originHost = new URL(origin).host;
-  } catch {
-    return NextResponse.json({ error: "Bad Origin header" }, { status: 403 });
+  if (origin) return origin === allowed;
+  const referer = request.headers.get("referer");
+  if (referer) {
+    try {
+      return new URL(referer).origin === allowed;
+    } catch {
+      return false;
+    }
   }
-  if (originHost !== request.headers.get("host")) {
-    return NextResponse.json({ error: "Cross-origin requests are not allowed" }, { status: 403 });
-  }
-  return null;
+  return false;
 }
 
-// R-122 public-checkout preamble: same-origin first, then the 20/min per-IP
-// checkout limiter. One guard order and one 429 message for both checkout
-// routes; null means the request may proceed.
-export function guardPublicCheckoutMutation(request: Request): NextResponse | null {
-  const originBlock = assertSameOrigin(request);
-  if (originBlock) return originBlock;
-  if (!checkoutRateLimit(clientIp(request.headers) ?? "unknown")) {
-    return NextResponse.json({ error: "Too many checkout attempts — try again in a minute" }, { status: 429 });
+/** Returns a Response to send when the request is blocked, null when it may proceed. */
+export function guardPublicEndpoint(
+  request: Request,
+  bucket: string,
+  limit: number,
+  windowMs: number
+): Response | null {
+  if (!isSameOrigin(request)) {
+    return Response.json({ error: "Cross-origin requests are not allowed" }, { status: 403 });
+  }
+  if (!rateLimit(`${bucket}:${clientIp(request)}`, limit, windowMs)) {
+    return Response.json({ error: "Too many requests â€” try again in a minute" }, { status: 429 });
   }
   return null;
 }
