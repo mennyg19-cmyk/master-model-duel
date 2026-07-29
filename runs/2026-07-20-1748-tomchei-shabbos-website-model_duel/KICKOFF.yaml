@@ -85,3 +85,5 @@ late_joins:
     web_port: 3106
     db_port: 4106
     joined_utc: 2026-07-28T08:46:35.7136836Z
+    test6: rerun_same_seeds
+    test6_note: arm-06 only; clone arm-02 winner; B1-B5 from .scratch/BUG-LEDGER.md; prior arm scores frozen
