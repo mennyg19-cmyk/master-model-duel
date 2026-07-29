@@ -674,3 +674,4 @@
 2026-07-29T13:39:38Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P10,review_quality,glm-5.2-high,1303e435-72ac-41a9-872b-436649394f65,,,,,,,,P10 quality review; usage_missing_pending_export
 2026-07-29T13:39:38Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P10,review_rules,glm-5.2-high,e4aabc30-45be-401e-bd81-b174d6f635be,,,,,,,,P10 rules review; usage_missing_pending_export
 2026-07-29T13:39:38Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P10,review_clean_code,glm-5.2-high,f450f2ac-6084-419c-b7e6-927521060fbd,,,,,,,,P10 clean-code review; usage_missing_pending_export
+2026-07-29T13:43:34Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P10,review_aggregate,glm-5.2-high,PENDING_AGG_ID,,,,,,,,P10 aggregate of 4 specialists; usage_missing_pending_export
