@@ -683,3 +683,4 @@
 2026-07-29T16:00:57Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P11,review_clean_code,glm-5.2-high,f0517cb1-5f5a-42af-8821-72dc212f77ee,,,,,,,,P11 clean-code review; usage_missing_pending_export
 2026-07-29T16:09:45Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P11,review_aggregate,glm-5.2-high,5b59f432-fa0f-407d-a6bc-7adeec4066de,,,,,,,,P11 aggregate of 4 specialists; usage_missing_pending_export
 2026-07-29T16:16:11Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P11,fix,kimi-k3-max,268eede6-b83d-40ef-9d0c-2f9837b10143,,,,,,,,P11 fix vs aggregate 0B/13M/25m; usage_missing_pending_export
+2026-07-29T17:21:06Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P12,build,kimi-k3-max,c456c28f-f150-4921-b91f-188826091873,,,,,,,,P12 build after P11 gate 16.5/20; usage_missing_pending_export

@@ -7,6 +7,7 @@ import { SubscribersTab, SubscriberRow } from "@/components/admin/email/subscrib
 import { ListsTab } from "@/components/admin/email/lists-tab";
 import { TemplatesTab, TemplateRow } from "@/components/admin/email/templates-tab";
 import { TriggeredTab, TriggeredRow } from "@/components/admin/email/triggered-tab";
+import { ERROR_PREVIEW_CHARS, RECENT_OUTBOX_LIMIT, STATUS_TONES } from "@/components/admin/email/hub-display";
 
 export interface OutboxRow {
   id: string;
@@ -88,7 +89,7 @@ export function EmailTabs({
           <div className="max-w-4xl">
             <h2 className="text-lg font-semibold">Recent outbox</h2>
             <p className="mt-1 text-sm text-stone-600">
-              The 20 most recent outbox rows — every email/SMS the system sends lands here first and is
+              The {RECENT_OUTBOX_LIMIT} most recent outbox rows — every email/SMS the system sends lands here first and is
               drained by the outbox sweep cron.
             </p>
             <table className="mt-3 w-full text-left text-sm" data-outbox-log>
@@ -111,16 +112,10 @@ export function EmailTabs({
                     <td className="py-2 pr-3">{message.channel}</td>
                     <td className="py-2 pr-3">{message.toAddress}</td>
                     <td className="py-2 pr-3">
-                      <Badge
-                        tone={
-                          message.status === "SENT" ? "green" : message.status === "FAILED" ? "red" : message.status === "SENDING" ? "amber" : "stone"
-                        }
-                      >
-                        {message.status}
-                      </Badge>
+                      <Badge tone={STATUS_TONES[message.status] ?? "stone"}>{message.status}</Badge>
                       {message.lastError && (
                         <span className="ml-1 text-xs text-red-700" title={message.lastError}>
-                          {message.lastError.slice(0, 60)}
+                          {message.lastError.slice(0, ERROR_PREVIEW_CHARS)}
                         </span>
                       )}
                     </td>

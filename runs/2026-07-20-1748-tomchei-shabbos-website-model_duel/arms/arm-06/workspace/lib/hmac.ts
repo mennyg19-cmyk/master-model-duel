@@ -27,16 +27,16 @@ export async function hmacSha256(secret: string, message: string): Promise<strin
   return base64UrlEncode(new Uint8Array(signature));
 }
 
-// Constant-time compare: signature checks must not short-circuit on the first
-// differing byte, and must not return early on a length mismatch either
-// (timing length oracle). The loop always runs the longer length, cycling the
-// shorter string so every index is defined; unequal lengths flip diff up
-// front and the loop's cost stays independent of WHERE the difference is.
+// Constant-time compare for MAC/hash outputs — every caller compares HMAC
+// signatures or PIN hashes, which are fixed-length by construction, so the
+// length check leaks nothing about a secret. Same contract as
+// crypto.timingSafeEqual on equal-length buffers (the cron-auth pattern):
+// the loop never exits early on a differing byte.
 export function safeEqual(a: string, b: string): boolean {
-  let diff = a.length === b.length ? 0 : 1;
-  const comparedLength = Math.max(a.length, b.length);
-  for (let i = 0; i < comparedLength; i++) {
-    diff |= a.charCodeAt(i % a.length) ^ b.charCodeAt(i % b.length);
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
   return diff === 0;
 }

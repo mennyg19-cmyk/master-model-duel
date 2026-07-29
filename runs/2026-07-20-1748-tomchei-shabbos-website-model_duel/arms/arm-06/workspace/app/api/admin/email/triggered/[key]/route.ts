@@ -19,7 +19,7 @@ const patchSchema = z.object({
 // enqueue time; overrides replace the coded default copy; templateId points
 // the key at a reusable template (resolution order in lib/email/triggered.ts).
 export async function PATCH(request: Request, { params }: { params: Promise<{ key: string }> }) {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const { key } = await params;
@@ -34,23 +34,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ke
     if (!template) return NextResponse.json({ error: "EmailTemplate not found" }, { status: 404 });
   }
 
-  const data = {
-    ...(parsed.data.enabled !== undefined ? { enabled: parsed.data.enabled } : {}),
-    ...(parsed.data.subjectOverride !== undefined ? { subjectOverride: parsed.data.subjectOverride } : {}),
-    ...(parsed.data.bodyTemplateOverride !== undefined ? { bodyTemplateOverride: parsed.data.bodyTemplateOverride } : {}),
-    ...(parsed.data.templateId !== undefined ? { templateId: parsed.data.templateId } : {}),
-  };
+  // Prisma ignores undefined fields on update, so the parsed patch applies
+  // directly — no per-field unwrapping.
   const override = await prisma.emailTriggeredOverride.upsert({
     where: { key },
-    update: data,
-    create: { key, ...data },
+    update: parsed.data,
+    create: { key, ...parsed.data },
   });
   await recordAudit({
     ctx: gate.ctx,
     action: "email_hub_update",
     targetType: "EmailTriggeredOverride",
     targetId: key,
-    metadata: { kind: "triggered_override", ...data },
+    metadata: { kind: "triggered_override", ...parsed.data },
   });
   return NextResponse.json({ ok: true, override });
 }

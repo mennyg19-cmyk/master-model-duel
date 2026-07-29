@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 // R-083: the campaign builder — draft edit, branding-accurate preview,
 // test-send, send/rerun with the idempotency report, and the recipient rows.
 export default async function AdminCampaignPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePermission("customers.manage");
+  await requirePermission("email.manage");
   const { id } = await params;
 
   const campaign = await prisma.emailCampaign.findUnique({

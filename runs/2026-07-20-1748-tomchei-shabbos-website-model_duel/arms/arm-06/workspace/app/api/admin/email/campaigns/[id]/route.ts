@@ -6,6 +6,8 @@ import { recordAudit } from "@/lib/audit";
 import { parseBody } from "@/lib/parse-body";
 import { DomainRuleError } from "@/lib/errors";
 import { mapDomainError } from "@/lib/http-errors";
+import { getCampaignOrThrow } from "@/lib/email/campaigns";
+import { getEmailListOrThrow } from "@/lib/email/lists";
 
 export const dynamic = "force-dynamic";
 
@@ -19,23 +21,26 @@ const patchSchema = z.object({
 // R-083: campaign detail + draft edit. Only DRAFT campaigns edit — once a
 // send has snapshotted recipients, the mailed bytes are history.
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const { id } = await params;
-  const campaign = await prisma.emailCampaign.findUnique({
-    where: { id },
-    include: {
-      list: { select: { id: true, name: true } },
-      recipients: { orderBy: { createdAt: "asc" } },
-    },
-  });
-  if (!campaign) return NextResponse.json({ error: "EmailCampaign not found" }, { status: 404 });
-  return NextResponse.json({ ok: true, campaign });
+  try {
+    const campaign = await getCampaignOrThrow(id);
+    const recipients = await prisma.emailCampaignRecipient.findMany({
+      where: { campaignId: id },
+      orderBy: { createdAt: "asc" },
+    });
+    return NextResponse.json({ ok: true, campaign: { ...campaign, recipients } });
+  } catch (error) {
+    const mapped = mapDomainError(error);
+    if (mapped) return mapped;
+    throw error;
+  }
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const { id } = await params;
@@ -43,14 +48,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!parsed.ok) return parsed.response;
 
   try {
-    const campaign = await prisma.emailCampaign.findUnique({ where: { id } });
-    if (!campaign) return NextResponse.json({ error: "EmailCampaign not found" }, { status: 404 });
+    const campaign = await getCampaignOrThrow(id);
     if (campaign.status !== "DRAFT") {
       throw new DomainRuleError(`Campaign ${campaign.name} is ${campaign.status}; expected DRAFT to edit`);
     }
     if (parsed.data.listId) {
-      const list = await prisma.emailList.findUnique({ where: { id: parsed.data.listId } });
-      if (!list) return NextResponse.json({ error: "EmailList not found" }, { status: 404 });
+      await getEmailListOrThrow(parsed.data.listId);
     }
     const updated = await prisma.emailCampaign.update({ where: { id }, data: parsed.data });
     await recordAudit({

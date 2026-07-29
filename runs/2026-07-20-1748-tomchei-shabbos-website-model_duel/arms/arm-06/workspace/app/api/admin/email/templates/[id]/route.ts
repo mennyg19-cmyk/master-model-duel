@@ -16,7 +16,7 @@ const patchSchema = z.object({
 // R-085: template edit. Keys are stable identifiers (triggered overrides
 // reference them), so they never change after creation.
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const { id } = await params;

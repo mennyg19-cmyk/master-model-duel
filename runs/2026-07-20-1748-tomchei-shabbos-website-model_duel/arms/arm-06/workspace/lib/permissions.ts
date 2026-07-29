@@ -8,6 +8,7 @@ export const PERMISSIONS = [
   "catalog.manage",
   "settings.manage",
   "customers.manage",
+  "email.manage",
   "payments.manage",
   "fulfillment.manage",
 ] as const;
@@ -19,6 +20,8 @@ const ROLE_DEFAULTS: Record<StaffRole, readonly Permission[]> = {
   // UR-014: POS-floor staff edit customer address books (audited); drivers don't.
   // UR-011/G-028: POS staff finalize counter orders and post/void cash/check.
   // UR-001: floor staff work the package board and print batches.
+  // email.manage stays manager-tier: mass campaign sends, transactional
+  // suppression, and template edits are not floor-staff capabilities (M1).
   STAFF: ["admin.access", "customers.manage", "payments.manage", "fulfillment.manage"],
   DRIVER: [],
 };

@@ -68,9 +68,10 @@ export function SubscribersTab({ subscribers }: { subscribers: SubscriberRow[] }
                           save(subscriber, {
                             unsubscribeAll: false,
                             prefs: {
-                              prefNewProducts: field === "prefNewProducts" ? !subscriber.prefNewProducts : subscriber.prefNewProducts,
-                              prefReminders: field === "prefReminders" ? !subscriber.prefReminders : subscriber.prefReminders,
-                              prefCommunity: field === "prefCommunity" ? !subscriber.prefCommunity : subscriber.prefCommunity,
+                              prefNewProducts: subscriber.prefNewProducts,
+                              prefReminders: subscriber.prefReminders,
+                              prefCommunity: subscriber.prefCommunity,
+                              [field]: !subscriber[field],
                             },
                           })
                         }

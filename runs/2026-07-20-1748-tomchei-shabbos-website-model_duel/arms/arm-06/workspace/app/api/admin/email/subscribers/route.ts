@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // public subscribe flow writes, with their three preference flags and global
 // unsubscribe state, plus which lists each belongs to.
 export async function GET() {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const subscribers = await prisma.newsletterSubscriber.findMany({

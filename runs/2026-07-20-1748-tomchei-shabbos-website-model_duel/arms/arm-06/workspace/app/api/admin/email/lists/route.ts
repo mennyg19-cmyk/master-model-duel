@@ -14,7 +14,7 @@ const createSchema = z.object({
 
 // R-084: mailing lists over newsletter subscribers.
 export async function GET() {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const lists = await prisma.emailList.findMany({
@@ -28,7 +28,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const parsed = await parseBody(request, createSchema, "A list name is required");

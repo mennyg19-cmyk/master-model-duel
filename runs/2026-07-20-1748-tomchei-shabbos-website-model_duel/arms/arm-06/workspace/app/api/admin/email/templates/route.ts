@@ -17,7 +17,7 @@ const createSchema = z.object({
 // R-085: reusable email templates with {{token}} placeholders (renderer in
 // lib/email/render.ts; branding tokens come from the email.branding setting).
 export async function GET() {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const templates = await prisma.emailTemplate.findMany({ orderBy: { key: "asc" } });
@@ -25,7 +25,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const parsed = await parseBody(request, createSchema, "key, name, subject, and bodyText are required");

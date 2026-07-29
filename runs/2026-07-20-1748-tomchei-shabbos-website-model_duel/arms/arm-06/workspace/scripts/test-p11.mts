@@ -55,13 +55,13 @@ check(
   renderTemplate("hi {{customerName}} / {{typoToken}}", { customerName: "Malka" }) === "hi Malka / {{typoToken}}",
 );
 check(
-  "brandTokens injects brand + footer and lets caller tokens shadow",
+  "brandTokens keeps brand + footer authoritative over caller tokens (m18)",
   (() => {
     const merged = brandTokens(
       { fromName: "Org", fromEmail: "o@x.org", replyToEmail: "r@x.org", footerText: "F" },
-      { brand: "Shadow", customerName: "Malka" },
+      { brand: "Shadow", footer: "ShadowFooter", customerName: "Malka" },
     );
-    return merged.brand === "Shadow" && merged.footer === "F" && merged.customerName === "Malka";
+    return merged.brand === "Org" && merged.footer === "F" && merged.customerName === "Malka";
   })(),
 );
 check(

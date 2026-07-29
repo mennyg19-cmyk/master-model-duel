@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import type { TriggeredKey } from "@/lib/email/triggered";
 
 // P9 notification seam (G-021). No live Resend/Twilio keys exist on this host
 // — the email platform and the SMS provider decision land in P11 (merged plan
@@ -21,6 +22,17 @@ export type NotificationKind =
   | "payment_reminder";
 
 export type NotificationChannel = "EMAIL" | "SMS";
+
+// The full OutboxMessage kind vocabulary: the P9 notification kinds above,
+// the P11 triggered keys, and the campaign/test kinds. The column stays
+// String (test fixtures write synthetic kinds), so producers reference these
+// unions — a typo at a write site is a compile error, not a row no reader
+// understands. Test kinds are one-shot probes: the sweeper never retries
+// them after a failure (the operator re-sends explicitly).
+export const CAMPAIGN_OUTBOX_KIND = "campaign";
+export const TEST_OUTBOX_KINDS = ["campaign_test", "test_email"] as const;
+export type CampaignOutboxKind = typeof CAMPAIGN_OUTBOX_KIND | (typeof TEST_OUTBOX_KINDS)[number];
+export type OutboxKind = NotificationKind | TriggeredKey | CampaignOutboxKind;
 
 export const NOTIFY_CHANNELS: Record<NotificationKind, readonly NotificationChannel[]> = {
   day_of_delivery: ["EMAIL", "SMS"],

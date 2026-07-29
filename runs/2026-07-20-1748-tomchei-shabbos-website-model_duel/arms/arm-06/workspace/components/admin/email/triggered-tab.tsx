@@ -16,18 +16,22 @@ export interface TriggeredRow {
   defaultSubject: string;
   enabled: boolean;
   subjectOverride: string | null;
+  bodyTemplateOverride: string | null;
   templateId: string | null;
 }
 
 export function TriggeredTab({ triggered, templates }: { triggered: TriggeredRow[]; templates: TemplateRow[] }) {
   const router = useRouter();
-  const [edits, setEdits] = useState<Record<string, { enabled: boolean; subjectOverride: string; templateId: string }>>({});
+  const [edits, setEdits] = useState<
+    Record<string, { enabled: boolean; subjectOverride: string; bodyTemplateOverride: string; templateId: string }>
+  >({});
 
   function stateFor(row: TriggeredRow) {
     return (
       edits[row.key] ?? {
         enabled: row.enabled,
         subjectOverride: row.subjectOverride ?? "",
+        bodyTemplateOverride: row.bodyTemplateOverride ?? "",
         templateId: row.templateId ?? "",
       }
     );
@@ -40,6 +44,7 @@ export function TriggeredTab({ triggered, templates }: { triggered: TriggeredRow
       body: {
         enabled: edit.enabled,
         subjectOverride: edit.subjectOverride.trim() === "" ? null : edit.subjectOverride,
+        bodyTemplateOverride: edit.bodyTemplateOverride.trim() === "" ? null : edit.bodyTemplateOverride,
         templateId: edit.templateId === "" ? null : edit.templateId,
       },
     });
@@ -80,6 +85,19 @@ export function TriggeredTab({ triggered, templates }: { triggered: TriggeredRow
                     setEdits((current) => ({ ...current, [row.key]: { ...edit, subjectOverride: event.target.value } }))
                   }
                   data-triggered-subject={row.key}
+                />
+              </div>
+              <div>
+                <Label htmlFor={`triggered-body-${row.key}`}>Body override (blank = template/coded default; supports {"{tokens}"})</Label>
+                <textarea
+                  id={`triggered-body-${row.key}`}
+                  className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm"
+                  rows={5}
+                  value={edit.bodyTemplateOverride}
+                  onChange={(event) =>
+                    setEdits((current) => ({ ...current, [row.key]: { ...edit, bodyTemplateOverride: event.target.value } }))
+                  }
+                  data-triggered-body={row.key}
                 />
               </div>
               <div>

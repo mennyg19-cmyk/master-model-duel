@@ -12,7 +12,7 @@ const testSchema = z.object({ toAddress: z.string().email() });
 // R-083: test-send a campaign draft to one address through the outbox + one
 // immediate dispatch attempt — the same delivery path a real send takes.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const { id } = await params;

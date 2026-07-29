@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { STATUS_TONES } from "@/components/admin/email/hub-display";
 
 export interface CampaignRow {
   id: string;
@@ -28,13 +29,6 @@ export interface ListRow {
   description: string | null;
   members: { subscriberId: string; email: string; name: string | null; unsubscribed: boolean }[];
 }
-
-const STATUS_TONES: Record<CampaignRow["status"], "stone" | "amber" | "green" | "red"> = {
-  DRAFT: "stone",
-  SENDING: "amber",
-  SENT: "green",
-  FAILED: "red",
-};
 
 export function CampaignsTab({ campaigns, lists }: { campaigns: CampaignRow[]; lists: ListRow[] }) {
   const router = useRouter();

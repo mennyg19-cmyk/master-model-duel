@@ -126,6 +126,22 @@ check(
 const sweep2 = await sweepOutbox();
 check("a second sweep never redelivers a SENT row (S4 one-claim law)", sweep2.claimed === 0 && fixtureSends.length === 1);
 
+// m7: the one-claim law under CONCURRENCY — two overlapping sweeps split the
+// batch; every row is delivered exactly once.
+const overlapAddresses = [1, 2, 3, 4].map((n) => `p11-overlap-${n}-${stamp}@example.org`);
+await prisma.outboxMessage.createMany({
+  data: overlapAddresses.map((toAddress) => ({ kind: "order_confirmation", channel: "EMAIL", toAddress, subject: `overlap ${stamp}`, body: "b" })),
+});
+const sendsBeforeOverlap = fixtureSends.length;
+const [sweepA, sweepB] = await Promise.all([sweepOutbox(), sweepOutbox()]);
+check(
+  "overlapping sweeps claim distinct rows — four sends, zero duplicates (S4, m7)",
+  sweepA.claimed + sweepB.claimed === 4 &&
+    sweepA.sent + sweepB.sent === 4 &&
+    fixtureSends.length === sendsBeforeOverlap + 4 &&
+    new Set(fixtureSends.slice(sendsBeforeOverlap).map((send) => send.to[0])).size === 4,
+);
+
 // --- Retry/backoff to exhaustion ---------------------------------------------------
 const recipientFail = `p11-fail+fail-${stamp}@example.org`;
 await enqueueTriggeredEmail({ key: "order_confirmation", recipient: recipientFail, tokens: { customerName: "F", orderRef: "TS-9002", amount: "$1.00" } });
@@ -142,6 +158,28 @@ const exhausted = await prisma.outboxMessage.findUniqueOrThrow({ where: { id: fa
 check("the sweeper retries FAILED rows up to maxAttempts", exhausted.attempts === 3 && exhausted.status === "FAILED");
 const sweepAfterExhaustion = await sweepOutbox();
 check("an exhausted row is never claimed again", sweepAfterExhaustion.claimed === 0);
+
+// M4: a stale SENDING claim (crashed sweeper) recovers WITHOUT spending an
+// attempt — a crash is not a provider failure and must not eat the retry budget.
+const staleClaimDate = new Date(Date.now() - 20 * 60 * 1000);
+await prisma.outboxMessage.create({
+  data: {
+    kind: "order_confirmation",
+    channel: "EMAIL",
+    toAddress: `p11-stale-${stamp}@example.org`,
+    subject: `stale ${stamp}`,
+    body: "b",
+    status: "SENDING",
+    attempts: 2,
+    lastAttemptAt: staleClaimDate,
+  },
+});
+const staleSweep = await sweepOutbox();
+const staleRow = await prisma.outboxMessage.findFirstOrThrow({ where: { toAddress: `p11-stale-${stamp}@example.org` } });
+check(
+  "a stale SENDING row recovers without burning an attempt (M4)",
+  staleSweep.sent === 1 && staleRow.status === "SENT" && staleRow.attempts === 2 && staleRow.providerId?.startsWith("resend:fixture-email-") === true,
+);
 
 // --- G-021: SMS rows capture honestly with no TWILIO_* -------------------------------
 await prisma.outboxMessage.create({
@@ -193,7 +231,7 @@ async function makeSubscriber(tag: string, unsubscribed = false) {
 }
 const sub1 = await makeSubscriber("s1");
 await makeSubscriber("s2");
-await makeSubscriber("s3", true);
+const sub3 = await makeSubscriber("s3", true);
 const campaign = await prisma.emailCampaign.create({
   data: { name: `P11 Campaign ${stamp}`, subject: "Shabbos news {{customerName}}", bodyText: "Body for {{customerName}}\n\n{{footer}}", listId: list.id },
 });
@@ -201,7 +239,7 @@ const sendsBeforeCampaign = fixtureSends.length;
 const send1 = await sendCampaign({ campaignId: campaign.id, ctx });
 check(
   "the send snapshots the list and skips the unsubscribed member provably",
-  send1.snapshotted === 3 && send1.skipped === 1 && send1.sent === 2 && send1.failed === 0 && send1.status === "SENT",
+  send1.totalMembers === 3 && send1.newRecipients === 3 && send1.skipped === 1 && send1.sent === 2 && send1.failed === 0 && send1.status === "SENT",
 );
 const recipientRows = await prisma.emailCampaignRecipient.findMany({ where: { campaignId: campaign.id } });
 check(
@@ -211,16 +249,52 @@ check(
     recipientRows.some((row) => row.status === "SKIPPED"),
 );
 check("the fixture delivered exactly the two subscribed recipients", fixtureSends.length === sendsBeforeCampaign + 2);
+// M5: every campaign delivery is an outbox row in the Send log; the recipient
+// row mirrors it. m9: {{customerName}} renders the subscriber name.
+const campaignOutboxRows = await prisma.outboxMessage.findMany({ where: { kind: "campaign", metadata: { path: ["campaignId"], equals: campaign.id } } });
+check(
+  "campaign sends land in the outbox Send log, one delivery row per recipient (M5)",
+  campaignOutboxRows.length === 2 &&
+    campaignOutboxRows.every((row) => row.status === "SENT" && row.campaignRecipientId !== null && row.attempts === 1 && row.providerId?.startsWith("resend:fixture-email-")),
+);
+check(
+  "recipient rows mirror their outbox delivery row (attempts + provider)",
+  recipientRows
+    .filter((row) => row.status === "SENT")
+    .every((row) => campaignOutboxRows.some((outbox) => outbox.campaignRecipientId === row.id && outbox.providerId === row.providerId && outbox.attempts === row.attempts)),
+);
+check(
+  "the greeting renders the subscriber NAME, not the email address (m9)",
+  fixtureSends.slice(sendsBeforeCampaign).some((send) => send.subject === "Shabbos news s1"),
+);
 const send2 = await sendCampaign({ campaignId: campaign.id, ctx });
 check(
   "a rerun never re-delivers (S2: zero new sends, zero failures)",
-  send2.sent === 0 && send2.failed === 0 && send2.alreadySent === 2 && fixtureSends.length === sendsBeforeCampaign + 2,
+  send2.sent === 0 && send2.failed === 0 && send2.alreadySent === 2 && send2.newRecipients === 0 && fixtureSends.length === sendsBeforeCampaign + 2,
 );
 const sub4 = await makeSubscriber("s4");
 const send3 = await sendCampaign({ campaignId: campaign.id, ctx });
 check(
   "a rerun reaches ONLY the member who joined after the first send",
   send3.sent === 1 && fixtureSends.length === sendsBeforeCampaign + 3 && fixtureSends[fixtureSends.length - 1].to.includes(sub4.email),
+);
+// m5: a member who resubscribes after being SKIPPED is reached on the next
+// rerun; m15: a member who unsubscribed after snapshotting flips to SKIPPED.
+await prisma.newsletterSubscriber.update({ where: { id: sub3.id }, data: { unsubscribedAt: null } });
+const send4 = await sendCampaign({ campaignId: campaign.id, ctx });
+check(
+  "a resubscribed member leaves SKIPPED and receives the rerun (m5)",
+  send4.sent === 1 && fixtureSends.length === sendsBeforeCampaign + 4 && fixtureSends[fixtureSends.length - 1].to.includes(sub3.email),
+);
+const sub5 = await makeSubscriber("s5", true);
+await prisma.emailCampaignRecipient.create({
+  data: { campaignId: campaign.id, subscriberId: sub5.id, email: sub5.email, status: "PENDING" },
+});
+const send5 = await sendCampaign({ campaignId: campaign.id, ctx });
+const sub5Row = await prisma.emailCampaignRecipient.findFirstOrThrow({ where: { campaignId: campaign.id, subscriberId: sub5.id } });
+check(
+  "a member who unsubscribed after snapshotting flips to SKIPPED before mailing (m15)",
+  send5.sent === 0 && sub5Row.status === "SKIPPED" && fixtureSends.length === sendsBeforeCampaign + 4,
 );
 
 // Campaign failure path: retryable FAILED, then permanent after exhaustion.
@@ -252,12 +326,64 @@ check(
     (await prisma.emailCampaignRecipient.findFirstOrThrow({ where: { campaignId: failCampaign.id, subscriberId: failBad.id } })).attempts === 3,
 );
 
+// M2: a campaign recipient stranded SENDING by a crashed pass is reclaimed by
+// the next rerun — via the shared outbox stale claim, without burning a retry.
+const staleList = await prisma.emailList.create({ data: { name: `P11 Stale List ${stamp}` } });
+const staleSub = await prisma.newsletterSubscriber.create({
+  data: { email: `p11-campstale-${stamp}@example.org`, listMemberships: { create: { listId: staleList.id } } },
+});
+const staleCampaign = await prisma.emailCampaign.create({
+  data: { name: `P11 Stale Campaign ${stamp}`, subject: "stale", bodyText: "b", listId: staleList.id },
+});
+const staleRecipient = await prisma.emailCampaignRecipient.create({
+  data: {
+    campaignId: staleCampaign.id,
+    subscriberId: staleSub.id,
+    email: staleSub.email,
+    status: "SENDING",
+    attempts: 1,
+    lastAttemptAt: staleClaimDate,
+    outboxMessage: {
+      create: { kind: "campaign", channel: "EMAIL", toAddress: staleSub.email, subject: "stale", body: "b", status: "SENDING", attempts: 1, lastAttemptAt: staleClaimDate },
+    },
+  },
+});
+const sendsBeforeStaleCampaign = fixtureSends.length;
+const staleSend = await sendCampaign({ campaignId: staleCampaign.id, ctx });
+const staleRecipientAfter = await prisma.emailCampaignRecipient.findUniqueOrThrow({ where: { id: staleRecipient.id } });
+check(
+  "a stale SENDING campaign recipient is reclaimed and delivered without a burned retry (M2)",
+  staleSend.sent === 1 &&
+    staleSend.status === "SENT" &&
+    fixtureSends.length === sendsBeforeStaleCampaign + 1 &&
+    staleRecipientAfter.status === "SENT" &&
+    staleRecipientAfter.attempts === 1,
+);
+
 // R-083 test-send: through the outbox, one immediate attempt, [test] subject.
+// The result contract is { outboxId, delivered, providerId, error } (M11).
 const testSend = await testSendCampaign(campaign.id, `p11-testdest-${stamp}@example.org`);
 const testRow = await prisma.outboxMessage.findUniqueOrThrow({ where: { id: testSend.outboxId } });
 check(
   "campaign test-send lands in the same outbox log with a [test] subject",
-  testSend.delivered && testRow.kind === "campaign_test" && testRow.status === "SENT" && testRow.subject?.startsWith("[test] ") === true,
+  testSend.delivered && testSend.error === null && testRow.kind === "campaign_test" && testRow.status === "SENT" && testRow.subject?.startsWith("[test] ") === true,
+);
+check(
+  "the test-send contract reports provider + null error on success (M11)",
+  testSend.providerId?.startsWith("resend:fixture-email-") === true,
+);
+// m11: a FAILED test send is reported to the operator and NOT silently
+// retried by the sweeper minutes later.
+const failedTest = await testSendCampaign(campaign.id, `p11-testfail+fail-${stamp}@example.org`);
+check(
+  "a failed test send reports delivered:false with the provider error (M11)",
+  failedTest.delivered === false && failedTest.providerId === null && (failedTest.error ?? "").includes("fixture rejection"),
+);
+await sweepOutbox();
+const failedTestRow = await prisma.outboxMessage.findUniqueOrThrow({ where: { id: failedTest.outboxId } });
+check(
+  "the sweeper never silently retries a failed test send (m11)",
+  failedTestRow.status === "FAILED" && failedTestRow.attempts === 1,
 );
 
 // --- R-087: order hooks — confirmation on finalize, payment link, refund --------------
@@ -322,12 +448,14 @@ check(
 
 // --- R-172: retention purge -------------------------------------------------------------
 const oldDate = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+const ancientDate = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
 await prisma.outboxMessage.createMany({
   data: [
     { kind: "order_confirmation", channel: "EMAIL", toAddress: `p11-old1-${stamp}@example.org`, body: "old", status: "SENT", createdAt: oldDate },
     { kind: "order_confirmation", channel: "EMAIL", toAddress: `p11-old2-${stamp}@example.org`, body: "old", status: "SENT", createdAt: oldDate },
     { kind: "order_confirmation", channel: "EMAIL", toAddress: `p11-old3-${stamp}@example.org`, body: "old", status: "FAILED", createdAt: oldDate },
     { kind: "order_confirmation", channel: "EMAIL", toAddress: `p11-old4-${stamp}@example.org`, body: "old", status: "PENDING", createdAt: oldDate },
+    { kind: "order_confirmation", channel: "EMAIL", toAddress: `p11-old5-${stamp}@example.org`, body: "old", status: "FAILED", createdAt: ancientDate },
   ],
 });
 const purgeSub = await prisma.newsletterSubscriber.create({ data: { email: `p11-purge-${stamp}@example.org` } });
@@ -344,8 +472,10 @@ check(
   purgeResult.purgedOutbox === 2 && purgeResult.purgedRecipients === 1,
 );
 check(
-  "FAILED and PENDING rows survive the purge (failure trail + active outbox)",
-  (await prisma.outboxMessage.count({ where: { toAddress: { in: [`p11-old3-${stamp}@example.org`, `p11-old4-${stamp}@example.org`] } } })) === 2 &&
+  "the failure trail is bounded: ancient FAILED rows purge, recent ones survive (m12)",
+  purgeResult.purgedFailed === 1 &&
+    (await prisma.outboxMessage.count({ where: { toAddress: `p11-old5-${stamp}@example.org` } })) === 0 &&
+    (await prisma.outboxMessage.count({ where: { toAddress: { in: [`p11-old3-${stamp}@example.org`, `p11-old4-${stamp}@example.org`] } } })) === 2 &&
     (await prisma.emailCampaignRecipient.count({ where: { subscriberId: purgeSubFailed.id } })) === 1,
 );
 const purgeRun = await prisma.cronRun.findFirstOrThrow({ where: { id: purgeResult.cronRunId } });

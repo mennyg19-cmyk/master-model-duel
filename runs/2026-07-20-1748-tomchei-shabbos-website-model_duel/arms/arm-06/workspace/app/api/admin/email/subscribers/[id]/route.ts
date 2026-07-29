@@ -22,7 +22,7 @@ const patchSchema = z.object({
 // R-084: staff-side preference/unsubscribe management — the same engine the
 // signed-token flow uses, audited because staff touch it without the token.
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const { id } = await params;

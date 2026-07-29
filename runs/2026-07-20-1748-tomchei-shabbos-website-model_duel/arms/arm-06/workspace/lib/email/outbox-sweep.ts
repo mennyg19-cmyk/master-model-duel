@@ -1,17 +1,23 @@
 import { prisma } from "@/lib/db";
 import { DomainRuleError } from "@/lib/errors";
-import { MILLIS_PER_MINUTE } from "@/lib/dates";
-import { deliverMessage } from "@/lib/email/dispatch";
 import { getSetting } from "@/lib/settings";
+import { getEmailBranding } from "@/lib/email/render";
+import { claimOutboxRow, deliverClaimedRow, STALE_CLAIM_MS } from "@/lib/email/claim-deliver";
+import { CAMPAIGN_OUTBOX_KIND, TEST_OUTBOX_KINDS } from "@/lib/notify/outbox";
 
 // R-088/R-181: the retrying outbox sweeper. Producers only write PENDING
-// rows; this is the single place rows meet a provider. Claim is the atomic
-// conditional UPDATE per message — two overlapping sweeps can never claim the
-// same row (count 0 = the other sweep owns it), which is the S4 one-claim
-// law. A SENDING row whose claim went stale (crashed sweeper) becomes
-// claimable again after STALE_CLAIM_MS so a crash can never strand a send.
-const STALE_CLAIM_MS = 10 * MILLIS_PER_MINUTE;
+// rows; this is the single place rows meet a provider on a schedule. Claim
+// discipline lives in lib/email/claim-deliver.ts (shared with the campaign
+// loop and the test sends) — two overlapping sweeps can never claim the same
+// row, and a stale claim from a crashed sweeper recovers without burning a
+// retry.
 const SWEEP_BATCH = 100;
+
+// Kinds the sweep must NOT auto-retry after failure: campaign recipients
+// (their retry path is the explicit campaign rerun, so the operator controls
+// a mass re-mail) and test sends (a failed test is answered to the operator
+// inline; silently re-mailing it minutes later reads as a ghost send).
+const NO_SWEEP_RETRY_KINDS: string[] = [CAMPAIGN_OUTBOX_KIND, ...TEST_OUTBOX_KINDS];
 
 export interface OutboxSweepResult {
   cronRunId: string;
@@ -28,12 +34,13 @@ export async function sweepOutbox(): Promise<OutboxSweepResult> {
   }
   const cronRun = await prisma.cronRun.create({ data: { name: "outbox-sweep" } });
   try {
+    const branding = await getEmailBranding();
     const staleBefore = new Date(Date.now() - STALE_CLAIM_MS);
     const candidates = await prisma.outboxMessage.findMany({
       where: {
         OR: [
           { status: "PENDING" },
-          { status: "FAILED", attempts: { lt: policy.maxAttempts } },
+          { status: "FAILED", attempts: { lt: policy.maxAttempts }, kind: { notIn: NO_SWEEP_RETRY_KINDS } },
           { status: "SENDING", lastAttemptAt: { lt: staleBefore } },
         ],
       },
@@ -47,35 +54,13 @@ export async function sweepOutbox(): Promise<OutboxSweepResult> {
     let failed = 0;
     let captured = 0;
     for (const { id } of candidates) {
-      const claim = await prisma.outboxMessage.updateMany({
-        where: {
-          id,
-          OR: [
-            { status: "PENDING" },
-            { status: "FAILED", attempts: { lt: policy.maxAttempts } },
-            { status: "SENDING", lastAttemptAt: { lt: staleBefore } },
-          ],
-        },
-        data: { status: "SENDING", attempts: { increment: 1 }, lastAttemptAt: new Date() },
-      });
-      if (claim.count === 0) continue; // an overlapping sweep owns this row
+      if (!(await claimOutboxRow(id, policy.maxAttempts, staleBefore))) continue; // an overlapping owner holds this row
       claimed += 1;
-
-      const message = await prisma.outboxMessage.findUniqueOrThrow({ where: { id } });
-      try {
-        const outcome = await deliverMessage(message);
-        await prisma.outboxMessage.update({
-          where: { id },
-          data: { status: "SENT", providerId: outcome.providerId, sentAt: new Date(), lastError: null },
-        });
+      const delivery = await deliverClaimedRow(id, branding);
+      if (delivery.outcome === "sent") {
         sent += 1;
-        if (outcome.captured) captured += 1;
-      } catch (error) {
-        const lastError = error instanceof Error ? error.message : String(error);
-        await prisma.outboxMessage.update({
-          where: { id },
-          data: { status: "FAILED", lastError },
-        });
+        if (delivery.captured) captured += 1;
+      } else {
         failed += 1;
       }
     }

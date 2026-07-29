@@ -1,4 +1,5 @@
 import { getSetting, SettingValue } from "@/lib/settings";
+import { DomainRuleError } from "@/lib/errors";
 
 // R-085: the one template renderer. Templates and overrides are plain text
 // with {{token}} placeholders; unknown tokens stay literal so a staff typo is
@@ -15,16 +16,17 @@ export async function getEmailBranding(): Promise<EmailBranding> {
   const branding = await getSetting("email.branding");
   if (!branding) {
     // Seeded in prisma/seed.ts; refusing loudly beats sending unbranded mail.
-    throw new Error("email.branding is not configured; expected the seeded sender branding");
+    throw new DomainRuleError("email.branding is not configured; expected the seeded sender branding");
   }
   return branding;
 }
 
 // Branding is applied at enqueue time: the outbox row stores the exact final
 // subject/body bytes, so the sweep, the log, and any purge decision all see
-// what the recipient would have received.
+// what the recipient would have received. Branding wins the spread so a
+// caller can never shadow {{brand}}/{{footer}} with a per-message token.
 export function brandTokens(branding: EmailBranding, tokens: RenderTokens): RenderTokens {
-  return { brand: branding.fromName, footer: branding.footerText, ...tokens };
+  return { ...tokens, brand: branding.fromName, footer: branding.footerText };
 }
 
 export function brandedFrom(branding: EmailBranding): string {

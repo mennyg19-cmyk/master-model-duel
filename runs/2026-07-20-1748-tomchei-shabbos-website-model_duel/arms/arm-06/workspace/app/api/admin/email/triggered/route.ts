@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // R-086: the triggered-key registry — every key with its coded default, its
 // override row when one exists, and the templates an override can point at.
 export async function GET() {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const [overrides, templates] = await Promise.all([

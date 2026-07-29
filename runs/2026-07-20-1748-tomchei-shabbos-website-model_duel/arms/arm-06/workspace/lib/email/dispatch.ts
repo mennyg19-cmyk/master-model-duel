@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { OutboxMessage } from "@prisma/client";
+import { DomainRuleError } from "@/lib/errors";
 import { getResendConfig, sendEmail } from "@/lib/email/resend";
-import { brandedFrom, getEmailBranding } from "@/lib/email/render";
+import { brandedFrom, EmailBranding, getEmailBranding } from "@/lib/email/render";
 import { isSmsConfigured, sendSms } from "@/lib/notify/sms";
 
 // R-178: the delivery driver behind the outbox. Two honest modes, decided per
@@ -16,7 +17,13 @@ export interface DeliveryOutcome {
   captured: boolean;
 }
 
-export async function deliverMessage(message: Pick<OutboxMessage, "channel" | "toAddress" | "subject" | "body">): Promise<DeliveryOutcome> {
+// Branding does not change mid-send, so bulk callers (sweeper, campaign
+// loop) fetch it once and pass it in rather than hitting the settings table
+// per message; one-off callers leave it to the fallback fetch.
+export async function deliverMessage(
+  message: Pick<OutboxMessage, "channel" | "toAddress" | "subject" | "body">,
+  branding?: EmailBranding,
+): Promise<DeliveryOutcome> {
   if (message.channel === "SMS") {
     if (!isSmsConfigured()) {
       return { providerId: `capture:sms:${randomUUID()}`, captured: true };
@@ -25,17 +32,20 @@ export async function deliverMessage(message: Pick<OutboxMessage, "channel" | "t
     return { providerId: `twilio:${result.id}`, captured: false };
   }
 
+  if (message.subject === null) {
+    throw new DomainRuleError("EMAIL outbox row has no subject; every email producer sets subject at enqueue");
+  }
   const { apiKey } = getResendConfig();
   if (!apiKey) {
     return { providerId: `capture:email:${randomUUID()}`, captured: true };
   }
-  const branding = await getEmailBranding();
+  const brand = branding ?? (await getEmailBranding());
   const result = await sendEmail({
     to: message.toAddress,
-    subject: message.subject ?? "(no subject)",
+    subject: message.subject,
     text: message.body,
-    from: brandedFrom(branding),
-    replyTo: branding.replyToEmail,
+    from: brandedFrom(brand),
+    replyTo: brand.replyToEmail,
   });
   return { providerId: `resend:${result.id}`, captured: false };
 }

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // claims mean SENT recipients are never re-delivered; a rerun only picks up
 // new list members and retries failures.
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireApiPermission("customers.manage");
+  const gate = await requireApiPermission("email.manage");
   if (!gate.ok) return gate.response;
 
   const { id } = await params;

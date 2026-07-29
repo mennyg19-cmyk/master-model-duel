@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ERROR_PREVIEW_CHARS, STATUS_TONES } from "@/components/admin/email/hub-display";
 
 interface EditorCampaign {
   id: string;
@@ -31,13 +32,6 @@ interface RecipientRow {
   sentAt: string | null;
 }
 
-const RECIPIENT_TONES: Record<RecipientRow["status"], "stone" | "amber" | "green" | "red"> = {
-  PENDING: "stone",
-  SENDING: "amber",
-  SENT: "green",
-  FAILED: "red",
-  SKIPPED: "stone",
-};
 
 export function CampaignEditor({
   campaign,
@@ -130,7 +124,7 @@ export function CampaignEditor({
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <CardTitle>Content</CardTitle>
-            <Badge tone={campaign.status === "SENT" ? "green" : campaign.status === "FAILED" ? "red" : campaign.status === "SENDING" ? "amber" : "stone"} data-campaign-status>
+            <Badge tone={STATUS_TONES[campaign.status]} data-campaign-status>
               {campaign.status}
             </Badge>
           </div>
@@ -258,10 +252,10 @@ export function CampaignEditor({
                 <tr key={recipient.id} className="border-b border-stone-100" data-recipient-row={recipient.email}>
                   <td className="py-2 pr-3">{recipient.email}</td>
                   <td className="py-2 pr-3">
-                    <Badge tone={RECIPIENT_TONES[recipient.status]}>{recipient.status}</Badge>
+                    <Badge tone={STATUS_TONES[recipient.status]}>{recipient.status}</Badge>
                     {recipient.lastError && (
                       <span className="ml-1 text-xs text-red-700" title={recipient.lastError}>
-                        {recipient.lastError.slice(0, 50)}
+                        {recipient.lastError.slice(0, ERROR_PREVIEW_CHARS)}
                       </span>
                     )}
                   </td>

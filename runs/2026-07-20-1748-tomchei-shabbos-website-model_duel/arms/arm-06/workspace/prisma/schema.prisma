@@ -135,6 +135,7 @@ model StaffUser {
   overrides     PermissionOverride[]
   sessions      AuthSession[]
   uploadedMedia MediaAsset[]
+  createdCampaigns EmailCampaign[]
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
@@ -1061,10 +1062,15 @@ model OutboxMessage {
   providerId    String?
   lastError     String?
   sentAt        DateTime?
+  // Campaign deliveries land in this log too (R-083): one row per campaign
+  // recipient, claimed and drained by the same law as every other send.
+  campaignRecipient   EmailCampaignRecipient? @relation(fields: [campaignRecipientId], references: [id], onDelete: SetNull)
+  campaignRecipientId String?                 @unique
   createdAt     DateTime     @default(now())
 
   @@index([kind, channel, createdAt])
   @@index([status, createdAt])
+  @@index([status, lastAttemptAt])
   @@map("outbox_messages")
 }
 
@@ -1148,6 +1154,7 @@ model EmailCampaign {
   listId      String
   status      EmailCampaignStatus @default(DRAFT)
   recipients  EmailCampaignRecipient[]
+  createdBy   StaffUser?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdById String?
   sentAt      DateTime?
   lastError   String?
@@ -1178,9 +1185,13 @@ model EmailCampaignRecipient {
   email        String
   status       EmailRecipientStatus @default(PENDING)
   attempts     Int                  @default(0)
+  // Claim clock mirroring the delivery outbox row: a SENDING recipient whose
+  // clock went stale (crashed send pass) is reclaimable on the next rerun.
+  lastAttemptAt DateTime?
   lastError    String?
   providerId   String?
   sentAt       DateTime?
+  outboxMessage OutboxMessage?
   createdAt    DateTime             @default(now())
 
   @@unique([campaignId, subscriberId])

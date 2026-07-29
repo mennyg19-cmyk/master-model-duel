@@ -4,13 +4,14 @@ import { prisma } from "@/lib/db";
 import { TRIGGERED_DEFAULTS, TRIGGERED_KEYS } from "@/lib/email/triggered";
 import { currentDeliveryMode } from "@/lib/email/dispatch";
 import { EmailTabs } from "@/components/admin/email/email-tabs";
+import { RECENT_OUTBOX_LIMIT } from "@/components/admin/email/hub-display";
 
 export const metadata: Metadata = { title: "Email" };
 export const dynamic = "force-dynamic";
 
 // R-082: the email hub — campaigns, subscribers, lists, templates, triggered.
 export default async function AdminEmailPage() {
-  await requirePermission("customers.manage");
+  await requirePermission("email.manage");
 
   const [campaigns, subscribers, lists, templates, overrides, recentOutbox] = await Promise.all([
     prisma.emailCampaign.findMany({
@@ -29,7 +30,7 @@ export default async function AdminEmailPage() {
     }),
     prisma.emailTemplate.findMany({ orderBy: { key: "asc" } }),
     prisma.emailTriggeredOverride.findMany(),
-    prisma.outboxMessage.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.outboxMessage.findMany({ orderBy: { createdAt: "desc" }, take: RECENT_OUTBOX_LIMIT }),
   ]);
 
   return (
@@ -84,6 +85,7 @@ export default async function AdminEmailPage() {
             defaultSubject: TRIGGERED_DEFAULTS[key].subject,
             enabled: override?.enabled ?? true,
             subjectOverride: override?.subjectOverride ?? null,
+            bodyTemplateOverride: override?.bodyTemplateOverride ?? null,
             templateId: override?.templateId ?? null,
           };
         })}
