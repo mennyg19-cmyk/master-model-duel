@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { MILLIS_PER_DAY } from "@/lib/dates";
 import { loadUnclaimedPickups, loadPickupPolicy } from "@/lib/pickup/readiness";
 
 // R-079: the follow-up call center read model. One work list per reason —
@@ -50,7 +51,7 @@ export async function loadFollowUps(seasonId: string, reason?: FollowUpReason): 
     const unclaimed = await loadUnclaimedPickups(seasonId, policy);
     for (const pkg of unclaimed) {
       const readyAt = pkg.pickupReadyAt!;
-      const daysWaiting = Math.floor((Date.now() - readyAt.getTime()) / (24 * 60 * 60 * 1000));
+      const daysWaiting = Math.floor((Date.now() - readyAt.getTime()) / MILLIS_PER_DAY);
       rows.push({
         reason: "pickup",
         customerName: pkg.order.customer.name,
@@ -63,6 +64,9 @@ export async function loadFollowUps(seasonId: string, reason?: FollowUpReason): 
   }
 
   if (!reason || reason === "bulk") {
+    // m7: EVERY schedule's customers surface — a call-center agent working an
+    // earlier same-day run must still see its batch, one row per
+    // (customer, schedule) so historical follow-ups never go invisible.
     const schedules = await prisma.bulkDeliverySchedule.findMany({
       where: { seasonId },
       include: {
@@ -74,28 +78,30 @@ export async function loadFollowUps(seasonId: string, reason?: FollowUpReason): 
       },
       orderBy: { createdAt: "desc" },
     });
-    const latest = schedules[0];
-    if (latest) {
+    const customerIds = [...new Set(schedules.flatMap((schedule) => schedule.items.map((item) => item.customerId)))];
+    const customers = await prisma.customer.findMany({
+      where: { id: { in: customerIds } },
+      select: { id: true, name: true, email: true, phone: true },
+    });
+    const customersById = new Map(customers.map((customer) => [customer.id, customer]));
+    for (const schedule of schedules) {
       const byCustomer = new Map<string, { recipients: string[]; orderIds: Set<string> }>();
-      for (const item of latest.items) {
+      for (const item of schedule.items) {
         const entry = byCustomer.get(item.customerId) ?? { recipients: [], orderIds: new Set<string>() };
         entry.recipients.push(item.package.recipientName);
         entry.orderIds.add(item.orderId);
         byCustomer.set(item.customerId, entry);
       }
-      const customers = await prisma.customer.findMany({
-        where: { id: { in: [...byCustomer.keys()] } },
-        select: { id: true, name: true, email: true, phone: true },
-      });
-      for (const customer of customers) {
-        const entry = byCustomer.get(customer.id)!;
+      for (const [customerId, entry] of byCustomer) {
+        const customer = customersById.get(customerId);
+        if (!customer) continue;
         rows.push({
           reason: "bulk",
           customerName: customer.name,
           customerEmail: customer.email,
           customerPhone: customer.phone,
           ref: [...entry.orderIds].length === 1 ? `order ${[...entry.orderIds][0].slice(-8)}` : `${entry.orderIds.size} orders`,
-          detail: `bulk delivery ${latest.deliveryDay}${latest.window ? ` (${latest.window})` : ""} · ${entry.recipients.length} package(s): ${entry.recipients.join(", ")}`,
+          detail: `bulk delivery ${schedule.deliveryDay}${schedule.window ? ` (${schedule.window})` : ""} · ${entry.recipients.length} package(s): ${entry.recipients.join(", ")}`,
         });
       }
     }

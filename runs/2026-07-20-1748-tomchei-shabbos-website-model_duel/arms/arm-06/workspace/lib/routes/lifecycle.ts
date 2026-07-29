@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/db";
 import { DomainRuleError, NotFoundError } from "@/lib/errors";
+import { groupByCustomer } from "@/lib/notify/by-customer";
 import { sendNotification } from "@/lib/notify/outbox";
 import { googleMapsDirectionsUrl } from "@/lib/routes/geo";
 import { writeRouteEvent } from "@/lib/routes/events";
 import { parseMethodStages, assertCanAdvanceStage, PackageEventAction } from "@/lib/packages/stages";
-import { getOpenSeason } from "@/lib/seasons/queries";
 import { BRAND } from "@/lib/brand";
 
 // G-025/G-030: route lifecycle — start (fires the idempotent day-of
@@ -19,6 +19,9 @@ export interface DriverStopCard {
   address: { line1: string; line2: string | null; city: string; region: string; postalCode: string };
   mapsUrl: string;
   contents: string[];
+  // m11: the printed manifest shows "Greeting card enclosed" — the driver app
+  // surfaces the same fact so the card is never left in the van.
+  greeting: boolean;
   deliveredAt: string | null;
 }
 
@@ -39,6 +42,7 @@ export async function loadDriverRouteView(routeId: string): Promise<DriverRouteV
         include: {
           package: {
             select: {
+              greeting: true,
               lines: { select: { qty: true, orderLine: { select: { productName: true, optionLabel: true } } } },
             },
           },
@@ -69,6 +73,7 @@ export async function loadDriverRouteView(routeId: string): Promise<DriverRouteV
         contents: stop.package.lines.map(
           (line) => `${line.qty} x ${line.orderLine.productName}${line.orderLine.optionLabel ? ` (${line.orderLine.optionLabel})` : ""}`,
         ),
+        greeting: stop.package.greeting !== null,
         deliveredAt: stop.deliveredAt?.toISOString() ?? null,
       };
     }),
@@ -84,7 +89,7 @@ export interface StartRouteResult {
 // SMS per affected CUSTOMER, ever — re-starting (second device, retry after a
 // crash) sends nothing because the stops carry dayOfNotifiedAt.
 export async function startRoute(input: { routeId: string; linkId?: string | null }): Promise<StartRouteResult> {
-  const result = await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     const route = await tx.deliveryRoute.findUnique({
       where: { id: input.routeId },
       include: {
@@ -116,20 +121,14 @@ export async function startRoute(input: { routeId: string; linkId?: string | nul
 
     // Group stops by CUSTOMER so a customer with several packages on the run
     // — even across two orders — gets ONE notification listing every
-    // recipient, not one tap per package.
-    const byCustomer = new Map<
-      string,
-      { customer: { id: string; name: string; email: string; phone: string | null }; orderIds: Set<string>; recipients: string[]; stopIds: string[] }
-    >();
-    for (const stop of route.stops) {
-      if (stop.dayOfNotifiedAt !== null) continue;
-      const order = stop.package.order;
-      const entry = byCustomer.get(order.customer.id) ?? { customer: order.customer, orderIds: new Set<string>(), recipients: [], stopIds: [] };
-      entry.orderIds.add(order.id);
-      entry.recipients.push(stop.recipientName);
-      entry.stopIds.push(stop.id);
-      byCustomer.set(order.customer.id, entry);
-    }
+    // recipient, not one tap per package (m18 shared helper).
+    const byCustomer = groupByCustomer(
+      route.stops.filter((stop) => stop.dayOfNotifiedAt === null),
+      (stop) => stop.package.order.customer.id,
+      (stop) => stop.package.order.customer,
+      (stop) => stop.recipientName,
+      (stop) => stop.package.order.id,
+    );
 
     const notifiedAt = new Date();
     for (const [, entry] of byCustomer) {
@@ -142,16 +141,26 @@ export async function startRoute(input: { routeId: string; linkId?: string | nul
           body: `Hello ${entry.customer.name},\n\nYour ${BRAND.orgName} delivery is out for delivery today${route.deliveryDay ? ` (${route.deliveryDay})` : ""}. The driver is heading to: ${recipientList}.\n\nThank you for supporting ${BRAND.orgName}.`,
           smsBody: `${BRAND.orgName}: your delivery is on its way today${route.deliveryDay ? ` (${route.deliveryDay})` : ""} — heading to ${recipientList}.`,
           orderId: [...entry.orderIds][0],
-          metadata: { routeId: route.id, routeName: route.name, stopCount: entry.stopIds.length, orderCount: entry.orderIds.size },
+          // m6: the FK carries the first order; metadata carries them ALL, so
+          // a deleted order never orphans the audit link to the others.
+          metadata: {
+            routeId: route.id,
+            routeName: route.name,
+            stopCount: entry.items.length,
+            orderCount: entry.orderIds.size,
+            orderIds: [...entry.orderIds],
+          },
         },
         tx,
       );
-      await tx.routeStop.updateMany({ where: { id: { in: entry.stopIds } }, data: { dayOfNotifiedAt: notifiedAt } });
+      await tx.routeStop.updateMany({
+        where: { id: { in: entry.items.map((stop) => stop.id) } },
+        data: { dayOfNotifiedAt: notifiedAt },
+      });
     }
 
     return { alreadyStarted: false as const, notifiedCustomers: byCustomer.size };
   });
-  return result;
 }
 
 export interface DeliverStopResult {
@@ -168,7 +177,6 @@ export async function markStopDelivered(input: {
   stopId: string;
   via: { linkId: string } | { staffId: string };
 }): Promise<DeliverStopResult> {
-  const season = await getOpenSeason();
   return prisma.$transaction(async (tx) => {
     const route = await tx.deliveryRoute.findUnique({ where: { id: input.routeId }, include: { stops: true } });
     if (!route) throw new NotFoundError("DeliveryRoute", input.routeId);
@@ -190,20 +198,21 @@ export async function markStopDelivered(input: {
 
     const pkg = await tx.package.findUnique({
       where: { id: stop.packageId },
-      include: { fulfillmentMethod: true, order: { select: { seasonId: true } } },
+      include: { fulfillmentMethod: true },
     });
     if (!pkg) throw new NotFoundError("Package", stop.packageId);
-    if (season && pkg.order.seasonId === season.id) {
-      const methodStages = parseMethodStages(pkg.fulfillmentMethod.stages, pkg.fulfillmentMethod.code);
-      if (pkg.stage !== pkg.fulfillmentMethod.terminalStage) {
-        assertCanAdvanceStage(pkg.stage, pkg.fulfillmentMethod.terminalStage, methodStages, pkg.fulfillmentMethod.code);
-        const advanced = await tx.package.updateMany({
-          where: { id: pkg.id, version: pkg.version },
-          data: { stage: pkg.fulfillmentMethod.terminalStage, version: { increment: 1 } },
-        });
-        if (advanced.count === 0) {
-          throw new DomainRuleError(`Package ${pkg.id} changed concurrently while marking delivered; reload and retry the tap`);
-        }
+    // M2: advance unconditionally — the package WAS delivered and the route is
+    // the authority, not the season flag. A season closing mid-run must never
+    // strand a delivered package at PACKED/PRINTED.
+    const methodStages = parseMethodStages(pkg.fulfillmentMethod.stages, pkg.fulfillmentMethod.code);
+    if (pkg.stage !== pkg.fulfillmentMethod.terminalStage) {
+      assertCanAdvanceStage(pkg.stage, pkg.fulfillmentMethod.terminalStage, methodStages, pkg.fulfillmentMethod.code);
+      const advanced = await tx.package.updateMany({
+        where: { id: pkg.id, version: pkg.version },
+        data: { stage: pkg.fulfillmentMethod.terminalStage, version: { increment: 1 } },
+      });
+      if (advanced.count === 0) {
+        throw new DomainRuleError(`Package ${pkg.id} changed concurrently while marking delivered; reload and retry the tap`);
       }
     }
     const deliveredAction: PackageEventAction = "delivered";

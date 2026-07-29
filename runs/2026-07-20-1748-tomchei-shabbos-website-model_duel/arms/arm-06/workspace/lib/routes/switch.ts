@@ -6,9 +6,18 @@ import { DomainRuleError, NotFoundError } from "@/lib/errors";
 import { destinationSnapshotFor } from "@/lib/packages/destination";
 import { buildGroupingKey } from "@/lib/packages/grouping";
 import { methodCodeForChoice } from "@/lib/packages/materialize";
-import { reprintBatch } from "@/lib/packages/print-batches";
+import { reprintBestEffort } from "@/lib/packages/print-batches";
 import { PackageEventAction } from "@/lib/packages/stages";
-import { ACTIVE_SHIPMENT_STATUSES, voidLabel } from "@/lib/shipping/labels";
+import {
+  ACTIVE_SHIPMENT_STATUSES,
+  CarrierRefund,
+  LabelVoidError,
+  markLabelVoidedTx,
+  persistVoidRefundMarker,
+  requestLabelVoid,
+  usableStoredRefund,
+  voidCrashMessage,
+} from "@/lib/shipping/labels";
 import { getSetting } from "@/lib/settings";
 
 // UR-002/G-005: switch a package between carrier shipping (P8) and local
@@ -39,10 +48,34 @@ export type SwitchablePackage = Prisma.PackageGetPayload<{ include: typeof switc
 async function loadSwitchable(packageId: string): Promise<SwitchablePackage> {
   const pkg = await prisma.package.findUnique({ where: { id: packageId }, include: switchableInclude });
   if (!pkg) throw new NotFoundError("Package", packageId);
+  // M6: closed season is a domain rule (409), not a missing package (404).
   if (pkg.order.season.status !== "OPEN") {
-    throw new NotFoundError("Package in the open season", packageId);
+    throw new DomainRuleError(
+      `Package ${packageId} belongs to a closed season; expected an open season to switch fulfillment methods`,
+    );
   }
   return pkg;
+}
+
+// Shared switch/reroute pre-flight (m19): both verbs refuse a package sitting
+// on an active route or with a label purchase stuck mid-flight, with the same
+// wording law ("what is wrong + the expected state").
+export function assertOffActiveRoute(pkg: SwitchablePackage, action: string): void {
+  const activeStop = pkg.routeStops.find((stop) => stop.route.status === "PLANNED" || stop.route.status === "STARTED");
+  if (activeStop) {
+    throw new DomainRuleError(
+      `Package ${pkg.id} is on route "${activeStop.route.name}" (${activeStop.route.status}); reassign it off the route before ${action}`,
+    );
+  }
+}
+
+export function assertNoStuckPurchase(pkg: SwitchablePackage, action: string): void {
+  const stuck = pkg.shipments.find((shipment) => shipment.status === "PURCHASING");
+  if (stuck) {
+    throw new DomainRuleError(
+      `Package ${pkg.id} has a label purchase stuck mid-flight; force-resolve it on the package page before ${action}`,
+    );
+  }
 }
 
 function assertSwitchable(pkg: SwitchablePackage): void {
@@ -51,12 +84,7 @@ function assertSwitchable(pkg: SwitchablePackage): void {
       `Package ${pkg.id} is ${pkg.stage} — already out the door; a method switch must happen before the terminal stage`,
     );
   }
-  const activeStop = pkg.routeStops.find((stop) => stop.route.status === "PLANNED" || stop.route.status === "STARTED");
-  if (activeStop) {
-    throw new DomainRuleError(
-      `Package ${pkg.id} is on route "${activeStop.route.name}" (${activeStop.route.status}); reassign it off the route before switching methods`,
-    );
-  }
+  assertOffActiveRoute(pkg, "switching methods");
 }
 
 // The customer-facing charge that survives the switch: the member recipients'
@@ -71,12 +99,7 @@ export function preservedChargeCents(pkg: SwitchablePackage): number {
 }
 
 async function assertLabelVoidable(pkg: SwitchablePackage, confirmVoid: boolean | undefined): Promise<void> {
-  const stuck = pkg.shipments.find((shipment) => shipment.status === "PURCHASING");
-  if (stuck) {
-    throw new DomainRuleError(
-      `Package ${pkg.id} has a label purchase stuck mid-flight; force-resolve it on the package page before switching methods`,
-    );
-  }
+  assertNoStuckPurchase(pkg, "switching methods");
   const purchased = pkg.shipments.find((shipment) => shipment.status === "PURCHASED");
   if (purchased && !confirmVoid) {
     throw new DomainRuleError(
@@ -159,37 +182,65 @@ export async function switchPackageMethod(input: {
     await assertLabelVoidable(pkg, input.confirmVoid);
   }
 
-  let voidedShipmentId: string | null = null;
-  if (input.to === "PER_PACKAGE_DELIVERY") {
-    const purchased = pkg.shipments.find((shipment) => shipment.status === "PURCHASED");
-    if (purchased) {
-      const voided = await voidLabel({
-        packageId: pkg.id,
-        ctx: input.ctx,
-        reason: "method switch to local delivery (UR-002)",
-      });
-      voidedShipmentId = voided.id;
+  // B1 atomic shape: the carrier void is the only irreversible call and can
+  // never join a local transaction, so it happens FIRST; every local write
+  // (void marking + channel flip + switch audit) then commits in ONE
+  // transaction — no crash window leaves "label voided, package still
+  // SHIPPED". A PURCHASED row already carrying a shippoRefundId means the
+  // carrier void succeeded on an earlier crashed attempt: skip the carrier
+  // call and complete locally from the stored refund id.
+  const purchased = pkg.shipments.find((shipment) => shipment.status === "PURCHASED");
+  let refund: CarrierRefund | null = null;
+  if (input.to === "PER_PACKAGE_DELIVERY" && purchased) {
+    const storedRefund = usableStoredRefund(purchased);
+    if (!purchased.shippoTransactionId && !storedRefund) {
+      throw new LabelVoidError("the purchased label is missing its carrier transaction id");
     }
+    refund = storedRefund ?? (await requestLabelVoid(purchased.shippoTransactionId!));
   }
 
   const preservedFeeCents = preservedChargeCents(pkg);
-  await prisma.$transaction(async (tx) => {
-    await flipPackageChannelTx(tx, pkg, input.to, deliveryDay);
-  });
-  await recordAudit({
-    ctx: input.ctx,
-    action: "method_switch",
-    targetType: "Package",
-    targetId: pkg.id,
-    metadata: { from: pkg.channel, to: input.to, deliveryDay, voidedShipmentId, preservedFeeCents },
-  });
+  let voidedShipmentId: string | null = null;
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (purchased && refund) {
+        const voided = await markLabelVoidedTx(tx, {
+          active: purchased,
+          refund,
+          packageId: pkg.id,
+          actorId: input.ctx.staff.id,
+          reason: "method switch to local delivery (UR-002)",
+          ctx: input.ctx,
+        });
+        voidedShipmentId = voided.id;
+      }
+      await flipPackageChannelTx(tx, pkg, input.to, deliveryDay);
+      await recordAudit(
+        {
+          ctx: input.ctx,
+          action: "method_switch",
+          targetType: "Package",
+          targetId: pkg.id,
+          metadata: { from: pkg.channel, to: input.to, deliveryDay, voidedShipmentId, preservedFeeCents },
+        },
+        tx,
+      );
+    });
+  } catch (persistError) {
+    // The carrier void succeeded but the local void+flip failed — mark the
+    // refund id on the row so a retry resumes WITHOUT a second carrier call
+    // and the shipping sweep can reconcile even without one (B1).
+    if (purchased && refund) {
+      const detail = persistError instanceof Error ? persistError.message : String(persistError);
+      await persistVoidRefundMarker(purchased, refund, detail);
+      throw new LabelVoidError(voidCrashMessage(refund, detail));
+    }
+    throw persistError;
+  }
 
   // Keep the print room honest: the order's printed artifacts re-file under
-  // the new channel. Nothing printable (all terminal) is a quiet no-op.
-  await reprintBatch({ orderId: pkg.order.id, createdById: input.ctx.staff.id }).catch((error: unknown) => {
-    if (error instanceof NotFoundError) return;
-    throw error;
-  });
+  // the new channel (m17 shared helper).
+  await reprintBestEffort(pkg.order.id, input.ctx.staff.id);
 
   return { packageId: pkg.id, from: pkg.channel, to: input.to, voidedShipmentId, preservedFeeCents };
 }

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { MILLIS_PER_DAY } from "@/lib/dates";
 import { DomainRuleError } from "@/lib/errors";
 import { sendNotification } from "@/lib/notify/outbox";
 import { getSetting } from "@/lib/settings";
@@ -15,8 +16,6 @@ export interface PaymentReminderResult {
   reminded: number;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 export async function sweepPaymentReminders(seasonId: string): Promise<PaymentReminderResult> {
   const policy = await getSetting("payments.reminders");
   if (!policy) {
@@ -24,8 +23,8 @@ export async function sweepPaymentReminders(seasonId: string): Promise<PaymentRe
   }
   const cronRun = await prisma.cronRun.create({ data: { name: "payment-reminders" } });
   try {
-    const initialCutoff = new Date(Date.now() - policy.initialAfterDays * DAY_MS);
-    const intervalCutoff = new Date(Date.now() - policy.intervalDays * DAY_MS);
+    const initialCutoff = new Date(Date.now() - policy.initialAfterDays * MILLIS_PER_DAY);
+    const intervalCutoff = new Date(Date.now() - policy.intervalDays * MILLIS_PER_DAY);
 
     const candidates = await prisma.order.findMany({
       where: {
@@ -42,11 +41,18 @@ export async function sweepPaymentReminders(seasonId: string): Promise<PaymentRe
       orderBy: { createdAt: "asc" },
     });
 
+    // m9: comp orders (totalCents 0) pass the query but are skipped below —
+    // count candidates AFTER the outstanding check so the CronRun message,
+    // the only audit of sweep scope, never overstates.
+    const eligible = candidates
+      .map((order) => ({
+        order,
+        outstandingCents: order.totalCents - order.payments.reduce((sum, payment) => sum + payment.amountCents, 0),
+      }))
+      .filter(({ outstandingCents }) => outstandingCents > 0);
+
     let reminded = 0;
-    for (const order of candidates) {
-      const paidCents = order.payments.reduce((sum, payment) => sum + payment.amountCents, 0);
-      const outstandingCents = order.totalCents - paidCents;
-      if (outstandingCents <= 0) continue;
+    for (const { order, outstandingCents } of eligible) {
       const outstanding = (outstandingCents / 100).toFixed(2);
       await prisma.$transaction(async (tx) => {
         await tx.order.update({ where: { id: order.id }, data: { lastPaymentReminderAt: new Date() } });
@@ -67,9 +73,9 @@ export async function sweepPaymentReminders(seasonId: string): Promise<PaymentRe
 
     await prisma.cronRun.update({
       where: { id: cronRun.id },
-      data: { status: "OK", finishedAt: new Date(), message: `${reminded} reminder(s) sent for ${candidates.length} candidate order(s)` },
+      data: { status: "OK", finishedAt: new Date(), message: `${reminded} reminder(s) sent for ${eligible.length} candidate order(s)` },
     });
-    return { cronRunId: cronRun.id, candidates: candidates.length, reminded };
+    return { cronRunId: cronRun.id, candidates: eligible.length, reminded };
   } catch (error) {
     await prisma.cronRun.update({
       where: { id: cronRun.id },

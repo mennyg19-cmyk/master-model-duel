@@ -7,6 +7,9 @@
 
 process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:4106/app";
 process.env.AUTH_SECRET ??= "0123456789abcdef0123456789abcdef";
+// lib/env parses once at first import — every secret the checks need lands
+// before any lib import below.
+process.env.CRON_SECRET ??= "unit-cron-secret";
 
 let failures = 0;
 
@@ -74,7 +77,26 @@ const single = await orderStops(origin, [near]);
 check("a single stop needs no optimizer at all", single.provider === "nearest-neighbor" && single.order.length === 1 && single.order[0] === 0);
 
 // --- magic-link hashing + PIN cookie ---------------------------------------------
-const { hashLinkToken, isPinFormat, issuePinCookie, verifyPinCookie } = await import("../lib/routes/links");
+const { hashLinkToken, isPinFormat, issuePinCookie, verifyPinCookie, pinLockDurationMs, PIN_LOCK_MS, PIN_LOCK_MAX_MS } = await import(
+  "../lib/routes/links"
+);
+
+// M1: the PIN lock escalates per lifetime lock — 10m doubling to the 12h cap.
+check("first lock is the base window", pinLockDurationMs(1) === PIN_LOCK_MS);
+check(
+  "the window doubles per lock and caps at 12h",
+  pinLockDurationMs(2) === PIN_LOCK_MS * 2 && pinLockDurationMs(5) === PIN_LOCK_MS * 16 && pinLockDurationMs(50) === PIN_LOCK_MAX_MS,
+);
+
+// m3: the cron gate compares hashes — a wrong-length guess is refused without
+// a length-comparison shortcut (timing can never leak the secret's length).
+const { isCronAuthorized } = await import("../lib/cron-auth");
+const authed = new Request("http://x/", { headers: { authorization: `Bearer ${process.env.CRON_SECRET}` } });
+const wrongLength = new Request("http://x/", { headers: { authorization: "Bearer x" } });
+const noHeader = new Request("http://x/");
+check("the right bearer authorizes", isCronAuthorized(authed));
+check("a wrong-length bearer is refused", !isCronAuthorized(wrongLength));
+check("a missing header is refused", !isCronAuthorized(noHeader));
 
 check("token hashes are stable and input-sensitive", hashLinkToken("abc") === hashLinkToken("abc") && hashLinkToken("abc") !== hashLinkToken("abd"));
 check("PIN format is exactly 4 digits", isPinFormat("1234") && !isPinFormat("123") && !isPinFormat("12345") && !isPinFormat("12a4"));

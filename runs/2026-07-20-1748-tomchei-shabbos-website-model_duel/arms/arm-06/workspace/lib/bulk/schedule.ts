@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { AuditContextLike, recordAudit } from "@/lib/audit";
 import { DomainRuleError } from "@/lib/errors";
+import { groupByCustomer } from "@/lib/notify/by-customer";
 import { sendNotification } from "@/lib/notify/outbox";
 import { loadTerminalStages } from "@/lib/packages/stages";
 import { getOpenSeason } from "@/lib/seasons/queries";
@@ -52,15 +53,31 @@ export async function scheduleBulkDelivery(input: {
     throw new DomainRuleError("No unscheduled bulk-delivery packages; expected finalized BULK_DELIVERY packages to schedule");
   }
 
-  const byCustomer = new Map<string, { customer: { name: string; email: string; phone: string | null }; orderIds: Set<string>; recipients: string[] }>();
-  for (const pkg of candidates) {
-    const entry = byCustomer.get(pkg.order.customerId) ?? { customer: pkg.order.customer, orderIds: new Set<string>(), recipients: [] };
-    entry.orderIds.add(pkg.order.id);
-    entry.recipients.push(pkg.recipientName);
-    byCustomer.set(pkg.order.customerId, entry);
-  }
+  const byCustomer = groupByCustomer(
+    candidates,
+    (pkg) => pkg.order.customerId,
+    (pkg) => pkg.order.customer,
+    (pkg) => pkg.recipientName,
+    (pkg) => pkg.order.id,
+  );
 
-  const result = await prisma.$transaction(async (tx) => {
+  // M3: re-notify dedupe is per (customer, deliveryDay), not per package. A
+  // customer already emailed "your Day A delivery is scheduled" by an earlier
+  // schedule never gets a SECOND Day A email when late-finalized packages
+  // join a later Day A run — one heads-up per delivery day, ever. (A
+  // DIFFERENT day is new information and still notifies.) The package board
+  // and door list stay the truth for what ships.
+  const customerIds = [...byCustomer.keys()];
+  const alreadyNotifiedItems = await prisma.bulkDeliveryScheduleItem.findMany({
+    where: {
+      customerId: { in: customerIds },
+      schedule: { seasonId: season.id, deliveryDay: input.deliveryDay, notifiedAt: { not: null } },
+    },
+    select: { customerId: true },
+  });
+  const alreadyNotifiedForDay = new Set(alreadyNotifiedItems.map((item) => item.customerId));
+
+  const scheduled = await prisma.$transaction(async (tx) => {
     const schedule = await tx.bulkDeliverySchedule.create({
       data: {
         seasonId: season.id,
@@ -88,8 +105,12 @@ export async function scheduleBulkDelivery(input: {
 
     let email = 0;
     let sms = 0;
-    for (const [, entry] of byCustomer) {
-      const orderId = [...entry.orderIds][0];
+    let reNotifySkipped = 0;
+    for (const [customerId, entry] of byCustomer) {
+      if (alreadyNotifiedForDay.has(customerId)) {
+        reNotifySkipped += 1;
+        continue;
+      }
       const channels = await sendNotification(
         {
           kind: "bulk_scheduled",
@@ -97,8 +118,9 @@ export async function scheduleBulkDelivery(input: {
           subject: `${BRAND.orgName}: your delivery is scheduled for ${input.deliveryDay}`,
           body: `Hello ${entry.customer.name},\n\nYour ${BRAND.orgName} bulk delivery is scheduled for ${input.deliveryDay}${input.window ? ` (${input.window})` : ""}. Packages heading to: ${entry.recipients.join(", ")}.\n\nThank you for supporting ${BRAND.orgName}.`,
           smsBody: `${BRAND.orgName}: bulk delivery scheduled for ${input.deliveryDay}${input.window ? ` (${input.window})` : ""}.`,
-          orderId,
-          metadata: { scheduleId: schedule.id, packageCount: entry.recipients.length },
+          orderId: [...entry.orderIds][0],
+          // m6: the FK carries the first order; metadata carries them ALL.
+          metadata: { scheduleId: schedule.id, packageCount: entry.recipients.length, orderIds: [...entry.orderIds] },
         },
         tx,
       );
@@ -109,28 +131,29 @@ export async function scheduleBulkDelivery(input: {
       where: { id: schedule.id },
       data: { notifiedAt: new Date() },
     });
-    return { scheduleId: notified.id, email, sms };
+    return { scheduleId: notified.id, email, sms, reNotifySkipped };
   });
 
   await recordAudit({
     ctx: input.ctx,
     action: "bulk_schedule",
     targetType: "BulkDeliverySchedule",
-    targetId: result.scheduleId,
+    targetId: scheduled.scheduleId,
     metadata: {
       deliveryDay: input.deliveryDay,
       window: input.window ?? null,
       packageCount: candidates.length,
       customerCount: byCustomer.size,
+      reNotifySkipped: scheduled.reNotifySkipped,
     },
   });
 
   return {
-    scheduleId: result.scheduleId,
+    scheduleId: scheduled.scheduleId,
     deliveryDay: input.deliveryDay,
     packageCount: candidates.length,
     customerCount: byCustomer.size,
-    notifiedChannels: { email: result.email, sms: result.sms },
+    notifiedChannels: { email: scheduled.email, sms: scheduled.sms },
   };
 }
 

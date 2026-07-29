@@ -125,6 +125,16 @@ export async function advancePackageStage(input: {
       data: { stage: input.to, version: { increment: 1 } },
     });
     if (updated.count === 0) throw new PackageConcurrencyError(input.packageId);
+    // m2: the picked-up stamp gates on readiness — without pickupReadyAt the
+    // ready notification never fired and the door list never showed the
+    // package, so stamping PICKED_UP now would bypass that invariant. Checked
+    // after the optimistic claim so a stale caller hears the version conflict
+    // first; this throw rolls the claim back with the transaction.
+    if (input.to === "PICKED_UP" && !pkg.pickupReadyAt) {
+      throw new DomainRuleError(
+        `Package ${pkg.id} is not pickup-ready yet; expected the readiness sweep (pickupReadyAt) before stamping PICKED_UP`,
+      );
+    }
 
     const action: PackageEventAction = "stage_advance";
     await tx.packageEvent.create({

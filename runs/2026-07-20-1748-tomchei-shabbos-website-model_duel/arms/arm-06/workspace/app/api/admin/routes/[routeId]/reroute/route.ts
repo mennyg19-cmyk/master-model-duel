@@ -3,8 +3,7 @@ import { z } from "zod";
 import { requireApiPermission } from "@/lib/auth";
 import { mapDomainError } from "@/lib/http-errors";
 import { parseBody } from "@/lib/parse-body";
-import { nearbyShippedSuggestions } from "@/lib/routes/builder";
-import { confirmRouteReroute } from "@/lib/routes/reroute";
+import { confirmRouteReroute, nearbyShippedSuggestions } from "@/lib/routes/reroute";
 
 export const dynamic = "force-dynamic";
 

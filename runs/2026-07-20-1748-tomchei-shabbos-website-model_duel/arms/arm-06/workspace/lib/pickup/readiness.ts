@@ -1,5 +1,6 @@
 import { Package, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { MILLIS_PER_DAY } from "@/lib/dates";
 import { DomainRuleError } from "@/lib/errors";
 import { sendNotification } from "@/lib/notify/outbox";
 import { PackageEventAction } from "@/lib/packages/stages";
@@ -65,9 +66,12 @@ export async function syncPickupReadiness(seasonId: string): Promise<ReadinessSy
 
   let markedReady = 0;
   for (const pkg of candidates) {
-    if (!(await hasAvailableInventory(pkg))) continue;
     const readyAt = new Date();
-    await prisma.$transaction(async (tx) => {
+    const marked = await prisma.$transaction(async (tx) => {
+      // m15: the inventory check runs INSIDE the stamp's transaction — a
+      // concurrent allocation between a pre-check and the stamp can never
+      // mark a package ready whose inventory just went negative.
+      if (!(await hasAvailableInventory(pkg, tx))) return false;
       await tx.package.update({
         where: { id: pkg.id },
         data: { pickupReadyAt: readyAt, pickupReadyNotifiedAt: readyAt, version: { increment: 1 } },
@@ -86,8 +90,9 @@ export async function syncPickupReadiness(seasonId: string): Promise<ReadinessSy
         },
         tx,
       );
+      return true;
     });
-    markedReady += 1;
+    if (marked) markedReady += 1;
   }
   return { candidates: candidates.length, markedReady };
 }
@@ -123,7 +128,7 @@ export async function loadDoorList(seasonId: string) {
 // G-026 unclaimed report: ready longer than the policy threshold, still not
 // picked up. Drives the admin report and the follow-up call center.
 export async function loadUnclaimedPickups(seasonId: string, policy: PickupPolicy) {
-  const threshold = new Date(Date.now() - policy.unclaimedAfterDays * 24 * 60 * 60 * 1000);
+  const threshold = new Date(Date.now() - policy.unclaimedAfterDays * MILLIS_PER_DAY);
   return prisma.package.findMany({
     where: {
       order: { seasonId, status: "FINALIZED" },
@@ -153,7 +158,7 @@ export async function sweepPickupExpiry(seasonId: string): Promise<PickupSweepRe
   try {
     const readiness = await syncPickupReadiness(seasonId);
 
-    const expireThreshold = new Date(Date.now() - policy.expireAfterDays * 24 * 60 * 60 * 1000);
+    const expireThreshold = new Date(Date.now() - policy.expireAfterDays * MILLIS_PER_DAY);
     const expirable: PickupCandidate[] = await prisma.package.findMany({
       where: {
         order: { seasonId, status: "FINALIZED" },

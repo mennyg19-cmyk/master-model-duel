@@ -14,7 +14,7 @@ import { Select } from "@/components/ui/select";
 export function BulkScheduleForm({ deliveryDays, disabled }: { deliveryDays: string[]; disabled: boolean }) {
   const router = useRouter();
   const [deliveryDay, setDeliveryDay] = useState(deliveryDays[0] ?? "");
-  const [window_, setWindow] = useState("");
+  const [deliveryWindow, setDeliveryWindow] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -26,7 +26,7 @@ export function BulkScheduleForm({ deliveryDays, disabled }: { deliveryDays: str
     setNote(null);
     const result = await apiFetch<{ packageCount?: number; customerCount?: number; notifiedChannels?: { email: number; sms: number } }>(
       "/api/admin/bulk-schedules",
-      { method: "POST", body: { deliveryDay, ...(window_.trim() ? { window: window_.trim() } : {}) } },
+      { method: "POST", body: { deliveryDay, ...(deliveryWindow.trim() ? { window: deliveryWindow.trim() } : {}) } },
     );
     setBusy(false);
     if (!result.ok) {
@@ -57,7 +57,7 @@ export function BulkScheduleForm({ deliveryDays, disabled }: { deliveryDays: str
       </div>
       <div>
         <Label htmlFor="bulk-window">Window (optional)</Label>
-        <Input id="bulk-window" value={window_} onChange={(event) => setWindow(event.target.value)} placeholder="10:00–14:00" data-bulk-window />
+        <Input id="bulk-window" value={deliveryWindow} onChange={(event) => setDeliveryWindow(event.target.value)} placeholder="10:00–14:00" data-bulk-window />
       </div>
       <Button type="submit" disabled={busy || disabled} data-bulk-schedule>
         {busy ? "Scheduling…" : disabled ? "Nothing to schedule" : "Schedule & notify"}

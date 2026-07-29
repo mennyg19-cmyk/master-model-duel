@@ -139,6 +139,18 @@ export async function runNightlyPrintBatch(input: { createdById?: string } = {})
 // Unrelated groups are never regenerated. Snapshot and create share the
 // nightly advisory lock so a concurrent run can't file a stale package set or
 // fork the supersession chain.
+// Best-effort reprint after a channel flip (method switch / reroute): the
+// order's printed artifacts re-file under the new channel so the warehouse
+// never packs from a stale slip. reprintBatch legitimately 404s when the
+// order has nothing printable left (all packages terminal) — that is the
+// quiet no-op case, not dead defense. Anything else still throws.
+export async function reprintBestEffort(orderId: string, createdById: string): Promise<void> {
+  await reprintBatch({ orderId, createdById }).catch((error: unknown) => {
+    if (error instanceof NotFoundError) return;
+    throw error;
+  });
+}
+
 export async function reprintBatch(input: {
   filingGroup?: string;
   orderId?: string;

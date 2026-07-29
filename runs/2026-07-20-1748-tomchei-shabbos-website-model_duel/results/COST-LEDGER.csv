@@ -669,3 +669,4 @@
 2026-07-29T08:49:36Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P9,review_aggregate,glm-5.2-high,c05bcc67-549a-4d0d-8cad-d7f396de9b87,,,,,,,,P9 aggregate of 4 specialists; usage_missing_pending_export
 2026-07-29T08:53:14Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P9,contestant_fix,kimi-k3-max,62cc9f21-56e0-45cd-9792-2e752b53bb11,,,,,,,,P9 fix pass after aggregate 1B/6M/27m; usage_missing_pending_export
 2026-07-29T09:18:43Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P9,contestant_fix_resume,kimi-k3-max,62cc9f21-56e0-45cd-9792-2e752b53bb11,,,,,,,,P9 fix resource_exhausted retry 1/1 from WIP; usage_missing_pending_export
+2026-07-29T11:20:31Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P10,contestant_build,kimi-k3-max,d96ff5de-efa9-4ca3-a381-2347f7f7520f,,,,,,,,P10 seasons/repeat/replacements initial build; usage_missing_pending_export

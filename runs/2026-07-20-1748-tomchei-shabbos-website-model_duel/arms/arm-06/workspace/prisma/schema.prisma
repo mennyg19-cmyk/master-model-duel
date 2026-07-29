@@ -956,7 +956,10 @@ model RouteStop {
   route           DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
   routeId         String
   seq             Int
-  package         Package       @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  // CASCADE: deleting a package (regroup absorb, season cleanup) removes its
+  // stops — a RESTRICT here made any ever-routed package undeletable with no
+  // staff recovery. Route events keep the stop id as plain text history.
+  package         Package       @relation(fields: [packageId], references: [id], onDelete: Cascade)
   packageId       String
   recipientName   String
   addressLine1    String
@@ -989,6 +992,9 @@ model DriverRouteLink {
   tokenHash      String        @unique
   pinHash        String?
   pinFailures    Int           @default(0)
+  // Lifetime lock count — never resets on a correct PIN, so a brute-force
+  // cadence escalates (10m, 20m, 40m, … capped) and dies after PIN_MAX_LOCKS.
+  pinLockCount   Int           @default(0)
   pinLockedUntil DateTime?
   expiresAt      DateTime
   createdAt      DateTime      @default(now())

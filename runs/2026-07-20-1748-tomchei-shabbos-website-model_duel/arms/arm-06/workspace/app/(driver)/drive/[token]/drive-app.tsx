@@ -7,24 +7,9 @@ import { Card, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BRAND } from "@/lib/brand";
-
-interface DriverStopCard {
-  stopId: string;
-  seq: number;
-  recipientName: string;
-  address: { line1: string; line2: string | null; city: string; region: string; postalCode: string };
-  mapsUrl: string;
-  contents: string[];
-  deliveredAt: string | null;
-}
-
-interface DriverRouteView {
-  routeId: string;
-  name: string;
-  deliveryDay: string | null;
-  status: string;
-  stops: DriverStopCard[];
-}
+// m22: the shared server type — the driver app can never silently drift from
+// the API payload.
+import type { DriverRouteView } from "@/lib/routes/lifecycle";
 
 // G-030: the driver's phone UI. Big tap targets, one card per stop, Google
 // Maps deep links for turn-by-turn, Delivered stamps inline. "Start route"
@@ -176,6 +161,11 @@ export function DriveApp({ token, pinRequired: pinRequiredInitial }: { token: st
                     <li key={index}>{line}</li>
                   ))}
                 </ul>
+                {stop.greeting && (
+                  <p className="mt-1 text-xs font-medium text-amber-800" data-stop-greeting>
+                    Greeting card enclosed — hand it over with the package
+                  </p>
+                )}
                 <div className="mt-3 flex gap-2">
                   <a
                     href={stop.mapsUrl}

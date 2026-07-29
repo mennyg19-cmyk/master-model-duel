@@ -5,7 +5,7 @@ import { geocodeAddress } from "@/lib/customers/geocode";
 import { DomainRuleError, NotFoundError } from "@/lib/errors";
 import { destinationSnapshotFor } from "@/lib/packages/destination";
 import { loadTerminalStages } from "@/lib/packages/stages";
-import { GeoPoint, haversineMiles, normalizedAddressKey, oneLineAddress, streetKey } from "@/lib/routes/geo";
+import { GeoPoint, normalizedAddressKey } from "@/lib/routes/geo";
 import { orderStops } from "@/lib/routes/optimize";
 import { writeRouteEvent } from "@/lib/routes/events";
 import { getOpenSeason } from "@/lib/seasons/queries";
@@ -15,8 +15,9 @@ import { getSetting } from "@/lib/settings";
 // into a seq-ordered, geocoded route. "Eligible" is exact: open season,
 // PER_PACKAGE_DELIVERY, non-terminal, not already sitting on an active
 // (PLANNED/STARTED) route — a package can never be on two manifests.
-
-export const REROUTE_SUGGESTION_RADIUS_MILES = 0.5;
+//
+// The G-023 radius law constant lives in lib/routes/geo.ts beside
+// haversineMiles (m1); the reroute scan + confirm live in lib/routes/reroute.ts (m13).
 
 const packageForRoutingInclude = {
   recipientAddress: true,
@@ -155,6 +156,12 @@ export async function listRoutes(seasonId: string): Promise<
   }));
 }
 
+// m26: three route loaders exist because the shapes are honestly different —
+// this one (admin detail: events + link presence), loadDriverRouteView
+// (lifecycle.ts: PII-minimized driver cards), loadRouteForPrint (print.ts:
+// greeting + content lines). A single include would either leak PII or
+// starve a consumer, so each owns its projection; add a RouteStop field by
+// editing the loaders that need it, deliberately.
 export async function loadRouteDetail(routeId: string) {
   const route = await prisma.deliveryRoute.findUnique({
     where: { id: routeId },
@@ -178,7 +185,13 @@ export async function loadRouteDetail(routeId: string) {
     },
   });
   if (!route) throw new NotFoundError("DeliveryRoute", routeId);
-  return route;
+  // m24: the PIN hash is a credential hash — project to presence, same
+  // honesty class as the token hash. Staff see "PIN protected", never the hash.
+  const { link, ...rest } = route;
+  return {
+    ...rest,
+    link: link ? { id: link.id, expiresAt: link.expiresAt, hasPin: link.pinHash !== null, createdAt: link.createdAt } : null,
+  };
 }
 
 export async function reassignStop(input: {
@@ -206,21 +219,11 @@ export async function reassignStop(input: {
     if (!stop) throw new NotFoundError("RouteStop", input.stopId);
 
     const nextSeq = target.stops.reduce((max, candidate) => Math.max(max, candidate.seq), 0) + 1;
-    await tx.routeStop.delete({ where: { id: stop.id } });
-    const moved = await tx.routeStop.create({
-      data: {
-        routeId: target.id,
-        seq: nextSeq,
-        packageId: stop.packageId,
-        recipientName: stop.recipientName,
-        addressLine1: stop.addressLine1,
-        addressLine2: stop.addressLine2,
-        city: stop.city,
-        region: stop.region,
-        postalCode: stop.postalCode,
-        lat: stop.lat,
-        lng: stop.lng,
-      },
+    // m8: update in place — the stop keeps its id, so the reassigned_out event
+    // reference never dangles and any external stop reference stays valid.
+    const moved = await tx.routeStop.update({
+      where: { id: stop.id },
+      data: { routeId: target.id, seq: nextSeq },
     });
     await writeRouteEvent(tx, source.id, "stop_reassigned_out", {
       stopId: stop.id,
@@ -242,72 +245,3 @@ export async function reassignStop(input: {
   });
 }
 
-export interface RerouteSuggestion {
-  packageId: string;
-  recipientName: string;
-  address: string;
-  stage: string;
-  distanceMiles: number | null;
-  matchedStopSeq: number;
-  reason: "nearby" | "same-street";
-}
-
-// G-023/G-027: unshipped SHIPPED packages that belong on this route's run —
-// within REROUTE_SUGGESTION_RADIUS_MILES of a stop, or on a stop's street.
-// The manager always confirms; nothing here mutates.
-export async function nearbyShippedSuggestions(routeId: string): Promise<RerouteSuggestion[]> {
-  const route = await prisma.deliveryRoute.findUnique({
-    where: { id: routeId },
-    include: { stops: { orderBy: { seq: "asc" } } },
-  });
-  if (!route) throw new NotFoundError("DeliveryRoute", routeId);
-  if (route.stops.length === 0) return [];
-
-  const candidates: RoutablePackage[] = await prisma.package.findMany({
-    where: {
-      order: { seasonId: route.seasonId },
-      channel: "SHIPPED",
-      stage: { not: "SENT" },
-      routeStops: { none: { route: { status: { in: [...ACTIVE_ROUTE_STATUSES] } } } },
-    },
-    include: packageForRoutingInclude,
-    orderBy: { id: "asc" },
-  });
-
-  const suggestions: RerouteSuggestion[] = [];
-  for (const pkg of candidates) {
-    const destination = destinationSnapshotFor(pkg);
-    const point = await geocodeAddress(normalizedAddressKey(destination));
-    let best: { stopSeq: number; distance: number } | null = null;
-    for (const stop of route.stops) {
-      if (stop.lat === null || stop.lng === null) continue;
-      const distance = haversineMiles(point, { lat: stop.lat, lng: stop.lng });
-      if (!best || distance < best.distance) best = { stopSeq: stop.seq, distance };
-    }
-    if (best && best.distance <= REROUTE_SUGGESTION_RADIUS_MILES) {
-      suggestions.push({
-        packageId: pkg.id,
-        recipientName: pkg.recipientName,
-        address: oneLineAddress(destination),
-        stage: pkg.stage,
-        distanceMiles: Math.round(best.distance * 100) / 100,
-        matchedStopSeq: best.stopSeq,
-        reason: "nearby",
-      });
-      continue;
-    }
-    const streetStop = route.stops.find((stop) => streetKey(stop.addressLine1) === streetKey(destination.line1));
-    if (streetStop) {
-      suggestions.push({
-        packageId: pkg.id,
-        recipientName: pkg.recipientName,
-        address: oneLineAddress(destination),
-        stage: pkg.stage,
-        distanceMiles: best ? Math.round(best.distance * 100) / 100 : null,
-        matchedStopSeq: streetStop.seq,
-        reason: "same-street",
-      });
-    }
-  }
-  return suggestions;
-}

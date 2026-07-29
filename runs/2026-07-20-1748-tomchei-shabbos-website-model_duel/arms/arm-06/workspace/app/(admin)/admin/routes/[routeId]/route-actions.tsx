@@ -8,16 +8,8 @@ import { Card, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-
-interface RerouteSuggestion {
-  packageId: string;
-  recipientName: string;
-  address: string;
-  stage: string;
-  distanceMiles: number | null;
-  matchedStopSeq: number;
-  reason: "nearby" | "same-street";
-}
+// m21: the shared server type — the client can never silently drift from the API.
+import type { RerouteSuggestion } from "@/lib/routes/reroute";
 
 // The route's working panel: driver-link create/rotate (raw URL shown ONCE —
 // it is never stored), stop reassign between PLANNED routes, and the

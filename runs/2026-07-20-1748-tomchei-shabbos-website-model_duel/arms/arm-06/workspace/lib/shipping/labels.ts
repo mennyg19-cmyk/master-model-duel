@@ -72,8 +72,12 @@ async function loadShippedPackage(packageId: string, options?: { allowTerminal?:
     },
   });
   if (!pkg) throw new NotFoundError("Package", packageId);
+  // M6: a closed season is a domain rule (409), not a missing resource —
+  // staff seeing 404 here concluded the package didn't exist at all.
   if (pkg.order.season.status !== "OPEN") {
-    throw new NotFoundError("Package in the open season", packageId);
+    throw new DomainRuleError(
+      `Package ${packageId} belongs to a closed season; expected an open season for label operations`,
+    );
   }
   if (pkg.channel !== "SHIPPED") {
     throw new DomainRuleError(`Package ${pkg.id} ships via ${pkg.channel}; expected SHIPPED to buy a carrier label`);
@@ -311,6 +315,109 @@ export async function buyLabel(input: { packageId: string; ctx: AuditContextLike
   }
 }
 
+export interface CarrierRefund {
+  object_id: string;
+  status: string;
+}
+
+// The irreversible carrier call, isolated so callers can commit every LOCAL
+// write (void marking + method flip + audit) in one atomic transaction AFTER
+// it. A PURCHASED row carrying a shippoRefundId means the carrier void
+// already succeeded for it — never call the carrier twice; complete the local
+// marking from the stored refund id instead.
+export async function requestLabelVoid(shippoTransactionId: string): Promise<CarrierRefund> {
+  const refund = await voidLabelTransaction(shippoTransactionId);
+  if (refund.status === "ERROR") {
+    const detail =
+      refund.messages.map((message) => message.text).filter(Boolean).join("; ") || "carrier rejected the void";
+    throw new LabelVoidError(detail);
+  }
+  return refund;
+}
+
+// Local half of the void, inside the caller's transaction: SUCCESS or
+// QUEUED/PENDING (Shippo processes voids asynchronously). The refund object
+// id + status stay on the row so the shipping sweep can re-check unsettled
+// refunds — a carrier decline reverts the row to PURCHASED with a
+// label_void_rejected event.
+export async function markLabelVoidedTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    active: Shipment;
+    refund: CarrierRefund;
+    packageId: string;
+    actorId: string | null;
+    reason?: string;
+    ctx?: AuditContextLike;
+  },
+): Promise<Shipment> {
+  const row = await tx.shipment.update({
+    where: { id: input.active.id },
+    data: {
+      status: "VOIDED",
+      voidedAt: new Date(),
+      shippoRefundId: input.refund.object_id || null,
+      refundStatus: input.refund.status,
+      // Clears a crash-resume marker when a retry is completing the void.
+      error: null,
+    },
+  });
+  await writeEvent(tx, input.packageId, "label_void", input.actorId, {
+    shipmentId: row.id,
+    reason: input.reason ?? null,
+    refundStatus: input.refund.status,
+    reversedCostCents: input.active.costCents,
+  });
+  if (input.ctx) {
+    await recordAudit(
+      {
+        ctx: input.ctx,
+        action: "label_void",
+        targetType: "Package",
+        targetId: input.packageId,
+        metadata: { shipmentId: row.id, reason: input.reason ?? null, reversedCostCents: input.active.costCents },
+      },
+      tx,
+    );
+  }
+  return row;
+}
+
+// Compensation for the crash window the carrier call can never join: the
+// carrier void succeeded but the local void+flip transaction failed. Persist
+// the refund id on the still-PURCHASED row (best-effort, buyLabel's
+// persist-failure discipline) so a retry skips the carrier call and completes
+// locally — and the shipping sweep can reconcile even without one.
+export async function persistVoidRefundMarker(active: Shipment, refund: CarrierRefund, cause: string): Promise<void> {
+  await prisma.shipment
+    .update({
+      where: { id: active.id },
+      data: {
+        shippoRefundId: refund.object_id || null,
+        refundStatus: refund.status,
+        error: `carrier void ${refund.object_id || "(no refund id)"} succeeded but the local persist failed: ${cause}`,
+      },
+    })
+    .catch(() => undefined);
+}
+
+export function voidCrashMessage(refund: CarrierRefund, cause: string): string {
+  return (
+    `the carrier voided the label (refund ${refund.object_id || "unknown"}) but recording it failed — ` +
+    `expected state: re-running the same action completes the void + flip locally WITHOUT a second carrier call ` +
+    `(the stored refund id is the proof); the shipping sweep reconciles it too. Cause: ${cause}`
+  );
+}
+
+// A stored refund id proves the carrier void succeeded ONLY while the refund
+// stands. A carrier-DECLINED refund (ERROR — the sweep reverts the row to
+// PURCHASED) means the label is live: any new void must call the carrier
+// again, never resurrect the dead refund.
+export function usableStoredRefund(active: Shipment): CarrierRefund | null {
+  if (!active.shippoRefundId || active.refundStatus === "ERROR") return null;
+  return { object_id: active.shippoRefundId, status: active.refundStatus ?? "SUCCESS" };
+}
+
 export async function voidLabel(input: {
   packageId: string;
   ctx: AuditContextLike;
@@ -322,48 +429,21 @@ export async function voidLabel(input: {
   if (!active) {
     throw new DomainRuleError(`Package ${input.packageId} has no purchased label to void`);
   }
-  if (!active.shippoTransactionId) {
+  const storedRefund = usableStoredRefund(active);
+  if (!active.shippoTransactionId && !storedRefund) {
     throw new LabelVoidError("the purchased label is missing its carrier transaction id");
   }
 
-  const refund = await voidLabelTransaction(active.shippoTransactionId);
-  if (refund.status === "ERROR") {
-    const detail =
-      refund.messages.map((message) => message.text).filter(Boolean).join("; ") || "carrier rejected the void";
-    throw new LabelVoidError(detail);
+  const refund: CarrierRefund = storedRefund ?? (await requestLabelVoid(active.shippoTransactionId!));
+  try {
+    return await prisma.$transaction(async (tx) => {
+      return markLabelVoidedTx(tx, { active, refund, packageId: pkg.id, actorId, reason: input.reason, ctx: input.ctx });
+    });
+  } catch (persistError) {
+    const detail = persistError instanceof Error ? persistError.message : String(persistError);
+    await persistVoidRefundMarker(active, refund, detail);
+    throw new LabelVoidError(voidCrashMessage(refund, detail));
   }
-  // SUCCESS or QUEUED/PENDING: Shippo processes voids asynchronously. The
-  // refund object id + status stay on the row so the shipping sweep can
-  // re-check unsettled refunds — a carrier decline reverts the row to
-  // PURCHASED with a label_void_rejected event.
-  return prisma.$transaction(async (tx) => {
-    const row = await tx.shipment.update({
-      where: { id: active.id },
-      data: {
-        status: "VOIDED",
-        voidedAt: new Date(),
-        shippoRefundId: refund.object_id || null,
-        refundStatus: refund.status,
-      },
-    });
-    await writeEvent(tx, pkg.id, "label_void", actorId, {
-      shipmentId: row.id,
-      reason: input.reason ?? null,
-      refundStatus: refund.status,
-      reversedCostCents: active.costCents,
-    });
-    await recordAudit(
-      {
-        ctx: input.ctx,
-        action: "label_void",
-        targetType: "Package",
-        targetId: pkg.id,
-        metadata: { shipmentId: row.id, reason: input.reason ?? null, reversedCostCents: active.costCents },
-      },
-      tx,
-    );
-    return row;
-  });
 }
 
 // A stuck PURCHASING row resolves to its honest end state: a row carrying a
@@ -418,6 +498,7 @@ export interface ShippingSweepResult {
   failedPurchases: number;
   recoveredPurchases: number;
   rejectedVoids: number;
+  resumedVoidCrashes: number;
   purgedQuotes: number;
 }
 
@@ -478,8 +559,38 @@ export async function sweepShippingMaintenance(): Promise<ShippingSweepResult> {
     }
   }
 
+  // B1 reconciliation: a PURCHASED row carrying a shippoRefundId means the
+  // carrier void succeeded but the local void(+flip) transaction crashed
+  // before committing. The stored refund id is the proof — complete the local
+  // marking WITHOUT calling the carrier again (the same discipline as
+  // flipLabelPayment, which skips a second carrier call when referenceId
+  // matches).
+  let resumedVoidCrashes = 0;
+  // Only a refund that still STANDS proves a crash (carrier void succeeded,
+  // local commit failed). refundStatus ERROR means the carrier declined and
+  // the rejected-voids leg deliberately reverted the row to PURCHASED —
+  // resuming that would re-void a live, paid label.
+  const crashedVoids = await prisma.shipment.findMany({
+    where: { status: "PURCHASED", shippoRefundId: { not: null }, refundStatus: { in: ["QUEUED", "PENDING", "SUCCESS"] } },
+    select: { id: true, packageId: true, shippoRefundId: true },
+  });
+  for (const row of crashedVoids) {
+    await prisma.$transaction(async (tx) => {
+      await tx.shipment.update({
+        where: { id: row.id },
+        data: { status: "VOIDED", voidedAt: new Date(), error: null },
+      });
+      await writeEvent(tx, row.packageId, "label_void", null, {
+        shipmentId: row.id,
+        refundId: row.shippoRefundId,
+        note: "sweep completed the local void marking after a crash between the carrier void and the local commit",
+      });
+    });
+    resumedVoidCrashes += 1;
+  }
+
   const purged = await prisma.shippingQuote.deleteMany({ where: { expiresAt: { lt: new Date() } } });
-  return { failedPurchases, recoveredPurchases, rejectedVoids, purgedQuotes: purged.count };
+  return { failedPurchases, recoveredPurchases, rejectedVoids, resumedVoidCrashes, purgedQuotes: purged.count };
 }
 
 export async function refreshTracking(input: { packageId: string; ctx: AuditContextLike }): Promise<Shipment> {

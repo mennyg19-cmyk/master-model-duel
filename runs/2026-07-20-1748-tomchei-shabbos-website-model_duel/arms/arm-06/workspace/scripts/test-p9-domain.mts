@@ -64,8 +64,9 @@ process.env.SHIPPO_BASE_URL = `http://127.0.0.1:${(fixtureServer.address() as { 
 
 const { setSetting } = await import("../lib/settings");
 const { finalizeOrder } = await import("../lib/orders/state-machine");
-const { buyLabel } = await import("../lib/shipping/labels");
-const { buildRoute, nearbyShippedSuggestions } = await import("../lib/routes/builder");
+const { buyLabel, sweepShippingMaintenance } = await import("../lib/shipping/labels");
+const { buildRoute } = await import("../lib/routes/builder");
+const { nearbyShippedSuggestions } = await import("../lib/routes/reroute");
 const { createDriverLink, loadLinkByToken, checkPin } = await import("../lib/routes/links");
 const { startRoute, markStopDelivered } = await import("../lib/routes/lifecycle");
 const { switchPackageMethod } = await import("../lib/routes/switch");
@@ -74,6 +75,8 @@ const { syncPickupReadiness, loadDoorList, loadUnclaimedPickups, loadPickupPolic
   "../lib/pickup/readiness"
 );
 const { scheduleBulkDelivery, countUnscheduledBulkPackages } = await import("../lib/bulk/schedule");
+const { deriveGeoPoint } = await import("../lib/customers/geocode");
+const { haversineMiles, normalizedAddressKey } = await import("../lib/routes/geo");
 const { sweepPaymentReminders } = await import("../lib/payments/reminders");
 const { loadFollowUps } = await import("../lib/admin/follow-ups");
 const { DomainRuleError } = await import("../lib/errors");
@@ -441,6 +444,143 @@ check(
 check(
   "the payment filter returns only unpaid-balance rows",
   (await loadFollowUps(season.id, "payment")).every((row) => row.reason === "payment"),
+);
+
+// --- P9 fix-pass coverage -------------------------------------------------------------
+
+// M1: the PIN lock escalates per LIFETIME lock (pinLockCount) and never
+// resets on a correct PIN. pinLinkRow carries one lock from the throttle
+// section above.
+for (const pin of ["9990", "9991", "9992", "9993"]) await checkPin(pinLinkRow.id, pin);
+const secondLock = await checkPin(pinLinkRow.id, "9989");
+const afterSecondLock = await prisma.driverRouteLink.findUniqueOrThrow({ where: { id: pinLinkRow.id } });
+check(
+  "M1: the second lock escalates to the doubled window and counts on the row",
+  secondLock.outcome === "locked"
+    && afterSecondLock.pinLockCount === 2
+    && afterSecondLock.pinLockedUntil!.getTime() - Date.now() > 15 * 60_000,
+);
+await prisma.driverRouteLink.update({ where: { id: pinLinkRow.id }, data: { pinLockedUntil: null } });
+check(
+  "M1: the correct PIN passes but the lifetime lock count never resets",
+  (await checkPin(pinLinkRow.id, "1234")).outcome === "ok"
+    && (await prisma.driverRouteLink.findUniqueOrThrow({ where: { id: pinLinkRow.id } })).pinLockCount === 2,
+);
+
+// B1: a PURCHASED row carrying a crash marker (carrier void succeeded, local
+// commit failed) is completed LOCALLY by the sweep — no second carrier call.
+const crashOrder = await makeOrder({
+  ref: "P9-K",
+  customerId: customer.id,
+  recipients: [{ name: "Crash Void", line1: "5 Crash Ct", choice: "SHIPPED", feeCents: 2197 }],
+});
+const crashPkg = await prisma.package.findFirstOrThrow({ where: { orderId: crashOrder.id } });
+await buyLabel({ packageId: crashPkg.id, ctx });
+await prisma.shipment.updateMany({
+  where: { packageId: crashPkg.id, status: "PURCHASED" },
+  data: {
+    shippoRefundId: `rfd_crash_${stamp}`,
+    refundStatus: "SUCCESS",
+    error: "carrier void succeeded but the local persist failed: simulated crash",
+  },
+});
+const crashSweep = await sweepShippingMaintenance();
+const crashRow = await prisma.shipment.findFirstOrThrow({ where: { packageId: crashPkg.id } });
+check(
+  "B1: the sweep resumes a crashed void from the stored refund id (no carrier call)",
+  crashSweep.resumedVoidCrashes === 1 && crashRow.status === "VOIDED" && crashRow.voidedAt !== null && crashRow.error === null,
+);
+
+// M5: the suggestion scan never geocodes a candidate outside every stop's
+// postal code — bounded even with many SHIPPED packages.
+const farPostalOrder = await makeOrder({
+  ref: "P9-L",
+  customerId: customer.id,
+  recipients: [{ name: "Wrong Postal", line1: "9 Nowhere Blvd", choice: "SHIPPED", feeCents: 2197 }],
+});
+const farPostalPkg = await prisma.package.findFirstOrThrow({ where: { orderId: farPostalOrder.id } });
+// The destination snapshot falls back to the draft recipient's inline fields
+// (no book address on these fixtures) — that is the row the scan reads.
+await prisma.draftRecipient.updateMany({
+  where: { orderId: farPostalOrder.id },
+  data: { postalCode: "99999" },
+});
+const farPostalKey = normalizedAddressKey({
+  line1: "9 Nowhere Blvd",
+  line2: null,
+  city: "Lakewood",
+  region: "NJ",
+  postalCode: "99999",
+  country: "US",
+});
+const boundedSuggestions = await nearbyShippedSuggestions(sundayRoute.routeId);
+check(
+  "M5: a postal-mismatched candidate is excluded WITHOUT spending a geocode",
+  (await prisma.geocodeCache.count({ where: { addressKey: farPostalKey } })) === 0
+    && !boundedSuggestions.some((entry) => entry.packageId === farPostalPkg.id),
+);
+
+// m1: the confirm path re-verifies the geography law — a far-away SHIPPED
+// package refuses even with confirm: true, before any carrier call. The dev
+// geocoder is deterministic per address, so self-calibrate a line1 that is
+// provably > 0.5 mi from the route's stop.
+const sundayStopPoint = { lat: sundayStop.lat!, lng: sundayStop.lng! };
+let farLine1 = "1 Faraway Rd";
+for (const candidate of ["1 Faraway Rd", "22 Distant Dr", "333 Remote Ave", "4444 Exile Ln"]) {
+  const key = normalizedAddressKey({ line1: candidate, line2: null, city: "Lakewood", region: "NJ", postalCode: "10952", country: "US" });
+  if (haversineMiles(deriveGeoPoint(key), sundayStopPoint) > 0.5) {
+    farLine1 = candidate;
+    break;
+  }
+}
+const farOrder = await makeOrder({
+  ref: "P9-M",
+  customerId: customer.id,
+  recipients: [{ name: "Too Far", line1: farLine1, choice: "SHIPPED", feeCents: 2197 }],
+});
+const farPkg = await prisma.package.findFirstOrThrow({ where: { orderId: farOrder.id } });
+check(
+  "m1: the manager-confirmed reroute re-verifies proximity and refuses a far package",
+  await expectThrow(
+    () => confirmRouteReroute({ routeId: sundayRoute.routeId, packageId: farPkg.id, confirm: true, ctx }),
+    DomainRuleError,
+  ),
+);
+
+// M3: re-notify dedupe is per (customer, delivery day) — a second Friday
+// schedule for the already-notified customer sends nothing; a different day
+// is new information and notifies.
+await makeOrder({
+  ref: "P9-N",
+  customerId: customer.id,
+  recipients: [{ name: "Late Shul", line1: "40 Torah Way", choice: "BULK_DELIVERY" }],
+});
+const rescheduled = await scheduleBulkDelivery({ deliveryDay: "Friday", ctx });
+check(
+  "M3: a same-day reschedule adds the package but never re-emails the customer",
+  rescheduled.packageCount === 1 && rescheduled.customerCount === 1
+    && rescheduled.notifiedChannels.email === 0 && rescheduled.notifiedChannels.sms === 0,
+);
+await makeOrder({
+  ref: "P9-O",
+  customerId: customer.id,
+  recipients: [{ name: "Sunday Shul", line1: "50 Torah Way", choice: "BULK_DELIVERY" }],
+});
+const sundayScheduled = await scheduleBulkDelivery({ deliveryDay: "Sunday", ctx });
+check(
+  "M3: a DIFFERENT day is new information and still notifies once",
+  sundayScheduled.notifiedChannels.email === 1,
+);
+
+// m2: the PICKED_UP stamp gates on readiness — no pickupReadyAt, no stamp.
+const { advancePackageStage } = await import("../lib/packages/stages");
+const notReadyPkg = await prisma.package.findUniqueOrThrow({ where: { id: boPkg.id } });
+check(
+  "m2: stamping PICKED_UP before the readiness sweep is a clean rule refusal",
+  await expectThrow(
+    () => advancePackageStage({ packageId: boPkg.id, expectedVersion: notReadyPkg.version, to: "PICKED_UP", actorId: staff.id }),
+    DomainRuleError,
+  ),
 );
 
 // Cleanup: close our season before restoring whatever was open.

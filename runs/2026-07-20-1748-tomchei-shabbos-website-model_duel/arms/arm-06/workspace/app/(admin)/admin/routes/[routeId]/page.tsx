@@ -48,7 +48,7 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
         routeStatus={route.status}
         link={
           route.link
-            ? { expiresAt: route.link.expiresAt.toISOString(), hasPin: route.link.pinHash !== null }
+            ? { expiresAt: route.link.expiresAt.toISOString(), hasPin: route.link.hasPin }
             : null
         }
         stops={route.stops.map((stop) => ({ id: stop.id, seq: stop.seq, recipientName: stop.recipientName }))}

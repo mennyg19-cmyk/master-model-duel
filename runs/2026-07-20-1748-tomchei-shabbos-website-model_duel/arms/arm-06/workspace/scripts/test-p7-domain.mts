@@ -270,8 +270,11 @@ check(
     && await expectThrow(() => reprintBatch({ filingGroup: "PICKUP", orderId: orderB.id }), DomainRuleError),
 );
 
-// Terminal packages fall out of every future run/reprint.
+// Terminal packages fall out of every future run/reprint. (P9 m2: the
+// PICKED_UP stamp now requires the readiness sweep's pickupReadyAt — mark it
+// the way the sweep would before stamping.)
 await advancePackageStage({ packageId: pkgB.id, expectedVersion: 1, to: "PACKED", actorId: staff.id });
+await prisma.package.update({ where: { id: pkgB.id }, data: { pickupReadyAt: new Date() } });
 await advancePackageStage({ packageId: pkgB.id, expectedVersion: 2, to: "PICKED_UP", actorId: staff.id });
 const nightly3 = await runNightlyPrintBatch({ createdById: staff.id });
 check("terminal packages are never re-filed by the nightly run", nightly3.packageCount === 0 && nightly3.batches.length === 0);

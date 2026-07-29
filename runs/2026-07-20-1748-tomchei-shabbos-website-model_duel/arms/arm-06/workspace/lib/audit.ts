@@ -53,7 +53,14 @@ export type AuditAction =
   | "route_link_create"
   | "route_reroute"
   | "method_switch"
-  | "bulk_schedule";
+  | "bulk_schedule"
+  // m25: kept in lockstep with PackageEventAction's P9 members
+  // (lib/packages/stages.ts) so auditing any P9 package event type-checks —
+  // the same discipline the P8 members above already follow.
+  | "reroute"
+  | "delivered"
+  | "pickup_ready"
+  | "pickup_expired";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

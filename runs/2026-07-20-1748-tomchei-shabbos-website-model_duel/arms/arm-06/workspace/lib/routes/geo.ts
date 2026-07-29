@@ -7,6 +7,11 @@ export interface GeoPoint {
   lng: number;
 }
 
+// The G-023 "nearby" law: a shipped package is a reroute candidate when its
+// destination is within this radius of a stop (or on a stop's street). Both
+// the suggestion scan AND the manager-confirmed accept enforce it.
+export const REROUTE_SUGGESTION_RADIUS_MILES = 0.5;
+
 const EARTH_RADIUS_MILES = 3958.8;
 
 export function haversineMiles(a: GeoPoint, b: GeoPoint): number {

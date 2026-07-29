@@ -32,8 +32,8 @@ export async function POST(request: Request) {
   if (!parsed.ok) return parsed.response;
 
   try {
-    const result = await buildRoute({ ...parsed.data, ctx: gate.ctx });
-    return NextResponse.json({ ok: true, ...result });
+    const built = await buildRoute({ ...parsed.data, ctx: gate.ctx });
+    return NextResponse.json({ ok: true, ...built });
   } catch (error) {
     const mapped = mapDomainError(error);
     if (mapped) return mapped;
