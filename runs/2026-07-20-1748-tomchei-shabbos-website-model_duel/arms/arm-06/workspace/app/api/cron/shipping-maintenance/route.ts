@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
-import { env } from "@/lib/env";
+import { isCronAuthorized } from "@/lib/cron-auth";
 import { mapDomainError } from "@/lib/http-errors";
 import { sweepShippingMaintenance } from "@/lib/shipping/labels";
 
@@ -10,14 +9,7 @@ export const dynamic = "force-dynamic";
 // reconcile async void refunds with the carrier (including void rejections),
 // and purge expired quote rows. Same bearer gate as nightly-print.
 export async function GET(request: Request) {
-  const auth = request.headers.get("authorization");
-  const expected = env.CRON_SECRET ? `Bearer ${env.CRON_SECRET}` : null;
-  const authorized =
-    expected !== null &&
-    auth !== null &&
-    auth.length === expected.length &&
-    timingSafeEqual(Buffer.from(auth, "utf8"), Buffer.from(expected, "utf8"));
-  if (!authorized) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

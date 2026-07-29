@@ -113,6 +113,15 @@ enum ShipmentStatus {
   FAILED
 }
 
+// P9: a delivery route runs PLANNED (stops editable, link creatable) ->
+// STARTED (driver tapped start, day-of notifications sent) -> COMPLETED
+// (every stop delivered; the magic link dies).
+enum DeliveryRouteStatus {
+  PLANNED
+  STARTED
+  COMPLETED
+}
+
 model StaffUser {
   id            String               @id @default(cuid())
   email         String               @unique
@@ -236,6 +245,8 @@ model Season {
   orders             Order[]
   products           Product[]
   printBatches       PrintBatch[]
+  deliveryRoutes     DeliveryRoute[]
+  bulkSchedules      BulkDeliverySchedule[]
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -385,6 +396,9 @@ model Order {
   stripeSessionId  String?             @unique
   stockReserved    Boolean             @default(false)
   version        Int                   @default(1)
+  // P9 (R-080): last payment-reminder send; the cron re-reminds on the
+  // configured interval instead of spamming every run.
+  lastPaymentReminderAt DateTime?
   lines          OrderLine[]
   recipients     DraftRecipient[]
   payments       Payment[]
@@ -392,6 +406,7 @@ model Order {
   webhookEvents  StripeWebhookEvent[]
   shippingQuotes ShippingQuote[]
   packages       Package[]
+  outboxMessages OutboxMessage[]
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
 
@@ -490,11 +505,18 @@ model Package {
   channel              FulfillmentChoice @default(PICKUP)
   deliveryDay          String?
   version              Int               @default(1)
+  // P9 pickup lifecycle (UR-010): ready when inventory is available, ready
+  // notification sent once, expiry notification sent once (G-017/G-026).
+  pickupReadyAt           DateTime?
+  pickupReadyNotifiedAt   DateTime?
+  pickupExpiredNotifiedAt DateTime?
   lines                PackageLine[]
   events               PackageEvent[]
   batchItems           PrintBatchItem[]
   shippingQuotes       ShippingQuote[]
   shipments            Shipment[]
+  routeStops           RouteStop[]
+  bulkScheduleItems    BulkDeliveryScheduleItem[]
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
 
@@ -896,4 +918,150 @@ model AssemblyBatch {
   updatedAt   DateTime            @updatedAt
 
   @@map("assembly_batches")
+}
+
+// ---------------------------------------------------------------------------
+// P9 — delivery routes, driver magic links, pickup, notifications
+// ---------------------------------------------------------------------------
+
+// R-075/R-076: one route per delivery run. createdById is a loose staff-id
+// snapshot by design (same discipline as PrintBatch): route history must
+// survive staff-user deletion; enforceable attribution lives in AuditLog.
+model DeliveryRoute {
+  id          String              @id @default(cuid())
+  season      Season              @relation(fields: [seasonId], references: [id])
+  seasonId    String
+  name        String
+  deliveryDay String?
+  status      DeliveryRouteStatus @default(PLANNED)
+  stops       RouteStop[]
+  link        DriverRouteLink?
+  events      RouteEvent[]
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdById String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([seasonId, status, createdAt])
+  @@map("delivery_routes")
+}
+
+// R-074: seq-ordered stops with the address + geocode snapshot taken at
+// assignment — the printed sheet and the driver link stay honest even when
+// the address book row is edited afterward. recipientName is a snapshot for
+// the same reason (and keeps customer PII off the driver payload).
+model RouteStop {
+  id              String        @id @default(cuid())
+  route           DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  routeId         String
+  seq             Int
+  package         Package       @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  packageId       String
+  recipientName   String
+  addressLine1    String
+  addressLine2    String?
+  city            String
+  region          String
+  postalCode      String
+  lat             Float?
+  lng             Float?
+  deliveredAt     DateTime?
+  // Idempotent day-of notification (route start): set when this stop's
+  // customer was notified, so a re-start never double-sends.
+  dayOfNotifiedAt DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@unique([routeId, packageId])
+  @@index([packageId])
+  @@map("route_stops")
+}
+
+// UR-004/UR-015/G-025: one magic link per route. The raw token (32 crypto
+// bytes) is shown once at creation and NEVER stored — tokenHash is SHA-256.
+// pinHash is SHA-256 of the manager-texted 4-digit PIN; failures throttle
+// DB-side (5 misses -> 10-minute lock). The link is dead once the route
+// completes or expiresAt passes.
+model DriverRouteLink {
+  id             String        @id @default(cuid())
+  route          DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  routeId        String        @unique
+  tokenHash      String        @unique
+  pinHash        String?
+  pinFailures    Int           @default(0)
+  pinLockedUntil DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime      @default(now())
+
+  @@map("driver_route_links")
+}
+
+// G-025: route-level audit — every Delivered tap (timestamp + link id), route
+// lifecycle, reassigns and reroute stop adds. action vocabulary lives in
+// lib/routes/events.ts (one typing discipline per concern, like PackageEvent).
+model RouteEvent {
+  id        String        @id @default(cuid())
+  route     DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  routeId   String
+  action    String
+  stopId    String?
+  linkId    String?
+  actorId   String?
+  metadata  Json?
+  createdAt DateTime      @default(now())
+
+  @@index([routeId, createdAt])
+  @@map("route_events")
+}
+
+// P9 notification seam (G-021): email + SMS sends are captured as rows — the
+// live Resend/Twilio platform lands in P11 and reads this same shape. kind
+// and channel vocabularies live in lib/notify/outbox.ts.
+model OutboxMessage {
+  id        String   @id @default(cuid())
+  kind      String
+  channel   String
+  toAddress String
+  subject   String?
+  body      String
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId   String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([kind, channel, createdAt])
+  @@map("outbox_messages")
+}
+
+// G-021/R-079: staff-scheduled bulk delivery run. Membership is a persisted
+// snapshot (like PrintBatchItem) so the notification set is provable: exactly
+// one email + one SMS per distinct customer, sent at schedule time.
+model BulkDeliverySchedule {
+  id            String                     @id @default(cuid())
+  season        Season                     @relation(fields: [seasonId], references: [id])
+  seasonId      String
+  deliveryDay   String
+  window        String?
+  packageCount  Int                        @default(0)
+  customerCount Int                        @default(0)
+  notifiedAt    DateTime?
+  items         BulkDeliveryScheduleItem[]
+  createdById   String?
+  createdAt     DateTime                   @default(now())
+
+  @@index([seasonId, createdAt])
+  @@map("bulk_delivery_schedules")
+}
+
+model BulkDeliveryScheduleItem {
+  id         String              @id @default(cuid())
+  schedule   BulkDeliverySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId String
+  package    Package             @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId  String
+  orderId    String
+  customerId String
+
+  @@unique([scheduleId, packageId])
+  @@map("bulk_delivery_schedule_items")
 }

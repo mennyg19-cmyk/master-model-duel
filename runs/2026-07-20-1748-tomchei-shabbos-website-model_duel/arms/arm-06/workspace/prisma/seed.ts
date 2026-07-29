@@ -194,6 +194,19 @@ async function main() {
     },
   });
 
+  // P9 pickup + payment-reminder policies (UR-010/G-017/R-080). Editable in
+  // the DB; the crons refuse to guess when unset.
+  await prisma.setting.upsert({
+    where: { key: "pickup.policy" },
+    update: {},
+    create: { key: "pickup.policy", value: { unclaimedAfterDays: 3, expireAfterDays: 7 } },
+  });
+  await prisma.setting.upsert({
+    where: { key: "payments.reminders" },
+    update: {},
+    create: { key: "payments.reminders", value: { initialAfterDays: 3, intervalDays: 7 } },
+  });
+
   // Data-driven fulfillment methods (R-153/R-154).
   await prisma.fulfillmentMethod.upsert({
     where: { code: "DELIVERY" },

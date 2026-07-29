@@ -25,6 +25,19 @@ const settingSchemas = {
   }),
   // Manager-set Purim-week day choices offered for per-package delivery.
   "delivery.days": z.array(z.string().min(1)),
+  // P9 pickup ops (UR-010/G-017/G-026): how long a ready pickup waits before
+  // it lands on the unclaimed report, and how long before the expiry cron
+  // sends the come-get-it-or-contact-us notice. DB-editable, seeded.
+  "pickup.policy": z.object({
+    unclaimedAfterDays: z.number().int().positive(),
+    expireAfterDays: z.number().int().positive(),
+  }),
+  // P9 (R-080): payment-reminder cadence — first reminder once an unpaid
+  // finalized order is this old, then one reminder per interval.
+  "payments.reminders": z.object({
+    initialAfterDays: z.number().int().positive(),
+    intervalDays: z.number().int().positive(),
+  }),
   // P8: the org's shipping origin — carrier labels and rate quotes ship FROM
   // here. Editable in the settings hub (P12); seeded for Lakewood.
   "shipping.origin": z.object({

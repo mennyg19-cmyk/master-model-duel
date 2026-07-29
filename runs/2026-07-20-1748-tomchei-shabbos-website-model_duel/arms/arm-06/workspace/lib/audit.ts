@@ -46,7 +46,14 @@ export type AuditAction =
   | "label_void"
   | "label_void_rejected"
   | "tracking_refresh"
-  | "address_validate";
+  | "address_validate"
+  // P9 route/method lifecycle.
+  | "route_create"
+  | "route_reassign"
+  | "route_link_create"
+  | "route_reroute"
+  | "method_switch"
+  | "bulk_schedule";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

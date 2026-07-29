@@ -36,7 +36,14 @@ export type PackageEventAction =
   | "label_void"
   | "label_void_rejected"
   | "tracking_refresh"
-  | "address_validate";
+  | "address_validate"
+  // P9: method switch + reroute (UR-002/G-005/G-023), driver delivery tap
+  // (G-025), pickup readiness/expiry (UR-010/G-017/G-026).
+  | "method_switch"
+  | "reroute"
+  | "delivered"
+  | "pickup_ready"
+  | "pickup_expired";
 
 const PACKAGE_STAGES: readonly PackageStage[] = ["NEW", "PRINTED", "PACKED", "SENT", "PICKED_UP"];
 

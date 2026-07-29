@@ -98,6 +98,14 @@ export const ENV_SPEC = [
     secret: false,
   },
   {
+    key: "MAPBOX_ACCESS_TOKEN",
+    description:
+      "Mapbox access token (P9; R-074/R-179). Optional: without it, route stop ordering uses the deterministic nearest-neighbor optimizer over the geocode cache; with it, the Mapbox Optimization API orders stops (nearest-neighbor fallback on any provider failure).",
+    example: "pk.xxxx",
+    schema: z.string().min(1).optional(),
+    secret: true,
+  },
+  {
     key: "UPS_CLIENT_ID",
     description:
       "R-184 DECLARATION ONLY: direct UPS API credentials are declared so ops can provision them, but no code path uses them — all UPS shipping runs through the org's Shippo carrier account (resolution 6).",

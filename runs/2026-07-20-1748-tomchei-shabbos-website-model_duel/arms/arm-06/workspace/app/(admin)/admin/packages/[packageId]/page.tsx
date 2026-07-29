@@ -5,11 +5,13 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { CHANNEL_LABELS, formatBatchTimestamp } from "@/lib/packages/fulfillment";
 import { canAdvanceStage, parseMethodStages } from "@/lib/packages/stages";
+import { getSetting } from "@/lib/settings";
 import { Card, CardTitle } from "@/components/ui/card";
 import { BackLink } from "@/components/admin/back-link";
 import { PackageStageBadge } from "@/components/admin/order-badges";
 import { PackageActions } from "@/app/(admin)/admin/packages/[packageId]/package-actions";
 import { PackageLabelActions } from "@/app/(admin)/admin/packages/[packageId]/label-actions";
+import { PackageMethodSwitch } from "@/app/(admin)/admin/packages/[packageId]/method-switch";
 import type { PackageStage } from "@prisma/client";
 
 export const metadata: Metadata = { title: "Package detail" };
@@ -170,6 +172,16 @@ export default async function AdminPackageDetailPage({
           lastFailed={lastFailedShipment}
         />
       )}
+
+      {(pkg.channel === "SHIPPED" || pkg.channel === "PER_PACKAGE_DELIVERY") &&
+        pkg.stage !== pkg.fulfillmentMethod.terminalStage && (
+          <PackageMethodSwitch
+            packageId={pkg.id}
+            channel={pkg.channel}
+            deliveryDays={(await getSetting("delivery.days")) ?? []}
+            currentDeliveryDay={pkg.deliveryDay}
+          />
+        )}
 
       <Card className="mt-6 p-5">
         <CardTitle>Event trail</CardTitle>
