@@ -8,6 +8,8 @@ import { Card, CardTitle } from "@/components/ui/card";
 import { BackLink } from "@/components/admin/back-link";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/admin/order-badges";
 import { CustomerEditor } from "@/app/(admin)/admin/customers/[customerId]/customer-editor";
+import { BookCleanup } from "@/app/(admin)/admin/customers/[customerId]/book-cleanup";
+import { scanBook } from "@/lib/imports/legacy/cleanup";
 
 export const metadata: Metadata = { title: "Customer detail" };
 export const dynamic = "force-dynamic";
@@ -45,6 +47,20 @@ export default async function AdminCustomerDetailPage({
   });
   if (!customer) notFound();
 
+  // UR-014: cleanup scan feeds the review card (renders only when there's
+  // something to decide).
+  const scan = await scanBook(customer.id);
+  const toCleanupAddress = (address: (typeof customer.addresses)[number]) => ({
+    id: address.id,
+    label: address.label,
+    line1: address.line1,
+    line2: address.line2,
+    city: address.city,
+    region: address.region,
+    postalCode: address.postalCode,
+    reviewReason: address.reviewReason,
+  });
+
   const lifetimeCents = customer.orders
     .filter((order) => order.status === "FINALIZED")
     .reduce((sum, order) => sum + order.totalCents, 0);
@@ -73,12 +89,21 @@ export default async function AdminCustomerDetailPage({
                   {address.line1}
                   {address.line2 ? `, ${address.line2}` : ""}, {address.city}, {address.region} {address.postalCode}
                 </span>
+                {address.needsReview && (
+                  <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">needs review</span>
+                )}
               </li>
             ))}
             {customer.addresses.length === 0 && <li className="text-stone-500">No saved addresses.</li>}
           </ul>
         </Card>
       </div>
+
+      <BookCleanup
+        customerId={customer.id}
+        duplicates={scan.duplicates.map((group) => ({ key: group.key, addresses: group.addresses.map(toCleanupAddress) }))}
+        flagged={scan.flagged.map(toCleanupAddress)}
+      />
 
       <section className="mt-8">
         <div className="flex items-center justify-between">

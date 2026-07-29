@@ -5,6 +5,7 @@ import { getOpenSeason } from "@/lib/seasons/queries";
 import { getCustomerContext } from "@/lib/customers/session";
 import { SiteHeader } from "@/components/storefront/site-header";
 import { SubscribeForm } from "@/components/storefront/subscribe-form";
+import { TestModeBanner } from "@/components/test-mode-banner";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export default async function StorefrontLayout({ children }: { children: React.R
 
   return (
     <div className="flex min-h-screen flex-col">
+      <TestModeBanner />
       <SiteHeader customerName={customerCtx?.customer.name ?? null} />
       {!openSeason && (
         <div className="bg-accent-100 px-4 py-2 text-center text-sm font-medium text-amber-900" role="status">

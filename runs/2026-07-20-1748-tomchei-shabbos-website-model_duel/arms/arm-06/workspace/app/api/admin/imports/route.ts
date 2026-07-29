@@ -14,6 +14,7 @@ const stageSchema = z.object({
   kind: z.nativeEnum(ImportKind),
   filename: z.string().trim().min(1).max(200),
   csv: z.string().min(1).max(2_000_000),
+  dryRun: z.boolean().optional(),
 });
 
 // R-063: stage a CSV — parse, validate, mark duplicates, store the verdicts.
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
       filename: parsed.data.filename,
       csvText: parsed.data.csv,
       extraPayload: season ? { seasonId: season.id } : undefined,
+      dryRun: parsed.data.dryRun,
       ctx: gate.ctx,
     });
     return NextResponse.json({ ok: true, batchId: batch.id }, { status: 201 });

@@ -105,6 +105,8 @@ export async function stageImport(input: {
   filename: string;
   csvText: string;
   extraPayload?: Partial<ImportPayload>;
+  /** G-029: a dry-run batch stages + validates the full ledger but can never commit. */
+  dryRun?: boolean;
   ctx: AuditContextLike;
 }): Promise<ImportBatch> {
   const rows = parseStageRows(input.handler, input.csvText);
@@ -119,6 +121,7 @@ export async function stageImport(input: {
       data: {
         kind: input.kind,
         filename: input.filename,
+        dryRun: input.dryRun ?? false,
         payload: payload as unknown as Prisma.InputJsonValue,
         actorId: input.ctx.staff.id,
         actorEmail: input.ctx.staff.email,
@@ -131,7 +134,7 @@ export async function stageImport(input: {
         action: "import_stage",
         targetType: "ImportBatch",
         targetId: batch.id,
-        metadata: { kind: input.kind, filename: input.filename, ...counts },
+        metadata: { kind: input.kind, filename: input.filename, dryRun: input.dryRun ?? false, ...counts },
       },
       tx,
     );
@@ -149,6 +152,11 @@ export async function commitImport(input: {
     if (!batch) throw new NotFoundError("ImportBatch", input.batchId);
     if (batch.status !== "STAGED") {
       throw new DomainRuleError(`Import batch ${input.batchId} is ${batch.status}; expected STAGED to commit`);
+    }
+    if (batch.dryRun) {
+      // G-029: dry-run exists precisely to prove the ledger without writing;
+      // committing it would be a contradiction. Discard it instead.
+      throw new DomainRuleError("This batch is a dry run — it staged and validated only. Re-upload without dry-run to commit.");
     }
 
     const payload = readPayload(batch);

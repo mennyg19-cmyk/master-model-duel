@@ -78,7 +78,16 @@ export type AuditAction =
   | "email_hub_update"
   | "email_campaign_send"
   | "email_test_send"
-  | "payment_link_email";
+  | "payment_link_email"
+  // P12: export center, reconciliation, address-book cleanup, test console.
+  | "export_csv"
+  | "reconcile_run"
+  | "address_merge"
+  | "address_review"
+  | "testops_seed"
+  | "testops_reset"
+  | "testops_wipe"
+  | "testops_clear";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

@@ -6,6 +6,7 @@ import { getOpenSeason } from "@/lib/seasons/queries";
 import { BRAND } from "@/lib/brand";
 import { Sidebar, SidebarItem } from "@/components/admin/sidebar";
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner";
+import { TestEnvSwitch, TestModeBanner } from "@/components/test-mode-banner";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       { href: "/admin/orders", label: "Orders" },
       { href: "/admin/pos", label: "POS" },
       { href: "/admin/repeat-bulk", label: "Bulk repeat" },
+      { href: "/admin/reports", label: "Reports" },
+      { href: "/admin/export", label: "Export center" },
+      { href: "/admin/reconciliation", label: "Reconciliation" },
     );
   }
   if (hasPermission(ctx.staff, "customers.manage")) {
@@ -52,12 +56,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       { href: "/admin/media", label: "Media" },
     );
   }
-  if (hasPermission(ctx.staff, "settings.manage")) items.push({ href: "/admin/settings", label: "Settings" });
+  if (hasPermission(ctx.staff, "settings.manage")) {
+    items.push(
+      { href: "/admin/settings", label: "Settings" },
+      { href: "/admin/test-ops", label: "Test console" },
+    );
+  }
   if (hasPermission(ctx.staff, "staff.manage")) items.push({ href: "/admin/staff", label: "Staff" });
   if (hasPermission(ctx.staff, "audit.view")) items.push({ href: "/admin/audit", label: "Audit log" });
+  items.push({ href: "/admin/help", label: "Help" });
 
   return (
     <div className="flex min-h-screen flex-col">
+      <TestModeBanner />
       {ctx.impersonator && (
         <ImpersonationBanner targetEmail={ctx.staff.email} impersonatorEmail={ctx.impersonator.email} />
       )}
@@ -73,6 +84,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="flex items-center justify-between px-4 py-3">
           <span className="font-semibold">{BRAND.orgName} admin</span>
           <span className="flex items-center gap-4 text-sm text-brand-100">
+            <TestEnvSwitch />
             <Link href="/" className="rounded-md border border-brand-600 px-2.5 py-1 hover:bg-brand-700" data-visit-store>
               Visit store ↗
             </Link>

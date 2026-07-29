@@ -8,6 +8,14 @@ import { IMPORT_PERMISSION } from "@/lib/imports/kinds";
 import { BackLink } from "@/components/admin/back-link";
 import { ImportPreview } from "@/app/(admin)/admin/imports/[batchId]/import-preview";
 
+const KIND_LABEL: Record<string, string> = {
+  CUSTOMERS: "Customers",
+  PRODUCTS: "Products",
+  LEGACY_CUSTOMERS: "Legacy customers",
+  LEGACY_PRODUCTS: "Legacy products",
+  LEGACY_ORDERS: "Legacy orders",
+};
+
 export const metadata: Metadata = { title: "Import preview" };
 export const dynamic = "force-dynamic";
 
@@ -34,14 +42,15 @@ export default async function AdminImportPreviewPage({
         {batch.filename}
       </h1>
       <p className="mt-1 text-sm text-stone-500">
-        {batch.kind === "CUSTOMERS" ? "Customers" : "Products"} import · staged{" "}
-        {batch.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+        {KIND_LABEL[batch.kind] ?? batch.kind} import · staged {batch.createdAt.toISOString().slice(0, 16).replace("T", " ")}
         {batch.actorEmail ? ` by ${batch.actorEmail}` : ""}
+        {batch.dryRun ? " · DRY RUN — validated only, can never commit" : ""}
       </p>
 
       <ImportPreview
         batchId={batch.id}
         status={batch.status}
+        dryRun={batch.dryRun}
         counts={{
           total: batch.totalRows,
           valid: batch.validRows,

@@ -21,11 +21,13 @@ const VERDICT_TONES = { valid: "green", duplicate: "amber", invalid: "red" } as 
 export function ImportPreview({
   batchId,
   status,
+  dryRun,
   counts,
   rows,
 }: {
   batchId: string;
   status: "STAGED" | "COMMITTED" | "DISCARDED";
+  dryRun: boolean;
   counts: { total: number; valid: number; duplicate: number; invalid: number; committed: number };
   rows: PreviewRow[];
 }) {
@@ -56,7 +58,15 @@ export function ImportPreview({
         <Badge tone="amber">{counts.duplicate} duplicates</Badge>
         <Badge tone="red">{counts.invalid} invalid</Badge>
         {status === "COMMITTED" && <Badge tone="brand">{counts.committed} committed</Badge>}
-        {status === "STAGED" && (
+        {status === "STAGED" && dryRun && (
+          <>
+            <Badge tone="amber">DRY RUN — nothing will write</Badge>
+            <Button variant="secondary" size="sm" onClick={() => decide("discard")} disabled={busy !== null} data-import-discard>
+              {busy === "discard" ? "Discarding…" : "Discard batch"}
+            </Button>
+          </>
+        )}
+        {status === "STAGED" && !dryRun && (
           <>
             <Button size="sm" onClick={() => decide("commit")} disabled={busy !== null || counts.valid === 0} data-import-commit>
               {busy === "commit" ? "Committing…" : `Commit ${counts.valid} row${counts.valid === 1 ? "" : "s"}`}

@@ -92,6 +92,11 @@ enum CronRunStatus {
 enum ImportKind {
   CUSTOMERS
   PRODUCTS
+  // P12 (R-186/G-029): messy legacy export kinds. The staged-atomic engine is
+  // shared; per-kind handlers own normalization, dedupe keys, and commit law.
+  LEGACY_CUSTOMERS
+  LEGACY_PRODUCTS
+  LEGACY_ORDERS
 }
 
 enum ImportStatus {
@@ -360,12 +365,17 @@ model Address {
   // G-020: the greeting this recipient got last time; written at order
   // finalize and prefilled on the next checkout.
   lastGreeting  String?
+  // P12 (UR-014): address-book cleanup + legacy import flag rows a human
+  // must decide on (ambiguous duplicate group, unfixable field shape).
+  needsReview   Boolean       @default(false)
+  reviewReason  String?
   packages      Package[]
   recipients    DraftRecipient[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
   @@unique([customerId, label])
+  @@index([customerId, needsReview])
   @@map("addresses")
 }
 
@@ -407,6 +417,9 @@ model Order {
   repeatedFrom       Order?  @relation("RepeatLineage", fields: [repeatedFromOrderId], references: [id])
   repeatedFromOrderId String?
   repeats            Order[] @relation("RepeatLineage")
+  // P12 (R-186): the legacy system's order number, kept verbatim for audit
+  // when order-number repair assigns a clean per-season sequence at import.
+  legacyRef      String?
   lines          OrderLine[]
   recipients     DraftRecipient[]
   payments       Payment[]
@@ -826,6 +839,9 @@ model ImportBatch {
   actorId       String?
   actorEmail    String?
   committedAt   DateTime?
+  // P12 (R-186): a dry-run batch is the full validation report with zero
+  // domain writes — commit is refused; the batch row itself is the evidence.
+  dryRun        Boolean      @default(false)
   createdAt     DateTime     @default(now())
 
   @@index([kind, createdAt])
@@ -1230,4 +1246,67 @@ model BulkDeliveryScheduleItem {
 
   @@unique([scheduleId, packageId])
   @@map("bulk_delivery_schedule_items")
+}
+
+// ---------------------------------------------------------------------------
+// P12 — Stripe reconciliation (R-093)
+// ---------------------------------------------------------------------------
+
+enum ReconciliationRunStatus {
+  RUNNING
+  OK
+  FAILED
+}
+
+// One matcher pass over the Stripe-side intent list vs local mirrors +
+// posted payments. The matcher never mutates payments — findings are the
+// whole output, so a rerun over unchanged data cannot duplicate an
+// adjustment. actorId/Email are null on the cron path.
+model ReconciliationRun {
+  id            String                  @id @default(cuid())
+  status        ReconciliationRunStatus @default(RUNNING)
+  // Driver mode snapshot: "live" (real Stripe), "fixture" (dev double), or
+  // "capture" (keyless — local mirrors only, nothing Stripe-side to check).
+  mode          String
+  checkedCount  Int                     @default(0)
+  matchedCount  Int                     @default(0)
+  flaggedCount  Int                     @default(0)
+  findings      ReconciliationFinding[]
+  actorId       String?
+  actorEmail    String?
+  startedAt     DateTime                @default(now())
+  finishedAt    DateTime?
+  message       String?
+
+  @@index([startedAt])
+  @@map("reconciliation_runs")
+}
+
+enum ReconciliationFindingKind {
+  // Stripe-side intent carrying metadata.orderId that never reached us
+  // (no mirror row) — e.g. a checkout completed while webhooks were down.
+  ORPHANED_INTENT
+  // Intent succeeded Stripe-side but no posted Payment references it.
+  MISSING_PAYMENT
+  // Posted payment amount disagrees with the Stripe-side amount.
+  AMOUNT_MISMATCH
+  // Local mirror row for an intent Stripe no longer returns.
+  STALE_MIRROR
+  // Mirror status disagrees with the Stripe-side status.
+  STATUS_DRIFT
+}
+
+model ReconciliationFinding {
+  id        String                    @id @default(cuid())
+  run       ReconciliationRun         @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId     String
+  kind      ReconciliationFindingKind
+  intentId  String?
+  orderId   String?
+  detail    String
+  createdAt DateTime                  @default(now())
+
+  @@index([runId])
+  @@index([intentId])
+  @@map("reconciliation_findings")
 }

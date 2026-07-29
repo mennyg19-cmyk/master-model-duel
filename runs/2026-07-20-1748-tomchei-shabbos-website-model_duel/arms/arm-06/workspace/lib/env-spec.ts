@@ -42,6 +42,38 @@ export const ENV_SPEC = [
     secret: true,
   },
   {
+    key: "STRIPE_BASE_URL",
+    description:
+      "Stripe API base URL override. Defaults to https://api.stripe.com. Local seam: point at the in-app dev double (/api/dev/stripe-fixture) to exercise the P12 reconciliation matcher end-to-end — the double only serves when DEV_AUTH_BYPASS=true.",
+    example: "http://127.0.0.1:3106/api/dev/stripe-fixture",
+    schema: z.string().url().optional(),
+    secret: false,
+  },
+  {
+    key: "APP_ENV",
+    description:
+      "Deployment environment class (test|production). Drives the P12 test-mode banner (R-014) and gates the test-only destructive routes under /api/admin/test-ops/* (R-129): production refuses them outright.",
+    example: "test",
+    schema: z.enum(["test", "production"]).default("test"),
+    secret: false,
+  },
+  {
+    key: "LIVE_BASE_URL",
+    description:
+      "Public URL of the live deployment (R-103 env switch). Optional: the admin env-switch link renders only when this is set.",
+    example: "https://tomchei-shabbos.vercel.app",
+    schema: z.string().url().optional(),
+    secret: false,
+  },
+  {
+    key: "TEST_BASE_URL",
+    description:
+      "Public URL of the test deployment (R-103 env switch). Optional: the storefront test banner links here from live only when set.",
+    example: "https://tomchei-shabbos-test.vercel.app",
+    schema: z.string().url().optional(),
+    secret: false,
+  },
+  {
     key: "BLOB_READ_WRITE_TOKEN",
     description:
       "Vercel Blob token for media uploads (R-180). Optional: without it, uploads use the local .uploads/ driver.",

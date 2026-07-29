@@ -17,6 +17,7 @@ export class StripeNotConfiguredError extends Error {
 interface StripeConfig {
   secretKey: string | null;
   webhookSecret: string | null;
+  baseUrl: string;
 }
 
 let stripeConfigCache: StripeConfig | null = null;
@@ -26,12 +27,27 @@ export function getStripeConfig(): StripeConfig {
     stripeConfigCache = {
       secretKey: env.STRIPE_SECRET_KEY ?? null,
       webhookSecret: env.STRIPE_WEBHOOK_SECRET ?? null,
+      // P12 (R-093): base-URL seam for the dev double, same honesty class as
+      // SHIPPO_BASE_URL / RESEND_BASE_URL. The reconciliation matcher lists
+      // intents through this; checkout/refund stay pinned to api.stripe.com.
+      baseUrl: (env.STRIPE_BASE_URL ?? STRIPE_API).replace(/\/+$/, ""),
     };
   }
   return stripeConfigCache;
 }
 
 const STRIPE_API = "https://api.stripe.com";
+
+// Reconciliation driver mode (snapshot on each run row): live = real keys
+// against the real API; fixture = the dev double over HTTP; capture = no key
+// and no double — the matcher can only audit local mirrors, reported as such.
+export type StripeDriverMode = "live" | "fixture" | "capture";
+
+export function stripeDriverMode(): StripeDriverMode {
+  const { secretKey, baseUrl } = getStripeConfig();
+  if (baseUrl !== STRIPE_API) return "fixture";
+  return secretKey ? "live" : "capture";
+}
 
 async function stripePost<T>(path: string, params: URLSearchParams, idempotencyKey?: string): Promise<T> {
   const { secretKey } = getStripeConfig();
@@ -87,6 +103,53 @@ export async function createCheckoutSession(input: {
 export async function createRefund(paymentIntentId: string): Promise<{ id: string }> {
   const params = new URLSearchParams({ payment_intent: paymentIntentId });
   return stripePost<{ id: string }>("/v1/refunds", params, `refund-${paymentIntentId}`);
+}
+
+// R-093: the one Stripe read the matcher needs. Pages through
+// /v1/payment_intents against the configured base URL (live API or the dev
+// double). Fixture mode authenticates with a stand-in bearer — the double
+// ignores it; capture mode (no key, no double) refuses exactly like writes.
+export interface StripeIntentSummary {
+  id: string;
+  amountCents: number;
+  currency: string;
+  status: string;
+  metadata: Record<string, string>;
+}
+
+export async function listPaymentIntents(limit = 100): Promise<StripeIntentSummary[]> {
+  const { secretKey, baseUrl } = getStripeConfig();
+  const bearer = secretKey ?? "fixture-key";
+  if (!secretKey && baseUrl === STRIPE_API) throw new StripeNotConfiguredError();
+
+  const intents: StripeIntentSummary[] = [];
+  let startingAfter: string | undefined;
+  for (;;) {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (startingAfter) query.set("starting_after", startingAfter);
+    const response = await fetch(`${baseUrl}/v1/payment_intents?${query.toString()}`, {
+      headers: { authorization: `Bearer ${bearer}` },
+    });
+    const body = (await response.json().catch(() => null)) as {
+      data?: { id: string; amount: number; currency: string; status: string; metadata?: Record<string, string> }[];
+      has_more?: boolean;
+      error?: { message?: string };
+    } | null;
+    if (!response.ok) {
+      throw new Error(`Stripe list payment_intents failed (${response.status}): ${body?.error?.message ?? "unknown"}`);
+    }
+    for (const intent of body?.data ?? []) {
+      intents.push({
+        id: intent.id,
+        amountCents: intent.amount,
+        currency: intent.currency,
+        status: intent.status,
+        metadata: intent.metadata ?? {},
+      });
+    }
+    if (!body?.has_more || (body.data ?? []).length === 0) return intents;
+    startingAfter = body!.data![body!.data!.length - 1].id;
+  }
 }
 
 const SIGNATURE_TOLERANCE_SECONDS = 300;
