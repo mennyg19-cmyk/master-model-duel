@@ -1,11 +1,12 @@
 import { Package, PackageStage } from "@prisma/client";
 import { prisma, reloadOrThrow } from "@/lib/db";
 import { DomainRuleError, NotFoundError } from "@/lib/errors";
+import { getOpenSeason } from "@/lib/seasons/queries";
 
 // Stage advance is data-driven (R-153): the fulfillment method owns its stage
 // list, so DELIVERY can run NEW→PRINTED→PACKED→SENT while PICKUP skips
 // printing. Forward-only inside the method's list; terminal stage ends it.
-export class IllegalStageTransitionError extends Error {
+export class IllegalStageTransitionError extends DomainRuleError {
   constructor(from: PackageStage, to: PackageStage, methodCode: string) {
     // ASCII arrow (WIN1252-encoded embedded DB — see IllegalTransitionError).
     super(`Illegal package stage transition on ${methodCode}: ${from} -> ${to}`);
@@ -23,9 +24,21 @@ export class PackageConcurrencyError extends Error {
 // PackageEvent action discriminator — typed union mirroring AuditAction in
 // lib/audit.ts (one typing discipline per concern). Every event write uses a
 // member of this union; new event kinds extend it here.
-export type PackageEventAction = "stage_advance";
+export type PackageEventAction = "materialize" | "split" | "regroup" | "stage_advance" | "print";
 
 const PACKAGE_STAGES: readonly PackageStage[] = ["NEW", "PRINTED", "PACKED", "SENT", "PICKED_UP"];
+
+// Season-wide terminal set, derived from the per-method truth
+// (FulfillmentMethod.terminalStage) so read models never hardcode a list a
+// future method could redefine. Used by the nightly batch, reprints, and the
+// dashboard; single-package verbs check their own method's terminalStage.
+export async function loadTerminalStages(): Promise<PackageStage[]> {
+  const rows = await prisma.fulfillmentMethod.findMany({
+    distinct: ["terminalStage"],
+    select: { terminalStage: true },
+  });
+  return rows.map((row) => row.terminalStage);
+}
 
 // FulfillmentMethod.stages is an unvalidated Json column: validate-or-throw on
 // read so a bad seed/admin write fails loudly (naming the method) instead of
@@ -68,18 +81,22 @@ export function assertCanAdvanceStage(
 }
 
 // Optimistic versioning on the package row + package-level audit event.
+// Season-scoped like the bulk path: a past season's package ids are treated
+// as nonexistent rather than mutable.
 export async function advancePackageStage(input: {
   packageId: string;
   expectedVersion: number;
   to: PackageStage;
   actorId?: string;
 }): Promise<Package> {
+  const season = await getOpenSeason();
+  if (!season) throw new DomainRuleError("No open season — package stage advance only acts on the open season's packages");
   return prisma.$transaction(async (tx) => {
     const pkg = await tx.package.findUnique({
       where: { id: input.packageId },
-      include: { fulfillmentMethod: true },
+      include: { fulfillmentMethod: true, order: { select: { seasonId: true } } },
     });
-    if (!pkg) throw new NotFoundError("Package", input.packageId);
+    if (!pkg || pkg.order.seasonId !== season.id) throw new NotFoundError("Package", input.packageId);
 
     const methodStages = parseMethodStages(pkg.fulfillmentMethod.stages, pkg.fulfillmentMethod.code);
     assertCanAdvanceStage(pkg.stage, input.to, methodStages, pkg.fulfillmentMethod.code);

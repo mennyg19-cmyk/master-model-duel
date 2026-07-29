@@ -98,6 +98,12 @@ enum ImportStatus {
   DISCARDED
 }
 
+enum PrintBatchTrigger {
+  NIGHTLY
+  REPRINT_GROUP
+  REPRINT_ORDER
+}
+
 model StaffUser {
   id            String               @id @default(cuid())
   email         String               @unique
@@ -220,6 +226,7 @@ model Season {
   lastDraftSeq       Int          @default(0)
   orders             Order[]
   products           Product[]
+  printBatches       PrintBatch[]
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -446,6 +453,7 @@ model OrderLine {
   addOn                AddOn?              @relation(fields: [addOnId], references: [id], onDelete: Restrict)
   addOnId              String?
   lineTotalCents       Int
+  packageLines         PackageLine[]
   createdAt            DateTime            @default(now())
 
   @@map("order_lines")
@@ -453,6 +461,9 @@ model OrderLine {
 
 // UR-001: recipient/address/method/greeting grouping key; stages optional and
 // data-driven via FulfillmentMethod.stages; PackageEvent is package-level audit.
+// P7: channel/deliveryDay are fulfillment snapshots taken at materialization —
+// the channel dashboard and nightly filing groups read them without re-deriving
+// checkout choices.
 model Package {
   id                   String            @id @default(cuid())
   order                Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -467,14 +478,72 @@ model Package {
   greeting             String?
   groupingKey          String
   stage                PackageStage      @default(NEW)
+  channel              FulfillmentChoice @default(PICKUP)
+  deliveryDay          String?
   version              Int               @default(1)
+  lines                PackageLine[]
   events               PackageEvent[]
+  batchItems           PrintBatchItem[]
   shippingQuotes       ShippingQuote[]
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
 
   @@index([orderId, groupingKey])
   @@map("packages")
+}
+
+// P7: package contents. qty follows the order line at materialization and
+// moves between packages on split/regroup; orderLine RESTRICT keeps a printed
+// slip honest — a line referenced by a package cannot vanish under it.
+model PackageLine {
+  id          String    @id @default(cuid())
+  package     Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId   String
+  orderLine   OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+  orderLineId String
+  qty         Int
+
+  @@unique([packageId, orderLineId])
+  @@map("package_lines")
+}
+
+// UR-005: nightly print batches. One batch row per filing group per run;
+// membership is persisted (PrintBatchItem) so PDFs render on demand and a
+// rerun never re-files a package. Reprints create a new batch that supersedes
+// the predecessor instead of mutating it.
+model PrintBatch {
+  id           String            @id @default(cuid())
+  season       Season            @relation(fields: [seasonId], references: [id])
+  seasonId     String
+  filingGroup  String
+  trigger      PrintBatchTrigger
+  supersedes   PrintBatch?       @relation("BatchSupersession", fields: [supersedesId], references: [id])
+  supersedesId String?
+  supersededBy PrintBatch[]      @relation("BatchSupersession")
+  packageCount Int               @default(0)
+  // Loose staff-id snapshot by design (no relation): batch history must
+  // survive staff-user deletion; enforceable attribution lives in AuditLog.
+  createdById  String?
+  items        PrintBatchItem[]
+  createdAt    DateTime          @default(now())
+
+  @@index([seasonId, filingGroup, createdAt])
+  @@map("print_batches")
+}
+
+model PrintBatchItem {
+  id        String     @id @default(cuid())
+  batch     PrintBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batchId   String
+  package   Package    @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId String
+  // Denormalized so the per-order slips page and order reprints never join
+  // through Package.
+  orderId   String
+
+  @@unique([batchId, packageId])
+  @@index([packageId])
+  @@map("print_batch_items")
 }
 
 // R-153/R-154: data-driven fulfillment methods own their stage lists, e.g.

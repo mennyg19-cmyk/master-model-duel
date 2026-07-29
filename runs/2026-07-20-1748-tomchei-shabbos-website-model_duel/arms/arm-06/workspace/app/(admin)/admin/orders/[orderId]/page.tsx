@@ -4,10 +4,12 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatCents } from "@/lib/money";
+import { CHANNEL_LABELS } from "@/lib/packages/fulfillment";
 import { Card, CardTitle } from "@/components/ui/card";
 import { BackLink } from "@/components/admin/back-link";
 import { OrderStatusBadge, PaymentStatusBadge } from "@/components/admin/order-badges";
 import { OrderActions } from "@/app/(admin)/admin/orders/[orderId]/order-actions";
+import { OrderPackagesCard } from "@/app/(admin)/admin/orders/[orderId]/order-packages-card";
 
 export const metadata: Metadata = { title: "Order detail" };
 export const dynamic = "force-dynamic";
@@ -31,6 +33,17 @@ export default async function AdminOrderDetailPage({
       payments: { orderBy: { createdAt: "asc" } },
       customer: true,
       season: true,
+      packages: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          recipientName: true,
+          stage: true,
+          channel: true,
+          fulfillmentMethod: { select: { label: true } },
+          _count: { select: { lines: true } },
+        },
+      },
     },
   });
   if (!order) notFound();
@@ -132,6 +145,20 @@ export default async function AdminOrderDetailPage({
             {order.recipients.length === 0 && <li className="text-stone-500">No recipients yet.</li>}
           </ul>
         </Card>
+      </div>
+
+      <div className="mt-6">
+        <OrderPackagesCard
+          orderId={order.id}
+          packages={order.packages.map((pkg) => ({
+            id: pkg.id,
+            recipientName: pkg.recipientName,
+            stage: pkg.stage,
+            channelLabel: CHANNEL_LABELS[pkg.channel],
+            methodLabel: pkg.fulfillmentMethod.label,
+            lineCount: pkg._count.lines,
+          }))}
+        />
       </div>
 
       <OrderActions

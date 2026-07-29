@@ -34,7 +34,11 @@ export type AuditAction =
   | "import_stage"
   | "import_commit"
   | "import_discard"
-  | "bulk_action";
+  | "bulk_action"
+  | "package_split"
+  | "package_regroup"
+  | "print_batch_run"
+  | "print_batch_reprint";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

@@ -4,6 +4,7 @@ import { DomainRuleError, NotFoundError } from "@/lib/errors";
 import { AuditContextLike, recordAudit } from "@/lib/audit";
 import { claimOrderNumber, formatWireFormat } from "@/lib/orders/numbers";
 import { releaseOrderReservation } from "@/lib/checkout/reservations";
+import { materializePackagesTx } from "@/lib/packages/materialize";
 
 // R-044..R-046: draft → finalized | discarded; terminal states never move.
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
@@ -62,6 +63,9 @@ export async function finalizeOrderTx(tx: Prisma.TransactionClient, orderId: str
     },
   });
   if (updated.count === 0) throw new OrderConcurrencyError(orderId);
+  // UR-001: packages explode from the finalized order in the same transaction
+  // (P7). Drafts with no recipients/choices materialize nothing.
+  await materializePackagesTx(tx, orderId);
   return reloadOrThrow(() => tx.order.findUnique({ where: { id: orderId } }), "Order", orderId);
 }
 

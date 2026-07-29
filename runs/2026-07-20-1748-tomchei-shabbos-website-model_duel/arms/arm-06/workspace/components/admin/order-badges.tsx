@@ -1,4 +1,4 @@
-import { OrderStatus, PaymentStatus } from "@prisma/client";
+import { OrderStatus, PackageStage, PaymentStatus } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 
 // One tone mapping for order/payment status across dashboard, list, detail,
@@ -23,5 +23,19 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
 
 export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
   const { tone, label } = PAYMENT_TONES[status];
+  return <Badge tone={tone}>{label}</Badge>;
+}
+
+// Package stages ride the same badge language (UR-001 board + dashboard).
+const PACKAGE_TONES: Record<PackageStage, { tone: "green" | "amber" | "stone" | "brand"; label: string }> = {
+  NEW: { tone: "stone", label: "New" },
+  PRINTED: { tone: "brand", label: "Printed" },
+  PACKED: { tone: "amber", label: "Packed" },
+  SENT: { tone: "green", label: "Sent" },
+  PICKED_UP: { tone: "green", label: "Picked up" },
+};
+
+export function PackageStageBadge({ stage }: { stage: PackageStage }) {
+  const { tone, label } = PACKAGE_TONES[stage];
   return <Badge tone={tone}>{label}</Badge>;
 }

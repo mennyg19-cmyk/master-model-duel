@@ -575,6 +575,9 @@ await prisma.auditLog.deleteMany({
 });
 await prisma.stripePaymentIntent.deleteMany({ where: { orderId: { in: seasonOrderIds } } });
 await prisma.payment.deleteMany({ where: { orderId: { in: seasonOrderIds } } });
+// P7: finalized orders carry packages; package_lines RESTRICT-pin order lines,
+// so packages (cascading their lines/events) go first.
+await prisma.package.deleteMany({ where: { orderId: { in: seasonOrderIds } } });
 await prisma.orderLine.deleteMany({ where: { orderId: { in: seasonOrderIds } } });
 await prisma.draftRecipient.deleteMany({ where: { orderId: { in: seasonOrderIds } } });
 await prisma.order.deleteMany({ where: { seasonId: season.id } });
@@ -585,6 +588,8 @@ await prisma.address.delete({ where: { id: bookAddress.id } });
 // seeded season (S2A3-style lines) pin p5-* products too — drop those lines
 // (children before parents, RESTRICT) before the product sweep.
 await prisma.inventoryItem.deleteMany({ where: { product: { slug: { contains: "p5-" } } } });
+// Same RESTRICT discipline for interrupted runs whose orders finalized.
+await prisma.package.deleteMany({ where: { order: { lines: { some: { product: { slug: { contains: "p5-" } } } } } } });
 await prisma.orderLine.deleteMany({ where: { parentLine: { product: { slug: { contains: "p5-" } } } } });
 await prisma.orderLine.deleteMany({ where: { product: { slug: { contains: "p5-" } } } });
 await prisma.product.deleteMany({ where: { slug: { contains: `p5-` } } });

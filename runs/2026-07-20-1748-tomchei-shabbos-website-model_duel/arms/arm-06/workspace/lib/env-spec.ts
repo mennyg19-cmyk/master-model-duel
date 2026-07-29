@@ -49,6 +49,14 @@ export const ENV_SPEC = [
     schema: z.string().min(1).optional(),
     secret: true,
   },
+  {
+    key: "CRON_SECRET",
+    description:
+      "Bearer secret for /api/cron/* endpoints (R-124; P7 nightly print batch). Optional locally: without it, cron routes 401 every caller (configuration state is never revealed pre-auth).",
+    example: "generate-a-long-random-string",
+    schema: z.string().min(1).optional(),
+    secret: true,
+  },
 ] as const;
 
 export type EnvKey = (typeof ENV_SPEC)[number]["key"];

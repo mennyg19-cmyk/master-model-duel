@@ -24,6 +24,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (hasPermission(ctx.staff, "customers.manage")) {
     items.push({ href: "/admin/customers", label: "Customers" });
   }
+  if (hasPermission(ctx.staff, "fulfillment.manage")) {
+    items.push({ href: "/admin/packages", label: "Packages" }, { href: "/admin/fulfillment", label: "Fulfillment" });
+  }
   if (hasPermission(ctx.staff, "customers.manage") || hasPermission(ctx.staff, "catalog.manage")) {
     items.push({ href: "/admin/imports", label: "Imports" });
   }

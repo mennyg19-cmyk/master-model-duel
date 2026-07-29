@@ -119,10 +119,13 @@ check(
 
 // M5 regression: two rows with different emails but one normalized phone —
 // the second must be flagged in the preview, never silently dropped at commit.
+// The 556 prefix keeps these numbers disjoint from this file's 732-555-xxxx
+// fixtures (the first block's phone ends in the stamp's last 4 digits, so a
+// 555 M5 number collides whenever that digit sequence starts with 9).
 const phoneTwinCsv = [
   "name,email,phone",
-  `Phone One,phone1-${stamp}@example.org,732-555-9${String(stamp).slice(-3)}`,
-  `Phone Two,phone2-${stamp}@example.org,(732) 555-9${String(stamp).slice(-3)}`,
+  `Phone One,phone1-${stamp}@example.org,732-556-${String(stamp).slice(-4)}`,
+  `Phone Two,phone2-${stamp}@example.org,(732) 556-${String(stamp).slice(-4)}`,
 ].join("\n");
 const phoneBatch = await stageImport({
   kind: "CUSTOMERS",
