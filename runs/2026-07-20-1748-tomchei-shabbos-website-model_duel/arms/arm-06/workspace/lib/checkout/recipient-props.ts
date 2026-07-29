@@ -8,6 +8,7 @@ export interface CheckoutRecipientProps {
   name: string;
   addressLine: string;
   line1: string;
+  line2: string | null;
   city: string;
   region: string;
   postalCode: string;
@@ -31,6 +32,7 @@ export function buildCheckoutRecipients(
     name: recipient.name,
     addressLine: `${recipient.line1}${recipient.line2 ? `, ${recipient.line2}` : ""}, ${recipient.city}, ${recipient.region} ${recipient.postalCode}`,
     line1: recipient.line1,
+    line2: recipient.line2,
     city: recipient.city,
     region: recipient.region,
     postalCode: recipient.postalCode,

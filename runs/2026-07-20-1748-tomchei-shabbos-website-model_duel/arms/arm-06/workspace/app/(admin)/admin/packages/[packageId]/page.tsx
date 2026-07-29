@@ -43,8 +43,15 @@ export default async function AdminPackageDetailPage({
         orderBy: { id: "desc" },
         include: { batch: { select: { id: true, filingGroup: true, trigger: true, createdAt: true } } },
       },
+      // m9/m15: the active shipment is unique by index, so take:1 can never
+      // miss it; the latest FAILED row is queried on its own leg below so it
+      // can never age out of a shared slice.
       shipments: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 5 },
     },
+  });
+  const lastFailedShipment = await prisma.shipment.findFirst({
+    where: { packageId, status: "FAILED" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
   if (!pkg) notFound();
 
@@ -160,6 +167,7 @@ export default async function AdminPackageDetailPage({
           packageId={pkg.id}
           isTerminal={pkg.stage === pkg.fulfillmentMethod.terminalStage}
           shipments={pkg.shipments}
+          lastFailed={lastFailedShipment}
         />
       )}
 

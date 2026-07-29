@@ -13,7 +13,9 @@ import {
   fixtureCreateRefund,
   fixtureCreateShipment,
   fixtureCreateTransaction,
+  fixtureGetRefund,
   fixtureGetTrack,
+  fixtureStats,
   fixtureValidateAddress,
 } from "../lib/shipping/fixture-double";
 
@@ -44,6 +46,9 @@ const fixtureServer = http.createServer((req, res) => {
     if (req.method === "POST" && url.pathname === "/shipments/") result = fixtureCreateShipment(body);
     else if (req.method === "POST" && url.pathname === "/transactions/") result = fixtureCreateTransaction(body);
     else if (req.method === "POST" && url.pathname === "/refunds/") result = fixtureCreateRefund(body);
+    else if (req.method === "GET" && url.pathname.startsWith("/refunds/")) {
+      result = fixtureGetRefund(decodeURIComponent(url.pathname.split("/")[2]));
+    }
     else if (req.method === "POST" && url.pathname === "/addresses/") result = fixtureValidateAddress(body);
     else if (req.method === "GET" && url.pathname.startsWith("/tracks/")) {
       const parts = url.pathname.split("/");
@@ -61,7 +66,9 @@ process.env.SHIPPO_BASE_URL = `http://127.0.0.1:${(fixtureServer.address() as { 
 const { setSetting } = await import("../lib/settings");
 const { finalizeOrder } = await import("../lib/orders/state-machine");
 const { submitCheckout } = await import("../lib/checkout/submit");
-const { buyLabel, voidLabel, refreshTracking } = await import("../lib/shipping/labels");
+const { buyLabel, voidLabel, refreshTracking, sweepShippingMaintenance, forceResolveStuckPurchase } = await import(
+  "../lib/shipping/labels"
+);
 const { DomainRuleError } = await import("../lib/errors");
 const { closeAllOpenSeasons, expectThrow, reopenSeasons } = await import("./test-db-helpers.mts");
 
@@ -214,8 +221,12 @@ check(
     && (await prisma.auditLog.count({ where: { action: "label_buy", targetId: shippedPkg.id } })) === 1,
 );
 check(
-  "the package-scoped quote persisted too",
-  (await prisma.shippingQuote.count({ where: { packageId: shippedPkg.id } })) >= 1,
+  "m13: the label buy writes NO ShippingQuote row (rate-lock rows are the checkout path's record)",
+  (await prisma.shippingQuote.count({ where: { packageId: shippedPkg.id } })) === 0,
+);
+check(
+  "m12: the carrier-side shipment id landed on the row for traceability",
+  bought.shippoShipmentId !== null && bought.shippoShipmentId.startsWith("shp_"),
 );
 check(
   "one active label per package — a second buy is a clean rule refusal",
@@ -405,6 +416,289 @@ check(
 check(
   "once SENT a fresh buy is refused too",
   await expectThrow(() => buyLabel({ packageId: westPkg.id, ctx }), DomainRuleError),
+);
+// B1: at SENT the carrier has the package — tracking refresh is the live
+// operation there and must NOT hit the terminal-stage guard.
+const trackingAtSent = await refreshTracking({ packageId: westPkg.id, ctx });
+check(
+  "B1: tracking refresh works at SENT (the only stage where it matters)",
+  trackingAtSent.trackingStatus === "TRANSIT",
+);
+
+// --- M5: a merged SHIPPED package keeps a per-recipient charge ledger --------
+// Two guests at the SAME address merge into one package; each froze their own
+// checkout quote. The label buy must record the per-recipient split so P12
+// can separate the honest spread from the combined-parcel packing artifact.
+const mergeOrder = await prisma.order.create({
+  data: { seasonId: season.id, customerId: customer.id, status: "DRAFT", draftRef: `P8-M-${stamp}`, totalCents: 8394 },
+});
+const mergeA = await prisma.draftRecipient.create({
+  data: {
+    orderId: mergeOrder.id,
+    name: "Merge Pair",
+    line1: "5 Merge Ln",
+    city: "Lakewood",
+    region: "NJ",
+    postalCode: "10952",
+    fulfillmentChoice: "SHIPPED",
+    deliveryFeeCents: 2197,
+  },
+});
+const mergeB = await prisma.draftRecipient.create({
+  data: {
+    orderId: mergeOrder.id,
+    name: "Merge Pair",
+    line1: "5 Merge Ln",
+    city: "Lakewood",
+    region: "NJ",
+    postalCode: "10952",
+    fulfillmentChoice: "SHIPPED",
+    deliveryFeeCents: 2197,
+  },
+});
+await prisma.orderLine.create({
+  data: { orderId: mergeOrder.id, recipientId: mergeA.id, productId: tracked.id, productName: "P8 Box", qty: 1, unitPriceCents: 2000, lineTotalCents: 2000 },
+});
+await prisma.orderLine.create({
+  data: { orderId: mergeOrder.id, recipientId: mergeB.id, productId: tracked.id, productName: "P8 Box", qty: 1, unitPriceCents: 2000, lineTotalCents: 2000 },
+});
+await finalizeOrder(mergeOrder.id);
+const mergedPackages = await prisma.package.findMany({ where: { orderId: mergeOrder.id } });
+check("same-named guests at the same address merge into one package", mergedPackages.length === 1);
+const mergedBuy = await buyLabel({ packageId: mergedPackages[0].id, ctx });
+const mergedBreakdown = (mergedBuy.chargeBreakdown ?? []) as { recipientId: string; chargedCents: number }[];
+check(
+  "M5: the charge sums both frozen quotes and the split is on the row",
+  mergedBuy.chargedCents === 4394 && mergedBreakdown.length === 2
+    && mergedBreakdown.every((member) => member.chargedCents === 2197),
+);
+check(
+  "M5: cost prices the combined-parcel shipment and the margin is the honest blend",
+  mergedBuy.costCents === 1740 && mergedBuy.marginCents === 4394 - 1740,
+);
+const mergedEvent = await prisma.packageEvent.findFirstOrThrow({
+  where: { packageId: mergedPackages[0].id, action: "label_buy" },
+  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+});
+const mergedMeta = mergedEvent.metadata as { mergedMembers?: number; marginNote?: string };
+check(
+  "M5: the label_buy event flags the merge so reconciliation reads it correctly",
+  mergedMeta.mergedMembers === 2 && typeof mergedMeta.marginNote === "string",
+);
+
+// --- M4: the echoed cost is cross-checked against the selected rate ----------
+// DRIFTBUY: the carrier sale succeeds but echoes +$1.00 over the quoted rate.
+const driftOrder = await prisma.order.create({
+  data: { seasonId: season.id, customerId: customer.id, status: "DRAFT", draftRef: `P8-R-${stamp}`, totalCents: 4197 },
+});
+const driftRecipient = await prisma.draftRecipient.create({
+  data: {
+    orderId: driftOrder.id,
+    name: "Drift Buyer",
+    line1: "3 DRIFTBUY Dr",
+    city: "Lakewood",
+    region: "NJ",
+    postalCode: "10952",
+    fulfillmentChoice: "SHIPPED",
+    deliveryFeeCents: 2197,
+  },
+});
+await prisma.orderLine.create({
+  data: { orderId: driftOrder.id, recipientId: driftRecipient.id, productId: tracked.id, productName: "P8 Box", qty: 1, unitPriceCents: 2000, lineTotalCents: 2000 },
+});
+await finalizeOrder(driftOrder.id);
+const driftPkg = await prisma.package.findFirstOrThrow({ where: { orderId: driftOrder.id } });
+const driftBuy = await buyLabel({ packageId: driftPkg.id, ctx });
+check(
+  "M4: the echoed cost books honestly even when it drifts from the quote",
+  driftBuy.costCents === 1600 && driftBuy.marginCents === 2197 - 1600,
+);
+const driftEvent = await prisma.packageEvent.findFirstOrThrow({
+  where: { packageId: driftPkg.id, action: "label_buy" },
+  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+});
+const driftMeta = driftEvent.metadata as { quotedCostCents?: number; costDriftCents?: number };
+check(
+  "M4: the drift is flagged on the event, not silently absorbed into margin",
+  driftMeta.quotedCostCents === 1500 && driftMeta.costDriftCents === 100,
+);
+
+// --- M2: an ultimately-declined void reverts to PURCHASED via the sweep ------
+// FAILREFUND: the refund queues, then the carrier declines it (label already
+// scanned into the network). The sweep must not leave the ledger optimistic.
+const refundOrder = await prisma.order.create({
+  data: { seasonId: season.id, customerId: customer.id, status: "DRAFT", draftRef: `P8-V-${stamp}`, totalCents: 4197 },
+});
+const refundRecipient = await prisma.draftRecipient.create({
+  data: {
+    orderId: refundOrder.id,
+    name: "Late Scan",
+    line1: "8 FAILREFUND Pl",
+    city: "Lakewood",
+    region: "NJ",
+    postalCode: "10952",
+    fulfillmentChoice: "SHIPPED",
+    deliveryFeeCents: 2197,
+  },
+});
+await prisma.orderLine.create({
+  data: { orderId: refundOrder.id, recipientId: refundRecipient.id, productId: tracked.id, productName: "P8 Box", qty: 1, unitPriceCents: 2000, lineTotalCents: 2000 },
+});
+await finalizeOrder(refundOrder.id);
+const refundPkg = await prisma.package.findFirstOrThrow({ where: { orderId: refundOrder.id } });
+await buyLabel({ packageId: refundPkg.id, ctx });
+const queuedVoid = await voidLabel({ packageId: refundPkg.id, ctx, reason: "probe the async settle" });
+check(
+  "M2: a queued refund is recorded on the row with its refund object id",
+  queuedVoid.status === "VOIDED" && queuedVoid.refundStatus === "QUEUED" && queuedVoid.shippoRefundId !== null,
+);
+const refundSweep = await sweepShippingMaintenance();
+const reverted = await prisma.shipment.findFirstOrThrow({ where: { id: queuedVoid.id } });
+check(
+  "M2: the sweep reverts a carrier-declined void to PURCHASED (the label is still live and paid)",
+  refundSweep.rejectedVoids >= 1 && reverted.status === "PURCHASED" && reverted.refundStatus === "ERROR" && reverted.voidedAt === null,
+);
+check(
+  "M2: the rejection landed on the event trail",
+  (await prisma.packageEvent.count({ where: { packageId: refundPkg.id, action: "label_void_rejected" } })) === 1,
+);
+
+// --- M1: stuck PURCHASING rows resolve honestly --------------------------------
+const stuckOrder = await prisma.order.create({
+  data: { seasonId: season.id, customerId: customer.id, status: "DRAFT", draftRef: `P8-S-${stamp}`, totalCents: 4197 },
+});
+const stuckRecipient = await prisma.draftRecipient.create({
+  data: {
+    orderId: stuckOrder.id,
+    name: "Stuck Buyer",
+    line1: "21 Stuck Ln",
+    city: "Lakewood",
+    region: "NJ",
+    postalCode: "10952",
+    fulfillmentChoice: "SHIPPED",
+    deliveryFeeCents: 2197,
+  },
+});
+await prisma.orderLine.create({
+  data: { orderId: stuckOrder.id, recipientId: stuckRecipient.id, productId: tracked.id, productName: "P8 Box", qty: 1, unitPriceCents: 2000, lineTotalCents: 2000 },
+});
+await finalizeOrder(stuckOrder.id);
+const stuckPkg = await prisma.package.findFirstOrThrow({ where: { orderId: stuckOrder.id } });
+
+// Leg 1 — staff force-resolve a fresh stuck row the sweep's TTL hasn't reached.
+await prisma.shipment.create({ data: { packageId: stuckPkg.id, status: "PURCHASING", chargedCents: 2197 } });
+const forced = await forceResolveStuckPurchase({ packageId: stuckPkg.id, ctx });
+check(
+  "M1: staff force-resolve fails an unconfirmed stuck purchase so the package can buy again",
+  forced.status === "FAILED",
+);
+check(
+  "M1: force-resolve with nothing stuck is a clean rule refusal",
+  await expectThrow(() => forceResolveStuckPurchase({ packageId: stuckPkg.id, ctx }), DomainRuleError),
+);
+
+// Leg 2 — a stale row with no carrier transaction id sweeps to FAILED.
+await prisma.shipment.create({
+  data: { packageId: stuckPkg.id, status: "PURCHASING", chargedCents: 2197, createdAt: new Date(Date.now() - 60 * 60_000) },
+});
+const stuckSweep = await sweepShippingMaintenance();
+const sweptFailed = await prisma.shipment.findFirstOrThrow({
+  where: { packageId: stuckPkg.id, status: "FAILED" },
+  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+});
+check(
+  "M1: the sweep fails a stale PURCHASING row the carrier never confirmed",
+  stuckSweep.failedPurchases >= 1 && sweptFailed.error !== null,
+);
+
+// Leg 3 — a stale row WITH a carrier transaction id was a real sale: the sweep
+// completes the purchase instead of mislabeling it failed (M8's recovery leg).
+await prisma.shipment.create({
+  data: {
+    packageId: stuckPkg.id,
+    status: "PURCHASING",
+    chargedCents: 2197,
+    shippoTransactionId: "txn_stuck_recovered",
+    createdAt: new Date(Date.now() - 60 * 60_000),
+  },
+});
+const recoverSweep = await sweepShippingMaintenance();
+const recovered = await prisma.shipment.findFirstOrThrow({ where: { packageId: stuckPkg.id, status: "PURCHASED" } });
+check(
+  "M1/M8: the sweep completes a stuck purchase the carrier DID confirm",
+  recoverSweep.recoveredPurchases >= 1 && recovered.shippoTransactionId === "txn_stuck_recovered",
+);
+const recoveredEvent = await prisma.packageEvent.findFirstOrThrow({
+  where: { packageId: stuckPkg.id, action: "label_buy" },
+  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+});
+check(
+  "M1: the recovery is flagged on the event trail",
+  (recoveredEvent.metadata as { recoveredFromStuckPurchase?: boolean }).recoveredFromStuckPurchase === true,
+);
+
+// --- M6/M9: display quotes carry line2 and cache per order+recipient ---------
+const { quoteCheckoutShipping } = await import("../lib/checkout/shipping-quotes");
+const quoteOrder = await prisma.order.create({
+  data: { seasonId: season.id, customerId: customer.id, status: "DRAFT", draftRef: `P8-Q-${stamp}`, totalCents: 0 },
+});
+const quoteRecipient = await prisma.draftRecipient.create({
+  data: {
+    orderId: quoteOrder.id,
+    name: "Apt Resident",
+    line1: "12 Quoter Rd",
+    line2: "Apt 4",
+    city: "Lakewood",
+    region: "NJ",
+    postalCode: "10952",
+  },
+});
+await prisma.orderLine.create({
+  data: { orderId: quoteOrder.id, recipientId: quoteRecipient.id, productId: tracked.id, productName: "P8 Box", qty: 1, unitPriceCents: 2000, lineTotalCents: 2000 },
+});
+const statsBefore = fixtureStats.shipmentsCreated;
+const displayQuotes = await quoteCheckoutShipping({
+  orderId: quoteOrder.id,
+  recipients: [
+    {
+      id: quoteRecipient.id,
+      name: quoteRecipient.name,
+      line1: quoteRecipient.line1,
+      line2: quoteRecipient.line2,
+      city: quoteRecipient.city,
+      region: quoteRecipient.region,
+      postalCode: quoteRecipient.postalCode,
+      country: quoteRecipient.country,
+    },
+  ],
+});
+check(
+  "the display quote prices the SHIPPED option for the page",
+  displayQuotes[quoteRecipient.id]?.available === true
+    && (displayQuotes[quoteRecipient.id] as { chargedCents: number }).chargedCents === 2197,
+);
+check(
+  "M6: line2 rides the quote destination (quote and label see the same address)",
+  fixtureStats.lastShipmentTo?.street2 === "Apt 4",
+);
+await quoteCheckoutShipping({
+  orderId: quoteOrder.id,
+  recipients: [
+    {
+      id: quoteRecipient.id,
+      name: quoteRecipient.name,
+      line1: quoteRecipient.line1,
+      line2: quoteRecipient.line2,
+      city: quoteRecipient.city,
+      region: quoteRecipient.region,
+      postalCode: quoteRecipient.postalCode,
+      country: quoteRecipient.country,
+    },
+  ],
+});
+check(
+  "M9: a checkout re-render inside the TTL spends zero additional carrier calls",
+  fixtureStats.shipmentsCreated === statsBefore + 1,
 );
 
 // Cleanup: close our season before restoring whatever was open.

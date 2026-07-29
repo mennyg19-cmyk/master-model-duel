@@ -13,10 +13,9 @@ export const dynamic = "force-dynamic";
 export default async function AdminSettingsPage() {
   await requirePermission("settings.manage");
 
-  const [deliveryZips, rates, rules, deliveryFees, deliveryDays, packageTypes, pickupLocations, openSeason] =
+  const [deliveryZips, rules, deliveryFees, deliveryDays, packageTypes, pickupLocations, openSeason] =
     await Promise.all([
       getSetting("shipping.deliveryZips"),
-      getSetting("shipping.rates"),
       getSetting("shipping.rules"),
       getSetting("delivery.fees"),
       getSetting("delivery.days"),
@@ -32,7 +31,6 @@ export default async function AdminSettingsPage() {
         storeStatus={openSeason ? `Open — season ${openSeason.name}` : "Closed — no open season"}
         shipping={{
           deliveryZips: deliveryZips ?? [],
-          rates: rates ?? [],
           rules: rules ?? [],
           fees: deliveryFees ?? { bulkPerDestinationCents: 0, perPackagePerRecipientCents: 0 },
           days: deliveryDays ?? [],

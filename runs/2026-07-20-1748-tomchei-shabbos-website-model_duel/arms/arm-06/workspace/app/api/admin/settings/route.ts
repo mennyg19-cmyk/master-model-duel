@@ -11,7 +11,6 @@ export const dynamic = "force-dynamic";
 // a generic settings backdoor.
 const WRITABLE_KEYS = [
   "shipping.deliveryZips",
-  "shipping.rates",
   "shipping.rules",
   "delivery.fees",
   "delivery.days",

@@ -1,4 +1,4 @@
-import { Prisma, Shipment } from "@prisma/client";
+import { Prisma, Shipment, ShipmentStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { DomainRuleError, NotFoundError } from "@/lib/errors";
 import { AuditContextLike, recordAudit } from "@/lib/audit";
@@ -6,7 +6,9 @@ import { PackageEventAction } from "@/lib/packages/stages";
 import { planParcelsForPackage, quoteShipping } from "@/lib/shipping/quotes";
 import {
   buyLabelTransaction,
+  getRefund,
   getTracking,
+  ShippoNotConfiguredError,
   validateAddress,
   voidLabelTransaction,
 } from "@/lib/shipping/shippo";
@@ -31,7 +33,16 @@ export class LabelVoidError extends Error {
   }
 }
 
-async function loadShippedPackage(packageId: string) {
+// The in-flight-or-live shipment set, mirroring the partial unique index
+// (shipments_one_active_per_package). VOIDED/FAILED are history.
+export const ACTIVE_SHIPMENT_STATUSES: readonly ShipmentStatus[] = ["PURCHASING", "PURCHASED"];
+
+// A PURCHASING row older than this never got its carrier confirmation
+// recorded (crash, cold start, fetch timeout) — the shipping sweep resolves
+// it and staff can force-resolve it sooner.
+export const STUCK_PURCHASE_TTL_MINUTES = 15;
+
+async function loadShippedPackage(packageId: string, options?: { allowTerminal?: boolean }) {
   const pkg = await prisma.package.findUnique({
     where: { id: packageId },
     include: {
@@ -57,7 +68,7 @@ async function loadShippedPackage(packageId: string) {
           },
         },
       },
-      shipments: { where: { status: { in: ["PURCHASING", "PURCHASED"] } } },
+      shipments: { where: { status: { in: [...ACTIVE_SHIPMENT_STATUSES] } } },
     },
   });
   if (!pkg) throw new NotFoundError("Package", packageId);
@@ -65,9 +76,12 @@ async function loadShippedPackage(packageId: string) {
     throw new NotFoundError("Package in the open season", packageId);
   }
   if (pkg.channel !== "SHIPPED") {
-    throw new DomainRuleError(`Package ${packageId} ships via ${pkg.channel}; expected SHIPPED to buy a carrier label`);
+    throw new DomainRuleError(`Package ${pkg.id} ships via ${pkg.channel}; expected SHIPPED to buy a carrier label`);
   }
-  if (pkg.stage === pkg.fulfillmentMethod.terminalStage) {
+  // Terminal guard by operation: buy/void/validate are refused once the
+  // carrier has the package, but tracking refresh (R-176) is the live
+  // operation AT the terminal stage — it must keep working there.
+  if (!options?.allowTerminal && pkg.stage === pkg.fulfillmentMethod.terminalStage) {
     throw new DomainRuleError(`Package ${packageId} is ${pkg.stage} — the carrier has it; labels can't change now`);
   }
   return pkg;
@@ -75,11 +89,41 @@ async function loadShippedPackage(packageId: string) {
 
 type ShippedPackage = Awaited<ReturnType<typeof loadShippedPackage>>;
 
+function pickPurchasedShipment(shipments: Shipment[]): Shipment | undefined {
+  return shipments.find((shipment) => shipment.status === "PURCHASED");
+}
+
+function normalizedAddressKey(source: {
+  line1: string;
+  line2: string | null;
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+}): string {
+  return [source.line1, source.line2 ?? "", source.city, source.region, source.postalCode, source.country]
+    .map((part) => part.trim().toLowerCase())
+    .join("|");
+}
+
 // Label destination: the book address when the recipient linked one, else the
 // draft recipient's inline snapshot (guests never touch the address book, but
 // the snapshot is non-null by construction). A merged SHIPPED package groups
-// by that same snapshot, so any member's copy is the package's address.
+// by that same snapshot — the fallback still asserts every member agrees, so
+// a future finer grouping key can never silently label one member's address
+// onto the whole package.
 function destinationFor(pkg: ShippedPackage) {
+  if (!pkg.recipientAddress) {
+    const members = pkg.lines
+      .map((line) => line.orderLine.recipient)
+      .filter((recipient): recipient is NonNullable<typeof recipient> => recipient !== null);
+    const distinctKeys = new Set(members.map(normalizedAddressKey));
+    if (distinctKeys.size > 1) {
+      throw new DomainRuleError(
+        `Package ${pkg.id} merges recipients with different addresses; expected one shared destination to buy a label`,
+      );
+    }
+  }
   const source = pkg.recipientAddress ?? pkg.lines[0]?.orderLine.recipient ?? null;
   if (!source) {
     throw new DomainRuleError(`Package ${pkg.id} has no recipient address; expected one to buy a label`);
@@ -95,22 +139,24 @@ function destinationFor(pkg: ShippedPackage) {
   };
 }
 
-// The package's paid shipping charge: sum of its member recipients' frozen
-// fee snapshots (a merged SHIPPED package carries each member's fee).
-function chargedCentsFor(pkg: ShippedPackage): number {
+// The package's paid shipping charge: each member recipient's frozen fee
+// snapshot (a merged SHIPPED package carries each member's fee). The split is
+// the ledger the P12 reconciliation reads to tell the honest per-recipient
+// spread from the combined-parcel packing artifact.
+function chargeBreakdownFor(pkg: ShippedPackage): { recipientId: string; chargedCents: number }[] {
   const memberRecipientIds = new Set(
     pkg.lines.map((line) => line.orderLine.recipientId).filter((id): id is string => id !== null),
   );
   return pkg.order.recipients
     .filter((recipient) => memberRecipientIds.has(recipient.id))
-    .reduce((sum, recipient) => sum + recipient.deliveryFeeCents, 0);
+    .map((recipient) => ({ recipientId: recipient.id, chargedCents: recipient.deliveryFeeCents }));
 }
 
 async function writeEvent(
   tx: Prisma.TransactionClient | typeof prisma,
   packageId: string,
   action: PackageEventAction,
-  actorId: string,
+  actorId: string | null,
   metadata: Prisma.InputJsonValue,
 ) {
   await tx.packageEvent.create({ data: { packageId, action, actorId, metadata } });
@@ -138,8 +184,12 @@ export async function buyLabel(input: { packageId: string; ctx: AuditContextLike
   }
 
   const parcels = await planParcelsForPackage(prisma, pkg.id);
-  const quote = await quoteShipping({ parcels, destination, scope: { packageId: pkg.id } });
-  const chargedCents = chargedCentsFor(pkg);
+  // m13: ShippingQuote rows are the R-155 CHECKOUT rate-lock record — the
+  // label buy prices fresh and persists its own Shipment ledger fields, so it
+  // must not mix package-scoped rows into the rate-lock table.
+  const quote = await quoteShipping({ parcels, destination, scope: { packageId: pkg.id }, persist: false });
+  const chargeBreakdown = chargeBreakdownFor(pkg);
+  const chargedCents = chargeBreakdown.reduce((sum, member) => sum + member.chargedCents, 0);
 
   let shipment: Shipment;
   try {
@@ -150,7 +200,9 @@ export async function buyLabel(input: { packageId: string; ctx: AuditContextLike
         rateId: quote.margin.buy.rateId,
         carrier: quote.margin.buy.carrier,
         serviceLevel: quote.margin.buy.serviceLevel,
+        shippoShipmentId: quote.shippoShipmentId,
         chargedCents,
+        chargeBreakdown: chargeBreakdown as unknown as Prisma.InputJsonValue,
         parcels: parcels as unknown as Prisma.InputJsonValue,
       },
     });
@@ -164,16 +216,34 @@ export async function buyLabel(input: { packageId: string; ctx: AuditContextLike
     throw error;
   }
 
+  // The carrier call: any failure here means no sale was confirmed, so the
+  // row records the failed attempt (R-175) and the paid order is untouched.
+  let transaction;
   try {
-    const transaction = await buyLabelTransaction(quote.margin.buy.rateId);
+    transaction = await buyLabelTransaction(quote.margin.buy.rateId);
     if (transaction.status !== "SUCCESS") {
       const detail =
         transaction.messages.map((message) => message.text).filter(Boolean).join("; ") ||
         "carrier rejected the transaction";
       throw new LabelPurchaseError(detail);
     }
-    const costCents = Math.round(Number(transaction.rate?.amount ?? "0") * 100);
-    const marginCents = chargedCents - costCents;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    await prisma.shipment.update({ where: { id: shipment.id }, data: { status: "FAILED", error: detail } });
+    await writeEvent(prisma, pkg.id, "label_failed", actorId, { shipmentId: shipment.id, error: detail });
+    if (error instanceof LabelPurchaseError) throw error;
+    throw new LabelPurchaseError(detail);
+  }
+
+  // The zod boundary already guarantees a numeric amount; the cross-check
+  // flags any drift from the rate that was actually selected instead of
+  // silently booking it as margin.
+  const costCents = Math.round(Number(transaction.rate?.amount ?? "0") * 100);
+  const marginCents = chargedCents - costCents;
+  const quotedCostCents = quote.margin.buy.amountCents;
+  const costDriftCents = costCents - quotedCostCents;
+
+  try {
     return await prisma.$transaction(async (tx) => {
       const row = await tx.shipment.update({
         where: { id: shipment.id },
@@ -194,6 +264,15 @@ export async function buyLabel(input: { packageId: string; ctx: AuditContextLike
         chargedCents,
         costCents,
         marginCents,
+        quotedCostCents,
+        costDriftCents,
+        mergedMembers: chargeBreakdown.length,
+        ...(chargeBreakdown.length > 1
+          ? {
+              marginNote:
+                "merged package: charge sums per-recipient checkout quotes, cost prices the combined-parcel shipment",
+            }
+          : {}),
       });
       await recordAudit(
         {
@@ -207,15 +286,28 @@ export async function buyLabel(input: { packageId: string; ctx: AuditContextLike
       );
       return row;
     });
-  } catch (error) {
-    // R-175 compensation: the failed attempt is recorded with the carrier's
-    // reason and the package stays label-less; the paid order total is never
-    // touched by a label failure. Staff fix the cause and retry.
-    const detail = error instanceof Error ? error.message : String(error);
-    await prisma.shipment.update({ where: { id: shipment.id }, data: { status: "FAILED", error: detail } });
-    await writeEvent(prisma, pkg.id, "label_failed", actorId, { shipmentId: shipment.id, error: detail });
-    if (error instanceof LabelPurchaseError) throw error;
-    throw new LabelPurchaseError(detail);
+  } catch (persistError) {
+    // The carrier DID sell the label — flipping to FAILED would misrepresent
+    // a paid label as a failed attempt. Best-effort record the carrier
+    // identifiers and leave the row PURCHASING: the shipping sweep (or staff
+    // force-resolve) completes it from the transaction id.
+    const detail = persistError instanceof Error ? persistError.message : String(persistError);
+    await prisma.shipment
+      .update({
+        where: { id: shipment.id },
+        data: {
+          shippoTransactionId: transaction.object_id,
+          trackingNumber: transaction.tracking_number ?? null,
+          labelUrl: transaction.label_url ?? null,
+          costCents,
+          marginCents,
+          error: `carrier sale ${transaction.object_id} succeeded but the local persist failed: ${detail}`,
+        },
+      })
+      .catch(() => undefined);
+    throw new LabelPurchaseError(
+      `the carrier sold the label (transaction ${transaction.object_id}) but recording it failed — expected state: the shipping sweep or staff force-resolve completes the stuck purchase; do not retry blindly. Cause: ${detail}`,
+    );
   }
 }
 
@@ -226,7 +318,7 @@ export async function voidLabel(input: {
 }): Promise<Shipment> {
   const pkg = await loadShippedPackage(input.packageId);
   const actorId = input.ctx.staff.id;
-  const active = pkg.shipments.find((shipment) => shipment.status === "PURCHASED");
+  const active = pickPurchasedShipment(pkg.shipments);
   if (!active) {
     throw new DomainRuleError(`Package ${input.packageId} has no purchased label to void`);
   }
@@ -240,12 +332,19 @@ export async function voidLabel(input: {
       refund.messages.map((message) => message.text).filter(Boolean).join("; ") || "carrier rejected the void";
     throw new LabelVoidError(detail);
   }
-  // SUCCESS or QUEUED/PENDING: Shippo processes voids asynchronously — the
-  // label is dead to us either way, and the refund settles carrier-side.
+  // SUCCESS or QUEUED/PENDING: Shippo processes voids asynchronously. The
+  // refund object id + status stay on the row so the shipping sweep can
+  // re-check unsettled refunds — a carrier decline reverts the row to
+  // PURCHASED with a label_void_rejected event.
   return prisma.$transaction(async (tx) => {
     const row = await tx.shipment.update({
       where: { id: active.id },
-      data: { status: "VOIDED", voidedAt: new Date() },
+      data: {
+        status: "VOIDED",
+        voidedAt: new Date(),
+        shippoRefundId: refund.object_id || null,
+        refundStatus: refund.status,
+      },
     });
     await writeEvent(tx, pkg.id, "label_void", actorId, {
       shipmentId: row.id,
@@ -267,19 +366,127 @@ export async function voidLabel(input: {
   });
 }
 
-// UR-004 hook (P9): a manager-confirmed map reroute voids the printed-but-
-// unshipped label through this exact path before the package joins a route.
-export async function voidActiveShipmentForReroute(input: {
+// A stuck PURCHASING row resolves to its honest end state: a row carrying a
+// carrier transaction id means the label WAS sold (the persist failed after
+// the sale) — complete the purchase; a row with none means the sale never
+// confirmed — fail it so the package can buy again. actorId null = the sweep.
+async function resolveStuckShipment(shipment: Shipment, actorId: string | null, note: string): Promise<Shipment> {
+  if (shipment.shippoTransactionId) {
+    return prisma.$transaction(async (tx) => {
+      const row = await tx.shipment.update({
+        where: { id: shipment.id },
+        data: { status: "PURCHASED", error: null },
+      });
+      await writeEvent(tx, shipment.packageId, "label_buy", actorId, {
+        shipmentId: row.id,
+        recoveredFromStuckPurchase: true,
+        shippoTransactionId: shipment.shippoTransactionId,
+        note,
+      });
+      return row;
+    });
+  }
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.shipment.update({
+      where: { id: shipment.id },
+      data: { status: "FAILED", error: `purchase never confirmed by the carrier (${note})` },
+    });
+    await writeEvent(tx, shipment.packageId, "label_failed", actorId, {
+      shipmentId: row.id,
+      stuckPurchase: true,
+      note,
+    });
+    return row;
+  });
+}
+
+// Staff escape hatch for a stuck PURCHASING row (gated by fulfillment.manage
+// at the route): same resolution the sweep applies, on demand.
+export async function forceResolveStuckPurchase(input: {
   packageId: string;
   ctx: AuditContextLike;
-  reason: string;
 }): Promise<Shipment> {
-  return voidLabel(input);
+  const pkg = await loadShippedPackage(input.packageId);
+  const stuck = pkg.shipments.find((shipment) => shipment.status === "PURCHASING");
+  if (!stuck) {
+    throw new DomainRuleError(`Package ${input.packageId} has no stuck purchase to resolve`);
+  }
+  return resolveStuckShipment(stuck, input.ctx.staff.id, "staff force-resolve");
+}
+
+export interface ShippingSweepResult {
+  failedPurchases: number;
+  recoveredPurchases: number;
+  rejectedVoids: number;
+  purgedQuotes: number;
+}
+
+// Shipping maintenance sweep (cron): resolve stale PURCHASING rows, reconcile
+// async void refunds with the carrier, and purge expired quote rows.
+export async function sweepShippingMaintenance(): Promise<ShippingSweepResult> {
+  const cutoff = new Date(Date.now() - STUCK_PURCHASE_TTL_MINUTES * 60_000);
+  const stuck = await prisma.shipment.findMany({ where: { status: "PURCHASING", createdAt: { lt: cutoff } } });
+  let failedPurchases = 0;
+  let recoveredPurchases = 0;
+  for (const shipment of stuck) {
+    const resolved = await resolveStuckShipment(shipment, null, `stuck PURCHASING past ${STUCK_PURCHASE_TTL_MINUTES} min`);
+    if (resolved.status === "PURCHASED") recoveredPurchases += 1;
+    else failedPurchases += 1;
+  }
+
+  let rejectedVoids = 0;
+  const pendingVoids = await prisma.shipment.findMany({
+    where: { status: "VOIDED", refundStatus: { in: ["QUEUED", "PENDING"] }, shippoRefundId: { not: null } },
+  });
+  for (const shipment of pendingVoids) {
+    let refund;
+    try {
+      refund = await getRefund(shipment.shippoRefundId!);
+    } catch (error) {
+      // Carrier unreachable or unconfigured — the row stays honestly
+      // VOIDED-pending and the next sweep retries.
+      if (error instanceof ShippoNotConfiguredError) break;
+      continue;
+    }
+    if (refund.status === "ERROR") {
+      rejectedVoids += 1;
+      const detail =
+        refund.messages.map((message) => message.text).filter(Boolean).join("; ") || "carrier declined the refund";
+      const activeNow = await prisma.shipment.findFirst({
+        where: { packageId: shipment.packageId, status: { in: [...ACTIVE_SHIPMENT_STATUSES] } },
+      });
+      await prisma.$transaction(async (tx) => {
+        // The void failed carrier-side — the label is still live and paid.
+        // Revert when the package has no newer active label; if staff already
+        // re-bought, the unique index forbids the revert and the event alone
+        // flags the double cost for reconciliation.
+        const row = await tx.shipment.update({
+          where: { id: shipment.id },
+          data: activeNow
+            ? { refundStatus: refund.status }
+            : { status: "PURCHASED", voidedAt: null, refundStatus: refund.status },
+        });
+        await writeEvent(tx, shipment.packageId, "label_void_rejected", null, {
+          shipmentId: row.id,
+          shippoRefundId: shipment.shippoRefundId,
+          revertedToPurchased: activeNow === null,
+          detail,
+        });
+      });
+    } else {
+      await prisma.shipment.update({ where: { id: shipment.id }, data: { refundStatus: refund.status } });
+    }
+  }
+
+  const purged = await prisma.shippingQuote.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+  return { failedPurchases, recoveredPurchases, rejectedVoids, purgedQuotes: purged.count };
 }
 
 export async function refreshTracking(input: { packageId: string; ctx: AuditContextLike }): Promise<Shipment> {
-  const pkg = await loadShippedPackage(input.packageId);
-  const active = pkg.shipments.find((shipment) => shipment.status === "PURCHASED");
+  // allowTerminal: R-176 tracking is the live operation once the carrier has
+  // the package — refusing at SENT blocked the only stage where it matters.
+  const pkg = await loadShippedPackage(input.packageId, { allowTerminal: true });
+  const active = pickPurchasedShipment(pkg.shipments);
   if (!active || !active.trackingNumber || !active.carrier) {
     throw new DomainRuleError(`Package ${input.packageId} has no purchased label with a tracking number`);
   }

@@ -62,6 +62,29 @@ export async function submitCheckout(
   const days = deliveryDays ?? [];
   const zips = deliveryZips ?? [];
 
+  const choiceByRecipient = new Map(input.recipients.map((choice) => [choice.recipientId, choice]));
+
+  // M3: live Shippo quoting runs BEFORE the transaction — carrier HTTP
+  // inside a DB tx holds row locks for whole seconds and can outlive the tx
+  // timeout. The tx below re-loads and re-validates everything; any drift
+  // since this quote surfaces as a totals conflict (409), never a wrong
+  // charge. A quote failure refuses the submit with a clean 422 (R-032).
+  const preTxOrder = await loadAccessibleOrder(prisma, input.draftRef, access);
+  if (!preTxOrder) return null;
+  const shippedFeeByRecipient = new Map<string, number>();
+  if (preTxOrder.status === "DRAFT") {
+    for (const recipient of preTxOrder.recipients) {
+      if (choiceByRecipient.get(recipient.id)?.fulfillmentChoice !== "SHIPPED") continue;
+      try {
+        const quote = await quoteRecipientShipping(prisma, { orderId: preTxOrder.id, recipient });
+        shippedFeeByRecipient.set(recipient.id, quote.chargedCents);
+      } catch (error) {
+        if (error instanceof Error) throw new DomainRuleError(`${recipient.name}: ${error.message}`);
+        throw error;
+      }
+    }
+  }
+
   return prisma.$transaction(async (tx) => {
     const order = await loadAccessibleOrder(tx, input.draftRef, access);
     if (!order) return null;
@@ -79,7 +102,6 @@ export async function submitCheckout(
     if (unassigned.length > 0) {
       throw new DomainRuleError(`${unassigned.length} line(s) are not assigned to a recipient yet`);
     }
-    const choiceByRecipient = new Map(input.recipients.map((choice) => [choice.recipientId, choice]));
     for (const recipient of order.recipients) {
       if (!choiceByRecipient.has(recipient.id)) {
         throw new DomainRuleError(`Missing a fulfillment choice for ${recipient.name}`);
@@ -120,15 +142,13 @@ export async function submitCheckout(
       const choice = choiceByRecipient.get(recipient.id)!;
       let feeCents = 0;
       if (choice.fulfillmentChoice === "SHIPPED") {
-        try {
-          const quote = await quoteRecipientShipping(tx, { orderId: order.id, recipient });
-          feeCents = quote.chargedCents;
-        } catch (error) {
-          // A quote failure refuses the submit with a clean 422 (R-032) —
-          // the frozen fee can never be a guess.
-          if (error instanceof Error) throw new DomainRuleError(`${recipient.name}: ${error.message}`);
-          throw error;
+        // Quoted pre-transaction (M3); the frozen fee is that quote, and the
+        // expected-total check below catches any drift since the page render.
+        const quoted = shippedFeeByRecipient.get(recipient.id);
+        if (quoted === undefined) {
+          throw new DomainRuleError(`${recipient.name}: shipping quote is missing; resubmit to re-quote`);
         }
+        feeCents = quoted;
       } else {
         feeCents = resolveDeliveryFeeCents(choice.fulfillmentChoice, feeRules);
       }

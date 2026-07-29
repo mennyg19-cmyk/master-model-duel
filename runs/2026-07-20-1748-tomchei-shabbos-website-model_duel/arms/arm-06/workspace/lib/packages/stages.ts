@@ -34,6 +34,7 @@ export type PackageEventAction =
   | "label_buy"
   | "label_failed"
   | "label_void"
+  | "label_void_rejected"
   | "tracking_refresh"
   | "address_validate";
 

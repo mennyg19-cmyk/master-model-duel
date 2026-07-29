@@ -11,8 +11,11 @@ const settingSchemas = {
   // P3 settings hub (R-094/095): the delivery ZIP allowlist gates per-package
   // delivery at checkout (read live — edits take effect on the next request).
   "shipping.deliveryZips": z.array(zipSchema),
-  "shipping.rates": z.array(z.object({ name: z.string().min(1), feeCents: z.number().int().nonnegative() })),
   "shipping.rules": z.array(z.object({ name: z.string().min(1), description: z.string() })),
+  // P8 margin engine (UR-003): which carrier service levels count as
+  // ground-comparable per carrier. Falls back to the code default
+  // (GROUND_SERVICE_TOKENS) when unset; DB-editable for ops, no hub UI yet.
+  "shipping.groundServiceTokens": z.record(z.string(), z.array(z.string().min(1))),
   // P5 delivery rules (UR-009/G-015): placeholder rate resolution — bulk is
   // one fee per destination, per-package one fee per recipient. P8 swaps
   // these for live Shippo rates behind the same resolver seam.

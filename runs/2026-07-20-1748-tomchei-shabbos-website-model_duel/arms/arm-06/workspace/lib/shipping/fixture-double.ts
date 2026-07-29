@@ -7,9 +7,16 @@ import { createHash, randomBytes } from "node:crypto";
 // /api/dev/shippo-fixture (404 unless DEV_AUTH_BYPASS=true).
 //
 // Scripted behaviors (driven by destination line1, so smoke/tests choose):
-//   contains "BADADDR"   → address validation fails with carrier messages
-//   contains "FAILBUY"   → the transaction returns status ERROR (R-175 leg)
-//   contains "FAILRATES" → the shipment create 500s (quote-time API failure)
+//   contains "BADADDR"    → address validation fails with carrier messages
+//   contains "FAILBUY"    → the transaction returns status ERROR (R-175 leg)
+//   contains "FAILRATES"  → the shipment create 500s (quote-time API failure)
+//   contains "FAILREFUND" → the refund stays QUEUED, then GET /refunds reports
+//                           ERROR (the carrier ultimately declines the void)
+//   contains "DRIFTBUY"   → the transaction succeeds but echoes a rate amount
+//                           $1.00 above the quoted rate (cost-drift leg)
+//
+// Instrumentation for tests: fixtureStats counts shipment creates and keeps
+// the last destination, so tests can assert fan-out caps and address shape.
 //
 // Pricing is zip-zoned so smoke can flip WHICH carrier is high: out west
 // (zip 9xxxx) UPS beats its own east-coast price by 1.9x and becomes the
@@ -112,6 +119,11 @@ interface StoredTransaction {
 // process, so object ids resolve exactly like Shippo's without a database.
 const shipments = new Map<string, StoredShipment>();
 const transactions = new Map<string, StoredTransaction>();
+const refunds = new Map<string, { queuedThenDeclined: boolean }>();
+export const fixtureStats: { shipmentsCreated: number; lastShipmentTo: FixtureAddress | null } = {
+  shipmentsCreated: 0,
+  lastShipmentTo: null,
+};
 // Rate ids are content-derived (deterministic across identical quotes), so a
 // rate can appear in many shipments; the registry points each rate at the
 // NEWEST shipment that quoted it — the shipment a caller just created before
@@ -149,6 +161,8 @@ export function fixtureCreateShipment(body: {
     return { status: 400, payload: { messages: [{ text: "at least one parcel is required" }] } };
   }
   const shipmentId = objectId("shp", JSON.stringify(to) + JSON.stringify(parcels));
+  fixtureStats.shipmentsCreated += 1;
+  fixtureStats.lastShipmentTo = to;
   const rates: StoredShipment["rates"] = [];
   for (const [carrier, spec] of Object.entries(FIXTURE_CARRIERS)) {
     for (const [token, service] of Object.entries(spec.services)) {
@@ -190,10 +204,13 @@ export function fixtureCreateTransaction(body: { rate?: string }): { status: num
   }
   const transactionId = objectId("txn", rateId);
   const tracking = `1Z${parsed.carrier.toUpperCase()}${createHash("sha1").update(transactionId).digest("hex").slice(0, 10).toUpperCase()}`;
+  // DRIFTBUY: the sale succeeds but the echoed amount disagrees with the
+  // quoted rate — exercises the cost-drift flag on the label_buy event.
+  const driftCents = (stored.to.street1 ?? "").includes("DRIFTBUY") ? 100 : 0;
   const transaction: StoredTransaction = {
     shipmentId,
     rateId,
-    amount: (parsed.amountCents / 100).toFixed(2),
+    amount: ((parsed.amountCents + driftCents) / 100).toFixed(2),
     provider: parsed.carrier,
     serviceToken: parsed.serviceToken,
     status: "SUCCESS",
@@ -224,7 +241,31 @@ export function fixtureCreateRefund(body: { transaction?: string }): { status: n
   if (!transaction) {
     return { status: 201, payload: { object_id: "", status: "ERROR", messages: [{ text: "unknown transaction" }] } };
   }
-  return { status: 201, payload: { object_id: objectId("ref", body.transaction ?? ""), status: "SUCCESS", messages: [] } };
+  // FAILREFUND: the void queues, then the carrier declines it on the later
+  // status read (label already scanned into the network).
+  const destination = shipments.get(transaction.shipmentId)?.to;
+  const queuedThenDeclined = (destination?.street1 ?? "").includes("FAILREFUND");
+  const refundId = objectId("ref", body.transaction ?? "");
+  refunds.set(refundId, { queuedThenDeclined });
+  return {
+    status: 201,
+    payload: { object_id: refundId, status: queuedThenDeclined ? "QUEUED" : "SUCCESS", messages: [] },
+  };
+}
+
+export function fixtureGetRefund(refundId: string): { status: number; payload: unknown } {
+  const refund = refunds.get(refundId);
+  if (!refund) {
+    return { status: 404, payload: { detail: "refund not found" } };
+  }
+  return {
+    status: 200,
+    payload: {
+      object_id: refundId,
+      status: refund.queuedThenDeclined ? "ERROR" : "SUCCESS",
+      messages: refund.queuedThenDeclined ? [{ text: "label already scanned into the carrier network" }] : [],
+    },
+  };
 }
 
 export function fixtureValidateAddress(body: FixtureAddress): { status: number; payload: unknown } {

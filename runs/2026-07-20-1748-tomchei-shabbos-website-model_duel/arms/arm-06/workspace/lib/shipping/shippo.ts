@@ -16,10 +16,15 @@ export class ShippoNotConfiguredError extends Error {
 
 export class ShippoApiError extends Error {
   readonly status: number;
+  // Staff-safe summary for the HTTP response; the full carrier detail stays
+  // in `message` for the server log (carrier account internals are never
+  // echoed to the client).
+  readonly clientMessage: string;
   constructor(path: string, status: number, detail: string) {
     super(`Shippo ${path} failed (${status}): ${detail}`);
     this.name = "ShippoApiError";
     this.status = status;
+    this.clientMessage = `The carrier service rejected the request (HTTP ${status}); the carrier's detail is in the server log`;
   }
 }
 
@@ -31,21 +36,18 @@ export interface ShippoConfig {
   includeUsps: boolean;
 }
 
-let shippoConfigCache: ShippoConfig | null = null;
-
+// No module-level cache: lib/env already snapshots process.env once, so
+// caching the derived config only added token-rotation staleness.
 export function getShippoConfig(): ShippoConfig | null {
-  if (!shippoConfigCache) {
-    const token = env.SHIPPO_API_TOKEN;
-    if (!token) return null;
-    shippoConfigCache = {
-      token,
-      baseUrl: env.SHIPPO_BASE_URL ?? "https://api.goshippo.com",
-      fedexAccountId: env.SHIPPO_FEDEX_ACCOUNT_ID ?? null,
-      upsAccountId: env.SHIPPO_UPS_ACCOUNT_ID ?? null,
-      includeUsps: env.SHIPPO_INCLUDE_USPS === "true",
-    };
-  }
-  return shippoConfigCache;
+  const token = env.SHIPPO_API_TOKEN;
+  if (!token) return null;
+  return {
+    token,
+    baseUrl: env.SHIPPO_BASE_URL ?? "https://api.goshippo.com",
+    fedexAccountId: env.SHIPPO_FEDEX_ACCOUNT_ID ?? null,
+    upsAccountId: env.SHIPPO_UPS_ACCOUNT_ID ?? null,
+    includeUsps: env.SHIPPO_INCLUDE_USPS === "true",
+  };
 }
 
 export interface ShippoAddress {
@@ -65,9 +67,15 @@ export interface ShippoParcel {
   weightGrams: number;
 }
 
+// Carrier money strings must parse as finite numbers — a malformed amount
+// fails the zod boundary instead of NaN-poisoning the margin ledger.
+const numericAmount = z
+  .string()
+  .refine((value) => value.trim() !== "" && Number.isFinite(Number(value)), "expected a numeric amount");
+
 const rateSchema = z.object({
   object_id: z.string(),
-  amount: z.string(),
+  amount: numericAmount,
   currency: z.string().default("USD"),
   provider: z.string(),
   servicelevel: z
@@ -84,17 +92,21 @@ const shipmentSchema = z.object({
   messages: z.array(z.object({ text: z.string().default("") }).passthrough()).default([]),
 });
 
+// Label URLs render as <a href> in the admin shell — only http(s) schemes
+// pass the boundary, so a poisoned proxy/fixture can never serve javascript:.
+const labelUrl = z.string().regex(/^https?:\/\//, "expected an http(s) URL");
+
 const transactionSchema = z.object({
   object_id: z.string(),
   status: z.string(),
   tracking_number: z.string().nullish(),
-  label_url: z.string().nullish(),
-  commercial_invoice_url: z.string().nullish(),
+  label_url: labelUrl.nullish(),
+  commercial_invoice_url: labelUrl.nullish(),
   messages: z.array(z.object({ text: z.string().default("") }).passthrough()).default([]),
   rate: z
     .object({
       object_id: z.string(),
-      amount: z.string(),
+      amount: numericAmount,
       provider: z.string().default(""),
       servicelevel: z
         .object({ token: z.string().default(""), name: z.string().default("") })
@@ -162,6 +174,26 @@ function toShippoParcel(parcel: ShippoParcel): Record<string, string> {
   };
 }
 
+// Error bodies are summarized per semantic field (messages/detail), each
+// capped — slicing raw JSON can cut mid-field and leak half an account id
+// while losing the actionable message.
+function summarizeErrorBody(raw: unknown, status: number): string {
+  if (raw && typeof raw === "object") {
+    const body = raw as Record<string, unknown>;
+    const parts: string[] = [];
+    if (Array.isArray(body.messages)) {
+      for (const message of body.messages.slice(0, 3)) {
+        const text = (message as { text?: unknown } | null)?.text;
+        if (typeof text === "string" && text.length > 0) parts.push(text.slice(0, 160));
+      }
+    }
+    if (typeof body.detail === "string" && body.detail.length > 0) parts.push(body.detail.slice(0, 160));
+    if (parts.length > 0) return parts.join("; ");
+    return JSON.stringify(body).slice(0, 200);
+  }
+  return `HTTP ${status} with an unreadable body`;
+}
+
 async function shippoFetch<T>(method: string, path: string, body: unknown, schema: z.ZodType<T>): Promise<T> {
   const config = getShippoConfig();
   if (!config) throw new ShippoNotConfiguredError();
@@ -175,11 +207,7 @@ async function shippoFetch<T>(method: string, path: string, body: unknown, schem
   });
   const raw = await response.json().catch(() => null);
   if (!response.ok) {
-    const detail =
-      raw && typeof raw === "object"
-        ? JSON.stringify(raw).slice(0, 300)
-        : `HTTP ${response.status} with an unreadable body`;
-    throw new ShippoApiError(path, response.status, detail);
+    throw new ShippoApiError(path, response.status, summarizeErrorBody(raw, response.status));
   }
   return schema.parse(raw);
 }
@@ -218,6 +246,12 @@ export type ShippoRefund = z.infer<typeof refundSchema>;
 
 export async function voidLabelTransaction(transactionId: string): Promise<ShippoRefund> {
   return shippoFetch("POST", "/refunds/", { transaction: transactionId, async: false }, refundSchema);
+}
+
+// Voids settle asynchronously carrier-side: the sweep re-reads the refund
+// object to learn whether a QUEUED/PENDING refund ultimately succeeded.
+export async function getRefund(refundId: string): Promise<ShippoRefund> {
+  return shippoFetch("GET", `/refunds/${encodeURIComponent(refundId)}`, undefined, refundSchema);
 }
 
 export interface ShippoTrackStatus {

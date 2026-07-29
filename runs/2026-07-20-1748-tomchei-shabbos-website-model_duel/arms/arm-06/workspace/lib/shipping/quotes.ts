@@ -3,7 +3,13 @@ import { prisma } from "@/lib/db";
 import { DomainRuleError, NotFoundError } from "@/lib/errors";
 import { getSetting } from "@/lib/settings";
 import { planParcels, BoxSpec, PackItem, Parcel } from "@/lib/shipping/packing";
-import { MarginResolution, normalizeRates, resolveMargin, RateOption } from "@/lib/shipping/margin";
+import {
+  GROUND_SERVICE_TOKENS,
+  MarginResolution,
+  normalizeRates,
+  resolveMargin,
+  RateOption,
+} from "@/lib/shipping/margin";
 import {
   createShipmentWithRates,
   getShippoConfig,
@@ -23,6 +29,9 @@ export interface ShippingQuoteResult {
   margin: MarginResolution;
   parcels: Parcel[];
   expiresAt: Date;
+  // The carrier-side shipment object the rates came from — persisted on the
+  // Shipment row at label buy for traceability.
+  shippoShipmentId: string;
 }
 
 export class ShippingUnavailableError extends Error {
@@ -119,7 +128,10 @@ export async function quoteShipping(input: {
     parcels: input.parcels,
   });
   const options = normalizeRates(shipment.rates);
-  const margin = resolveMargin(options, config.includeUsps);
+  // Ground-comparable eligibility is operator-tunable (org-negotiated service
+  // levels change); the setting falls back to the code default list.
+  const groundTokens = (await getSetting("shipping.groundServiceTokens")) ?? GROUND_SERVICE_TOKENS;
+  const margin = resolveMargin(options, config.includeUsps, groundTokens);
   if (!margin) {
     throw new ShippingUnavailableError(
       options.length === 0
@@ -133,12 +145,18 @@ export async function quoteShipping(input: {
     await db.shippingQuote.create({
       data: {
         ...("orderId" in input.scope ? { orderId: input.scope.orderId } : { packageId: input.scope.packageId }),
-        options: { rates: options, charge: margin.charge, buy: margin.buy, parcels: input.parcels } as unknown as Prisma.InputJsonValue,
+        options: {
+          rates: options,
+          charge: margin.charge,
+          buy: margin.buy,
+          parcels: input.parcels,
+          shippoShipmentId: shipment.object_id,
+        } as unknown as Prisma.InputJsonValue,
         expiresAt,
       },
     });
   }
-  return { options, margin, parcels: input.parcels, expiresAt };
+  return { options, margin, parcels: input.parcels, expiresAt, shippoShipmentId: shipment.object_id };
 }
 
 // Package contents → parcels, for the label-purchase path (R-081).

@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-fetch";
-import { dollarsToCents, formatCents } from "@/lib/money";
+import { dollarsToCents } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 
 interface ShippingState {
   deliveryZips: string[];
-  rates: { name: string; feeCents: number }[];
   rules: { name: string; description: string }[];
   fees: { bulkPerDestinationCents: number; perPackagePerRecipientCents: number };
   days: string[];
@@ -58,8 +57,6 @@ export function SettingsTabs({
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("Orders");
   const [zipsText, setZipsText] = useState(shipping.deliveryZips.join(", "));
-  const [rateName, setRateName] = useState("");
-  const [rateFee, setRateFee] = useState("");
   const [bulkFee, setBulkFee] = useState((shipping.fees.bulkPerDestinationCents / 100).toFixed(2));
   const [perPackageFee, setPerPackageFee] = useState((shipping.fees.perPackagePerRecipientCents / 100).toFixed(2));
   const [daysText, setDaysText] = useState(shipping.days.join("\n"));
@@ -90,26 +87,6 @@ export function SettingsTabs({
       }),
       "Delivery ZIPs saved — the checkout checker reads this list live.",
     );
-  }
-
-  async function addRate(event: FormEvent) {
-    event.preventDefault();
-    const feeCents = dollarsToCents(Number(rateFee));
-    if (!rateName.trim() || feeCents === null) {
-      setError("Fee must be a clean dollar-and-cents amount");
-      setStatus(null);
-      return;
-    }
-    const next = [...shipping.rates, { name: rateName.trim(), feeCents }];
-    const apiResult = await apiFetch("/api/admin/settings", {
-      method: "POST",
-      body: { key: "shipping.rates", value: next },
-    });
-    reportSaveResult(apiResult, "Shipping rate added.");
-    if (apiResult.ok) {
-      setRateName("");
-      setRateFee("");
-    }
   }
 
   async function saveDeliveryFees(event: FormEvent) {
@@ -359,37 +336,7 @@ export function SettingsTabs({
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold">Delivery fees</h2>
-            <ul className="mt-3 flex flex-col gap-2">
-              {shipping.rates.map((rate) => (
-                <li key={rate.name} className="rounded-md border border-stone-200 bg-white px-3 py-2 text-sm">
-                  {rate.name} — {formatCents(rate.feeCents)}
-                </li>
-              ))}
-              {shipping.rates.length === 0 && <li className="text-sm text-stone-500">No fees configured.</li>}
-            </ul>
-            <form onSubmit={addRate} className="mt-3 flex gap-2">
-              <Input
-                value={rateName}
-                onChange={(event) => setRateName(event.target.value)}
-                placeholder="Rate name"
-                required
-                className="max-w-[12rem]"
-              />
-              <Input
-                value={rateFee}
-                onChange={(event) => setRateFee(event.target.value)}
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="$0.00"
-                required
-                className="max-w-[7rem]"
-              />
-              <Button type="submit" size="sm">Add</Button>
-            </form>
-
-            <h2 className="mt-8 text-lg font-semibold">Shipping rules</h2>
+            <h2 className="text-lg font-semibold">Shipping rules</h2>
             <ul className="mt-3 flex flex-col gap-2">
               {shipping.rules.map((rule) => (
                 <li key={rule.name} className="rounded-md border border-stone-200 bg-white px-3 py-2 text-sm">

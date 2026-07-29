@@ -679,6 +679,17 @@ model Shipment {
   chargedCents        Int
   costCents           Int?
   marginCents         Int?
+  // Per-recipient charge split when a merged SHIPPED package carries several
+  // frozen fees: [{ recipientId, chargedCents }]. The P12 reconciliation reads
+  // this to separate the honest per-recipient spread from the combined-parcel
+  // packing artifact (charged sums per-recipient quotes, cost prices the
+  // merged shipment).
+  chargeBreakdown     Json?
+  // Shippo's async void refund: the refund object id + its last known status
+  // (QUEUED/PENDING settle carrier-side later; the shipping sweep re-checks
+  // them and reverts the row to PURCHASED on a carrier decline).
+  shippoRefundId      String?
+  refundStatus        String?
   // The parcels the label was bought for (bin-packing snapshot, R-081).
   parcels             Json?
   // R-175: Shippo's failure reason lives here; the order's paid total is

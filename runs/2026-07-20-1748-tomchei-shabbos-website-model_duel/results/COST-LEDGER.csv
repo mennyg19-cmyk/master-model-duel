@@ -661,3 +661,4 @@
 2026-07-29T05:53:30Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P8,review_clean_code,glm-5.2-high,c651ae57-7ed7-4d75-a3c4-97f2748f571d,,,,,,,,P8 clean-code review; usage_missing_pending_export
 2026-07-29T05:57:26Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P8,review_aggregate,glm-5.2-high,73ccaf66-5952-406c-8811-fe948ebecaf0,,,,,,,,P8 aggregate of 4 specialists; usage_missing_pending_export
 2026-07-29T06:00:30Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P8,contestant_fix,kimi-k3-max,18efd89a-a3d2-43f7-b10c-5f7866790050,,,,,,,,P8 fix pass after aggregate 1B/9M/18m; usage_missing_pending_export
+2026-07-29T07:13:19Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P9,contestant_build,kimi-k3-max,c772b5b6-1984-43ce-9347-c821ea06a417,,,,,,,,P9 routes/drivers/pickup/bulk initial build; usage_missing_pending_export

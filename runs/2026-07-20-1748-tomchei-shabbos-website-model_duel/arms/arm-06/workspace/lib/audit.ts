@@ -39,8 +39,14 @@ export type AuditAction =
   | "package_regroup"
   | "print_batch_run"
   | "print_batch_reprint"
+  // P8 label lifecycle, kept in lockstep with PackageEventAction's P8 members
+  // (lib/packages/stages.ts) so auditing any label event type-checks.
   | "label_buy"
-  | "label_void";
+  | "label_failed"
+  | "label_void"
+  | "label_void_rejected"
+  | "tracking_refresh"
+  | "address_validate";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

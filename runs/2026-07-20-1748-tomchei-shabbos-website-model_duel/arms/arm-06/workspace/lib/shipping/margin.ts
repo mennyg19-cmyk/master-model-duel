@@ -17,14 +17,16 @@ export interface RateOption {
 // Comparability rule (merged plan open risk): only ground-comparable service
 // levels compete — quoting FedEx Ground against UPS Next Day Air would
 // fabricate margin, not capture it. Cheapest eligible service per carrier
-// enters the contest.
+// enters the contest. This is the default list; the typed
+// `shipping.groundServiceTokens` setting overrides it so an operator can
+// widen eligibility without a code change.
 export const GROUND_SERVICE_TOKENS: Record<string, readonly string[]> = {
   fedex: ["fedex_ground", "fedex_home_delivery"],
   ups: ["ups_ground"],
   usps: ["usps_priority", "usps_ground_advantage"],
 };
 
-export function carrierOf(provider: string): string {
+export function normalizeCarrier(provider: string): string {
   return provider.trim().toLowerCase();
 }
 
@@ -32,7 +34,7 @@ export function normalizeRates(rates: ShippoRate[]): RateOption[] {
   return rates
     .map((rate) => ({
       rateId: rate.object_id,
-      carrier: carrierOf(rate.provider),
+      carrier: normalizeCarrier(rate.provider),
       serviceLevel: rate.servicelevel.token,
       serviceName: rate.servicelevel.name || rate.servicelevel.token || rate.provider,
       amountCents: Math.round(Number(rate.amount) * 100),
@@ -43,11 +45,15 @@ export function normalizeRates(rates: ShippoRate[]): RateOption[] {
 
 // One cheapest ground-comparable rate per carrier. USPS enters only when the
 // deployment includes it ("where applicable" — org accounts are FedEx + UPS).
-export function eligibleRates(options: RateOption[], includeUsps: boolean): RateOption[] {
+export function eligibleRates(
+  options: RateOption[],
+  includeUsps: boolean,
+  groundTokens: Record<string, readonly string[]> = GROUND_SERVICE_TOKENS,
+): RateOption[] {
   const cheapestByCarrier = new Map<string, RateOption>();
   for (const option of options) {
-    const groundTokens = GROUND_SERVICE_TOKENS[option.carrier];
-    if (!groundTokens || !groundTokens.includes(option.serviceLevel)) continue;
+    const carrierTokens = groundTokens[option.carrier];
+    if (!carrierTokens || !carrierTokens.includes(option.serviceLevel)) continue;
     if (option.carrier === "usps" && !includeUsps) continue;
     const current = cheapestByCarrier.get(option.carrier);
     if (!current || option.amountCents < current.amountCents) {
@@ -68,8 +74,12 @@ export interface MarginResolution {
 
 // Charge = highest eligible quote; buy = cheapest eligible quote. One carrier
 // quoting alone charges and buys the same rate — margin 0, honestly recorded.
-export function resolveMargin(options: RateOption[], includeUsps: boolean): MarginResolution | null {
-  const eligible = eligibleRates(options, includeUsps);
+export function resolveMargin(
+  options: RateOption[],
+  includeUsps: boolean,
+  groundTokens: Record<string, readonly string[]> = GROUND_SERVICE_TOKENS,
+): MarginResolution | null {
+  const eligible = eligibleRates(options, includeUsps, groundTokens);
   if (eligible.length === 0) return null;
   const buy = eligible[0];
   const charge = eligible[eligible.length - 1];

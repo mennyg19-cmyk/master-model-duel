@@ -3,7 +3,9 @@ import {
   fixtureCreateRefund,
   fixtureCreateShipment,
   fixtureCreateTransaction,
+  fixtureGetRefund,
   fixtureGetTrack,
+  fixtureStats,
   fixtureValidateAddress,
 } from "@/lib/shipping/fixture-double";
 import { isDevAuthBypass } from "@/lib/env";
@@ -45,10 +47,21 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   const url = new URL(request.url);
-  const match = /\/tracks\/([^/]+)\/([^/]+)$/.exec(url.pathname);
-  if (!match) {
-    return NextResponse.json({ detail: "unknown fixture path" }, { status: 404 });
+  const trackMatch = /\/tracks\/([^/]+)\/([^/]+)$/.exec(url.pathname);
+  if (trackMatch) {
+    const result = fixtureGetTrack(decodeURIComponent(trackMatch[1]), decodeURIComponent(trackMatch[2]));
+    return NextResponse.json(result.payload, { status: result.status });
   }
-  const result = fixtureGetTrack(decodeURIComponent(match[1]), decodeURIComponent(match[2]));
-  return NextResponse.json(result.payload, { status: result.status });
+  const refundMatch = /\/refunds\/([^/]+)$/.exec(url.pathname);
+  if (refundMatch) {
+    const result = fixtureGetRefund(decodeURIComponent(refundMatch[1]));
+    return NextResponse.json(result.payload, { status: result.status });
+  }
+  // Test instrumentation: how many shipment-creates this server process has
+  // served, and the last destination — pins the display-quote cache and the
+  // line2 passthrough end-to-end.
+  if (url.pathname.endsWith("/stats")) {
+    return NextResponse.json(fixtureStats);
+  }
+  return NextResponse.json({ detail: "unknown fixture path" }, { status: 404 });
 }

@@ -29,10 +29,14 @@ export function PackageLabelActions({
   packageId,
   isTerminal,
   shipments,
+  lastFailed = null,
 }: {
   packageId: string;
   isTerminal: boolean;
   shipments: ShipmentRow[];
+  // The latest FAILED row, queried on its own leg (m9/m15) — never derived
+  // from the history slice, so it can't age out or pick an older failure.
+  lastFailed?: ShipmentRow | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -40,24 +44,23 @@ export function PackageLabelActions({
   const [note, setNote] = useState<string | null>(null);
 
   const active = shipments.find((shipment) => shipment.status === "PURCHASING" || shipment.status === "PURCHASED") ?? null;
-  const lastFailed = shipments.find((shipment) => shipment.status === "FAILED") ?? null;
 
   async function run(label: string, path: string, body?: Record<string, unknown>) {
     setBusy(label);
     setError(null);
     setNote(null);
-    const result = await apiFetch<{
+    const response = await apiFetch<{
       error?: string;
       validation?: { isValid: boolean; messages: string[] };
-      shipment?: { trackingStatus?: string | null };
+      shipment?: { status?: string; trackingStatus?: string | null };
     }>(path, body ? { method: "POST", body } : { method: "POST" });
     setBusy(null);
-    if (!result.ok) {
-      setError(result.body.error ?? "Action failed");
+    if (!response.ok) {
+      setError(response.body.error ?? "Action failed");
       return;
     }
     if (label === "validate") {
-      const validation = result.body.validation!;
+      const validation = response.body.validation!;
       setNote(
         validation.isValid
           ? "Carrier validated the address."
@@ -66,7 +69,15 @@ export function PackageLabelActions({
       return;
     }
     if (label === "track") {
-      setNote(`Tracking: ${result.body.shipment?.trackingStatus ?? "UNKNOWN"}`);
+      setNote(`Tracking: ${response.body.shipment?.trackingStatus ?? "UNKNOWN"}`);
+    }
+    if (label === "resolve") {
+      const status = response.body.shipment?.status;
+      setNote(
+        status === "PURCHASED"
+          ? "The carrier had confirmed this purchase — the label is now live."
+          : "The stuck purchase was marked failed — the package can buy again.",
+      );
     }
     router.refresh();
   }
@@ -104,6 +115,25 @@ export function PackageLabelActions({
             {active.costCents !== null && <> · label cost {formatCents(active.costCents)}</>}
             {active.marginCents !== null && <> · margin {formatCents(active.marginCents)}</>}
           </p>
+          {active.status === "PURCHASING" && (
+            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2" data-stuck-purchase>
+              <p className="text-sm text-amber-800">
+                Purchase is stuck in progress — the maintenance sweep resolves it automatically, or resolve it
+                now (recovers the label if the carrier confirmed it, otherwise fails it so the package can buy
+                again).
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-2"
+                disabled={busy !== null}
+                onClick={() => run("resolve", `/api/admin/packages/${packageId}/label/resolve-stuck`)}
+                data-resolve-stuck
+              >
+                {busy === "resolve" ? "Resolving…" : "Resolve stuck purchase"}
+              </Button>
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             {active.labelUrl && (
               <a

@@ -3,9 +3,10 @@ import { DomainRuleError } from "@/lib/errors";
 // R-081: shipment planning + bin packing against package types and boxes.
 // Order lines become pack items (product's own dims/weight; a product without
 // them falls back to the LARGEST active package type — never under-declare),
-// then first-fit-decreasing fills the org's shipment boxes. Rate quotes ship
-// the resulting parcel list; overflow becomes multiple parcels and carriers
-// rate the whole set.
+// then best-fit-decreasing fills the org's shipment boxes (largest unit
+// first, smallest open parcel that still fits). Rate quotes ship the
+// resulting parcel list; overflow becomes multiple parcels and carriers rate
+// the whole set.
 
 export interface PackItem {
   lengthMm: number;
@@ -70,9 +71,15 @@ export function planParcels(items: PackItem[], boxes: BoxSpec[]): Parcel[] {
 
   for (const unit of units) {
     const unitVolume = volumeMm3(unit);
-    const target = parcels.find(
-      (parcel) => fitsDimensionally(unit, parcel.box) && parcel.usedVolume + unitVolume <= volumeMm3(parcel.box) * FILL_EFFICIENCY,
-    );
+    // Best-fit among open parcels: the smallest box that still takes the unit
+    // — first-fit would strand small items in an oversized box and over-rate
+    // the parcel.
+    let target: OpenParcel | undefined;
+    for (const parcel of parcels) {
+      if (!fitsDimensionally(unit, parcel.box)) continue;
+      if (parcel.usedVolume + unitVolume > volumeMm3(parcel.box) * FILL_EFFICIENCY) continue;
+      if (!target || volumeMm3(parcel.box) < volumeMm3(target.box)) target = parcel;
+    }
     if (target) {
       target.usedVolume += unitVolume;
       target.weightGrams += unit.weightGrams;

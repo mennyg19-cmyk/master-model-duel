@@ -55,6 +55,17 @@ check(
 );
 check("no ground-comparable rates means no quote at all", resolveMargin([rates[1], rates[3]], false) === null);
 
+// m1: ground-comparable eligibility is operator-tunable via the token map —
+// a settings override re-keys the contest without a code change.
+const rekeyed = eligibleRates(rates, false, { fedex: ["fedex_express_saver"], ups: ["ups_ground"] });
+check(
+  "m1: an operator token override re-keys eligibility (express enters, ground drops)",
+  rekeyed.length === 2
+    && rekeyed.some((rate) => rate.rateId === "r-fdx-air")
+    && !rekeyed.some((rate) => rate.rateId === "r-fdx-ground"),
+);
+check("m1: an empty override means no ground contest at all", eligibleRates(rates, false, {}).length === 0);
+
 // --- bin packing (R-081) ------------------------------------------------------
 const { planParcels } = await import("../lib/shipping/packing");
 
@@ -82,6 +93,21 @@ try {
   oversizedThrew = (error as Error).name === DomainRuleError.name;
 }
 check("an item that fits no box refuses instead of under-declaring", oversizedThrew);
+
+// m11: best-fit among open parcels — a small unit lands in the smallest open
+// parcel that takes it, not the first parcel that happened to open.
+const bigBox = { name: "Big", lengthMm: 400, widthMm: 300, heightMm: 200, tareWeightGrams: 100 };
+const medBox = { name: "Med", lengthMm: 350, widthMm: 350, heightMm: 150, tareWeightGrams: 80 };
+const hugeUnit = { lengthMm: 380, widthMm: 280, heightMm: 150, weightGrams: 500, qty: 1 }; // fits Big only
+const wideUnit = { lengthMm: 340, widthMm: 340, heightMm: 120, weightGrams: 500, qty: 1 }; // fits Med only (too wide for Big)
+const smallUnit = { lengthMm: 100, widthMm: 100, heightMm: 50, weightGrams: 100, qty: 1 }; // fits either
+const bestFit = planParcels([hugeUnit, wideUnit, smallUnit], [bigBox, medBox]);
+check(
+  "m11: best-fit sends a small unit to the smallest open parcel, not the first opened",
+  bestFit.length === 2
+    && bestFit[0].name === "Big" && bestFit[0].itemCount === 1
+    && bestFit[1].name === "Med" && bestFit[1].itemCount === 2,
+);
 
 // --- fixture double -----------------------------------------------------------
 const fixture = await import("../lib/shipping/fixture-double");
