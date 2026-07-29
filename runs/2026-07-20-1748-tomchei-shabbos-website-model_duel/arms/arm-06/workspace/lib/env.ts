@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ENV_SPEC } from "./env-spec";
+import { isDevAuthBypassEnabled } from "./dev-auth";
 
 // Mapped type keeps per-key optionality (Object.fromEntries alone would
 // collapse every key to the union of all schemas, making them all optional).
@@ -24,15 +25,9 @@ function loadEnv(): AppEnv {
 
 export const env = loadEnv();
 
-// Dev-auth is hard-disabled on ANY Vercel deploy no matter what the flag
-// says: production is obvious, but a preview deploy is also a public URL, so
-// a leaked DEV_AUTH_BYPASS=true must never open either one. The Vercel guard
-// alone is platform-specific, though — a container or CI host never sets
-// VERCEL_ENV, so the fail-closed, platform-agnostic gate is the APP_ENV
-// class itself: only an explicit APP_ENV=test (default: production) lets the
-// bypass exist at all. A deployed environment that forgets APP_ENV gets
+// The bypass predicate lives in lib/dev-auth.ts (single source shared with
+// middleware): hard-disabled on ANY Vercel deploy, and fail-closed unless
+// APP_ENV=test — a deployed environment that forgets APP_ENV gets
 // "production" and the dev seam stays shut.
-const vercelEnv = process.env.VERCEL_ENV;
-export const isProductionDeploy = vercelEnv === "production";
-export const isDevAuthBypass =
-  env.DEV_AUTH_BYPASS === "true" && env.APP_ENV === "test" && vercelEnv !== "production" && vercelEnv !== "preview";
+export const isProductionDeploy = process.env.VERCEL_ENV === "production";
+export const isDevAuthBypass = isDevAuthBypassEnabled();

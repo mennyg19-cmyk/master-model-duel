@@ -693,3 +693,7 @@
 2026-07-29T20:13:21Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P12,fix,kimi-k3-max,13912042-c9d8-49d5-a7a5-655ffb325a9b,,,,,,,,P12 fix resume after auth error; WIP B1/B2/M2 done mid-M3; usage_missing_pending_export
 2026-07-29T21:27:03Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-06,T5,self_review,kimi-k3-max,91455b98-e940-4366-ac61-02c7b05432f6,,,,,,,,Test 5 single self-review after P12 gate 18.0; usage_missing_pending_export
 2026-07-29T21:36:35Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-06,T5,self_fix,kimi-k3-max,5b07847a-5530-4574-a88c-855f881f5339,,,,,,,,T5 self-fix vs SELF-REVIEW 0B/2M/7m; usage_missing_pending_export
+2026-07-29T21:52:47Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-06,T5,residual_security,glm-5.2-high,e9b62674-0dd4-40ba-9f6c-be792fc9615c,,,,,,,,T5 residual security; usage_missing_pending_export
+2026-07-29T21:52:48Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-06,T5,residual_quality,glm-5.2-high,f012d250-1752-497f-bf05-41814930a59e,,,,,,,,T5 residual quality; usage_missing_pending_export
+2026-07-29T21:52:48Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-06,T5,residual_rules,glm-5.2-high,4ce324d6-fff3-4a50-84f2-ee47a24e6edb,,,,,,,,T5 residual rules; usage_missing_pending_export
+2026-07-29T21:52:48Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,5,arm-06,T5,residual_clean_code,glm-5.2-high,3ce2d062-eef3-4fe1-b553-bc9f97edd610,,,,,,,,T5 residual clean-code; usage_missing_pending_export

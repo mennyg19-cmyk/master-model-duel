@@ -32,6 +32,15 @@ function dollars(cents: number | null | undefined): string {
   return ((cents ?? 0) / 100).toFixed(2);
 }
 
+// Formula-injection guard at the export edge: recipient/customer names and
+// emails are user-controlled, and a text cell starting with = + - @ or a tab
+// executes when staff open the CSV in Excel. Prefix with an apostrophe so
+// spreadsheet apps render it as literal text. Numbers pass through — they
+// are typed cells, not text.
+function safeText(value: string | number | null): string | number | null {
+  return typeof value === "string" && /^[=+\-@\t]/.test(value) ? `'${value}` : value;
+}
+
 async function* paged<T extends { id: string }>(
   fetchPage: (cursor?: string) => Promise<T[]>,
   mapRow: (row: T) => (string | number | null)[],
@@ -39,7 +48,7 @@ async function* paged<T extends { id: string }>(
   let cursor: string | undefined;
   for (;;) {
     const page = await fetchPage(cursor);
-    for (const row of page) yield mapRow(row);
+    for (const row of page) yield mapRow(row).map(safeText);
     if (page.length < PAGE) return;
     cursor = page[page.length - 1].id;
   }
@@ -202,7 +211,7 @@ const yearMetrics: ExportDataset = {
         dollars(shipping._sum.chargedCents),
         dollars(shipping._sum.costCents),
         dollars(shipping._sum.marginCents),
-      ];
+      ].map(safeText);
     }
   },
 };
@@ -233,8 +242,8 @@ const itemSales: ExportDataset = {
         orderBy: { productName: "asc" },
       }),
     ]);
-    for (const row of products) yield ["product", row.productName, row._sum.qty ?? 0, dollars(row._sum.lineTotalCents)];
-    for (const row of addOns) yield ["add-on", row.productName, row._sum.qty ?? 0, dollars(row._sum.lineTotalCents)];
+    for (const row of products) yield ["product", row.productName, row._sum.qty ?? 0, dollars(row._sum.lineTotalCents)].map(safeText);
+    for (const row of addOns) yield ["add-on", row.productName, row._sum.qty ?? 0, dollars(row._sum.lineTotalCents)].map(safeText);
   },
 };
 

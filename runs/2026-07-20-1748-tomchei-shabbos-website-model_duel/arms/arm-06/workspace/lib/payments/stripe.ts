@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/lib/env";
+import { DomainRuleError } from "@/lib/errors";
 
 // R-170: one lazy Stripe server client. ponytail ladder — native fetch +
 // node:crypto cover the two calls P5 needs (hosted Checkout session create,
@@ -11,6 +12,20 @@ export class StripeNotConfiguredError extends Error {
     // Public-facing text: the pay route maps this error to the 503 body.
     super("Card payment is not configured on this deployment yet (STRIPE_SECRET_KEY missing)");
     this.name = "StripeNotConfiguredError";
+  }
+}
+
+// Any non-2xx from the Stripe API, carrying the HTTP status so callers can
+// instanceof-branch (a checkout 400 maps to a retryable domain error; refund
+// and reconciliation failures keep surfacing as-is).
+export class StripeApiError extends Error {
+  constructor(
+    path: string,
+    public readonly status: number,
+    detail: string,
+  ) {
+    super(`Stripe ${path} failed (${status}): ${detail}`);
+    this.name = "StripeApiError";
   }
 }
 
@@ -63,7 +78,7 @@ async function stripePost<T>(path: string, params: URLSearchParams, idempotencyK
   });
   const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
   if (!response.ok) {
-    throw new Error(`Stripe ${path} failed (${response.status}): ${body?.error?.message ?? "unknown"}`);
+    throw new StripeApiError(path, response.status, body?.error?.message ?? "unknown");
   }
   return body as T;
 }
@@ -92,12 +107,25 @@ export async function createCheckoutSession(input: {
     "line_items[0][price_data][unit_amount]": String(input.amountCents),
     "line_items[0][price_data][product_data][name]": `Mishloach Manos order ${input.draftRef}`,
   });
-  return stripePost<{ id: string; url: string }>(
-    "/v1/checkout/sessions",
-    params,
-    // Retries of the same checkout attempt reuse one session server-side.
-    `checkout-${input.orderId}`,
-  );
+  try {
+    return await stripePost<{ id: string; url: string }>(
+      "/v1/checkout/sessions",
+      params,
+      // Retries of the same checkout attempt reuse one session server-side,
+      // but the frozen total rides in the key: a draft edit that re-freezes a
+      // different total mints a fresh session instead of colliding with the
+      // old key (Stripe 400s a reused key carrying different parameters).
+      `checkout-${input.orderId}-${input.amountCents}`,
+    );
+  } catch (error) {
+    // A 400 here is a rejected request, not an outage — surface it as a
+    // clean retryable domain error (the pay route maps it to 422) instead of
+    // an unmapped 500. No session was created, so no charge exists.
+    if (error instanceof StripeApiError && error.status === 400) {
+      throw new DomainRuleError(`Stripe rejected the checkout session (${error.message}); start checkout again — no charge was made`);
+    }
+    throw error;
+  }
 }
 
 export async function createRefund(paymentIntentId: string): Promise<{ id: string }> {

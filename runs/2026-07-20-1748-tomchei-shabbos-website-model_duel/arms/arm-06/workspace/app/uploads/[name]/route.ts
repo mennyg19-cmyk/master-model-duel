@@ -17,7 +17,8 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 // Serves the local storage driver's files. Names are UUID + extension from
-// the upload route; the strict pattern keeps this from ever becoming a
+// the upload route and season-wizard copies (storage.ts keeps both on this
+// one shape); the strict pattern keeps this from ever becoming a
 // path-traversal reader.
 export async function GET(_request: Request, { params }: Props) {
   const { name } = await params;

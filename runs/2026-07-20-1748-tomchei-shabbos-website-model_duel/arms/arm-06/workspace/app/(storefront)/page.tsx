@@ -49,10 +49,12 @@ export default async function HomePage() {
     prisma.customer.count(),
   ]);
 
+  // Labels say what the counts actually are: packageCount includes NEW/unpacked
+  // rows and customerCount includes guests whose drafts never finalized.
   const impactStats = [
-    { label: "Packages delivered", value: packageCount },
+    { label: "Packages packed", value: packageCount },
     { label: "Orders fulfilled", value: orderCount },
-    { label: "Families served", value: customerCount },
+    { label: "Families reached", value: customerCount },
   ];
 
   return (

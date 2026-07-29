@@ -1,4 +1,4 @@
-# Tomchei Shabbos — Mishloach Manos platform (arm-06, phase P6)
+# Tomchei Shabbos — Mishloach Manos platform (arm-06, phase P12)
 
 Public storefront + admin catalog/settings on the P2 domain core: Next.js (App Router, RSC) + Prisma + Postgres.
 
@@ -24,7 +24,7 @@ Copy `.env.example` to `.env` and fill values. A missing/invalid variable fails 
 ## What P3 ships
 
 - **Storefront shell** — sticky header (desktop links + hamburger sheet + user menu placeholder), closed-season banner, footer with mission/contact/hours links and the newsletter signup.
-- **Homepage** — mission hero, live impact bar (cumulative counts from the DB: packages delivered, orders fulfilled, families served), how-it-works, testimonials, store-open-aware CTAs ("Order" only when a season is OPEN).
+- **Homepage** — mission hero, live impact bar (cumulative counts from the DB: packages packed, orders fulfilled, families reached), how-it-works, testimonials, store-open-aware CTAs ("Order" only when a season is OPEN).
 - **Catalog** — `/packages` current-season grid with category filters, price sort, sold-out badges (reserve-aware stock math), quick-view dialog; `/packages/[slug]` detail with option pricing that updates the displayed total live.
 - **Archive** — `/past-collections` browses CLOSED seasons' catalogs (read-only, no buy buttons).
 - **Gate stubs** — `/order`, `/checkout`, `/account` enforce season closure; `/checkout` includes the live delivery-ZIP checker (`/api/delivery-check` reads the settings allowlist per request).
@@ -60,6 +60,52 @@ Copy `.env.example` to `.env` and fill values. A missing/invalid variable fails 
 - **CSV imports** (`lib/imports/`) — staged-atomic engine: stage → preview (valid/duplicate/invalid with reasons) → commit in one transaction. Customers dedupe on email **and** normalized phone, both in-file and against the DB; products dedupe on slug. Permission-scoped batch lists (`customers.manage` vs `catalog.manage`).
 - **Admin dashboard & directory** — `/admin` counts + open-season money, `/admin/customers` searchable directory, `/admin/audit` log (PII metadata redacted unless the viewer holds `customers.manage`).
 
+## What P7 ships
+
+- **Package engine** (`lib/packages/`) — finalized orders materialize into Package rows grouped by recipient + fulfillment channel; data-driven stage lists per fulfillment method (DELIVERY runs NEW→PRINTED→PACKED→SENT, PICKUP skips printing), forward-only transitions, optimistic `version` on stage advance.
+- **Print pipeline** — greeting-card + manifest PDFs (`lib/print/pdf.ts`, pdf-lib), batched through the nightly-print cron.
+
+## What P8 ships
+
+- **Shippo shipping** (`lib/shipping/`) — native-fetch wrapper (no SDK), rate quotes and label purchase against the frozen destination snapshot; dev double + `SHIPPO_BASE_URL` seam when no live account exists.
+- **Margin law** (`lib/shipping/margin.ts`) — charge the customer the HIGHEST eligible ground-comparable quote, buy on the CHEAPEST eligible carrier, book the spread per shipment (charged/cost/margin cents on every label).
+- **Shipping maintenance cron** — hourly sweep for label/tracking upkeep.
+
+## What P9 ships
+
+- **Delivery routes** (`lib/routes/builder.ts`) — a delivery day's eligible packages become a seq-ordered geocoded manifest; eligibility is exact (open season, per-package delivery, non-terminal, not already on an active route), G-023 radius law enforced.
+- **Driver flow** — signed driver access links, route events (`writeRouteEvent`), start/advance/complete with terminal-stage sync back to packages.
+- **Pickup** — pickup locations from settings, ready/picked-up stages, pickup-expiry cron for stale ready packages.
+
+## What P10 ships
+
+- **Season wizard** (`lib/seasons/manage.ts`) — create next year's season with optional full catalog copy (products, options, add-on restrictions, and media — each copied MediaAsset owns its own bytes); scheduled open/close datetimes drive the season-flip cron.
+- **Repeat ordering** (`lib/repeat/`) — repeat last year's order into a new draft (`repeatedFromOrderId`), repeat chains, bulk repeat history, and the legacy-import hook that links old-system orders into chains.
+
+## What P11 ships
+
+- **Email platform** (`lib/email/`, `lib/notify/outbox.ts`) — Resend sender isolated in one module (native fetch, no SDK), durable outbox with claim-and-deliver, triggered templates (order confirmation, payment reminders, driver links), per-message audit log, and the email-log-purge cron. Dev double via `RESEND_BASE_URL` when no key exists.
+
+## What P12 ships
+
+- **Reports & exports** — `/admin/reports` rollups and the streamed CSV export center (`lib/exports/datasets.ts`: deliveries, year-end, year-metrics, item-sales, lapsed-customers; formula-injection-safe cells).
+- **Legacy imports** (`lib/imports/legacy/`) — old-system customers/orders import riding the staged-atomic engine, linking repeated orders into repeat chains.
+- **Stripe reconciliation** — `/api/cron/reconcile-stripe` matcher audits posted payments against PaymentIntents (live API, fixture double, or capture-only mode), with per-run driver-mode snapshots.
+- **Test-mode banner & test ops** — explicit `APP_ENV=test` gates the destructive `/api/admin/test-ops/*` routes and shows the test banner; fail-closed default is production.
+
+## Cron schedules (vercel.json)
+
+| Path | Schedule | Job |
+|---|---|---|
+| `/api/cron/nightly-print` | `0 6 * * *` | Batch greeting-card/manifest PDFs |
+| `/api/cron/outbox-sweep` | `*/10 * * * *` | Drain the email outbox |
+| `/api/cron/payment-reminders` | `0 * * * *` | Balance-due reminder emails |
+| `/api/cron/pickup-expiry` | `0 * * * *` | Expire stale ready-for-pickup packages |
+| `/api/cron/season-flip` | `*/15 * * * *` | Open/close seasons at their scheduled datetimes |
+| `/api/cron/shipping-maintenance` | `17 * * * *` | Label/tracking upkeep |
+| `/api/cron/email-log-purge` | `30 3 * * *` | Purge old email log rows |
+| `/api/cron/reconcile-stripe` | `0 5 * * *` | Reconcile posted payments against Stripe |
+
 ## Customer auth (dev-auth seam, same shape as staff)
 
 Customer sessions mirror the staff mechanism: HMAC-signed cookie naming a server-side `CustomerSession` row (12h, revocable). `/dev-login` now has a customer section when `DEV_AUTH_BYPASS=true`; `POST/DELETE /api/dev-auth-customer` issues/revokes. Every ownership check runs against the real `Customer` row — there is no client-trusted identity.
@@ -79,7 +125,7 @@ Customer sessions mirror the staff mechanism: HMAC-signed cookie naming a server
 Uploads validate type/size/extension in `lib/media/validation.ts`, then store through `lib/media/storage.ts`:
 
 - `BLOB_READ_WRITE_TOKEN` set → Vercel Blob (lazy-loaded, like the Stripe seam).
-- Not set → local driver writes `.uploads/` and serves bytes via `app/uploads/[name]/route.ts` (strict UUID-name pattern, immutable caching).
+- Not set → local driver writes `.uploads/` and serves bytes via `app/uploads/[name]/route.ts` (strict UUID-name pattern — originals and season-wizard copies share that one name shape — immutable caching).
 
 The active driver is shown on `/admin/media` and the Developer settings tab.
 
@@ -98,7 +144,7 @@ The active driver is shown on `/admin/media` and the Developer settings tab.
 | Styling | Tailwind v4 tokens in `app/globals.css` `@theme`; minimal kit in `components/ui/` |
 | Settings | typed key-value store (`lib/settings.ts`) — each key has its own zod schema |
 | Catalog queries | `catalogProductInclude` (`lib/storefront/catalog.ts`) shared by grid/quick-view/detail |
-| Concurrency | optimistic `version` column on `StaffUser` and `InventoryItem` |
+| Concurrency | optimistic `version` column on `StaffUser` and `InventoryItem`; drafts are single-editor last-write-wins (see `saveDraft`) |
 | CSV imports | staged-atomic engine (`lib/imports/engine.ts`) — stage rows, preview verdicts, commit in one tx; per-kind handlers own schema + dedupe keys |
 | Bulk order actions | bounded runner (`lib/orders/bulk.ts`) — open-season scoped, deterministic per-row report, transactional per-discard audit + one summary row |
 | Admin list controls | `lib/admin/order-list.ts` param parsing + `buildListHref`; `components/admin/pagination-nav.tsx` owns pagination chrome |

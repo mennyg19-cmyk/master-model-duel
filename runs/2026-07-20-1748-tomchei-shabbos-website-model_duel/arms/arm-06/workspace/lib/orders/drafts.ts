@@ -126,6 +126,12 @@ function assertRecipientReferences(lines: DraftLineInput[], recipients: DraftRec
 // lines array is a full clear — the emptied-cart autosave persists here
 // instead of silently keeping the stale lines. `allowBookWrites` gates
 // saveToBook: only verified customer sessions may write to an address book.
+//
+// Concurrency: saves are last-write-wins BY DESIGN — a draft has a single
+// editor at a time (the customer's own tab, or one POS session acting for
+// that customer; staff sharing a draft hand off verbally). `Order.version`
+// increments on every save and is returned to clients, so a baseVersion/409
+// check can be added at this boundary if multi-editor drafts ever ship.
 export async function saveDraft(input: {
   seasonId: string;
   customerId: string;

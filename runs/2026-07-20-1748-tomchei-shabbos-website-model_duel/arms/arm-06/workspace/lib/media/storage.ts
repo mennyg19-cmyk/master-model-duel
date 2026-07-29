@@ -45,7 +45,9 @@ export async function putObject(input: {
  * catalog copy uses this so the copied MediaAsset owns its own bytes —
  * deleting either asset later never yanks the other season's photo. Blob
  * sources read through their public URL; writes go through the CURRENT
- * driver, so a blob→local dev copy works too.
+ * driver, so a blob→local dev copy works too. Copies take the same
+ * `<uuid>.<ext>` shape as originals — the local /uploads serve route only
+ * matches that pattern, so any other name 404s under the local driver.
  */
 export async function copyObject(source: {
   storedName: string;
@@ -58,7 +60,7 @@ export async function copyObject(source: {
       ? new Uint8Array(await (await fetch(source.url)).arrayBuffer())
       : await readFile(path.join(UPLOADS_DIR, source.storedName));
   return putObject({
-    storedName: `copy-${crypto.randomUUID()}-${source.storedName}`,
+    storedName: `${crypto.randomUUID()}${path.extname(source.storedName)}`,
     contentType: source.contentType,
     bytes,
   });
