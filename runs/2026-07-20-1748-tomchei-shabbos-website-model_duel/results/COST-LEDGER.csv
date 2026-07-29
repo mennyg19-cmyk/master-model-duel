@@ -654,3 +654,4 @@
 2026-07-29T03:27:04Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P7,review_clean_code,glm-5.2-high,6cb7f76f-b63d-4b7f-8b96-3ea3070677e1,,,,,,,,P7 clean-code review; usage_missing_pending_export
 2026-07-29T03:30:44Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P7,review_aggregate,glm-5.2-high,3b09b159-1d48-42a0-a419-14d30ca16422,,,,,,,,P7 aggregate of 4 specialists; usage_missing_pending_export
 2026-07-29T03:33:37Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P7,contestant_fix,kimi-k3-max,320b1d9f-8f01-4ef2-a189-ff12612a6085,,,,,,,,P7 fix pass after aggregate 1B/5M/20m; usage_missing_pending_export
+2026-07-29T04:19:04Z,2026-07-20-1748-tomchei-shabbos-website-model_duel,4,arm-06,P8,contestant_build,kimi-k3-max,c1edee43-6175-403c-952d-6a1e0da99ce1,,,,,,,,P8 Shippo/margin/labels initial build; usage_missing_pending_export
