@@ -8,9 +8,11 @@ export const dynamic = "force-dynamic";
 
 // R-005, G-022, UR-008 (browse half): every closed season stays browsable
 // off-season — browse only, deliberately no buy controls or prices CTAs.
+// P10: a season earns its archive slot by RUNNING (having orders) — wizard
+// shells that were never opened don't show up as "past" collections.
 export default async function PastCollectionsPage() {
   const closedSeasons = await prisma.season.findMany({
-    where: { status: "CLOSED" },
+    where: { status: "CLOSED", orders: { some: {} } },
     orderBy: { name: "desc" },
     include: {
       products: {

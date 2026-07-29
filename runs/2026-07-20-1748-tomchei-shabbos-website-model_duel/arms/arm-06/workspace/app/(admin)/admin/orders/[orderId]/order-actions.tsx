@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PaymentMethod } from "@prisma/client";
 import { apiFetch } from "@/lib/api-fetch";
@@ -203,9 +204,18 @@ export function OrderActions({
 
       <div className="mt-4 flex flex-wrap gap-3 border-t border-stone-200 pt-4">
         {status === "FINALIZED" && (
-          <Button variant="secondary" size="sm" onClick={repeatOrder} disabled={busy !== null} data-repeat-order>
-            {busy === "repeat" ? "Repeating…" : "Repeat as new draft"}
-          </Button>
+          <>
+            <Button variant="secondary" size="sm" onClick={repeatOrder} disabled={busy !== null} data-repeat-order>
+              {busy === "repeat" ? "Repeating…" : "Repeat as new draft"}
+            </Button>
+            <Link
+              href={`/admin/orders/${orderId}/repeat`}
+              className="inline-flex items-center rounded-md border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-900 hover:bg-stone-100"
+              data-repeat-review-link
+            >
+              Repeat with review…
+            </Link>
+          </>
         )}
         {status === "DRAFT" && (
           <Button variant="danger" size="sm" onClick={discardOrder} disabled={busy !== null} data-discard-order>

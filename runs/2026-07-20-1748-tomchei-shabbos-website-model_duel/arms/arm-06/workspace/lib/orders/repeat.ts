@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/db";
 import { DomainRuleError, NotFoundError } from "@/lib/errors";
-import { getOpenSeason } from "@/lib/seasons/queries";
 import { DraftLineInput } from "@/lib/orders/resolve-lines";
-import { DraftRecipientInput, DraftWithContents, saveDraft } from "@/lib/orders/drafts";
+import { DraftRecipientInput, DraftWithContents } from "@/lib/orders/drafts";
+import { buildRepeatPlan } from "@/lib/repeat/plan";
+import { autoConfirmPlan, createDraftFromRepeat } from "@/lib/repeat/create";
 
 // R-057 shell: staff single-order repeat. Straight copy into a new draft —
 // discontinued lines are skipped with reasons; the replacement flow
@@ -84,43 +85,19 @@ export function planRepeat(order: DraftWithContents, catalog: RepeatCatalog): Re
 }
 
 export async function repeatOrder(orderId: string): Promise<{ draftRef: string; skipped: RepeatSkip[] }> {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { lines: true, recipients: true },
-  });
+  const order = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true, status: true } });
   if (!order) throw new NotFoundError("Order", orderId);
   if (order.status !== "FINALIZED") {
     throw new DomainRuleError(`Order ${orderId} is ${order.status}; expected FINALIZED to repeat`);
   }
-  const season = await getOpenSeason();
-  if (!season) throw new DomainRuleError("No open season to repeat the order into");
 
-  const products = await prisma.product.findMany({
-    where: { seasonId: season.id, active: true },
-    include: { options: { include: { values: true } }, allowedAddOns: { include: { addOn: true } } },
-  });
-  const plan = planRepeat(order, {
-    productIds: new Set(products.map((product) => product.id)),
-    optionValueIds: new Set(
-      products.flatMap((product) => product.options.flatMap((option) => option.values.map((value) => value.id))),
-    ),
-    addOnIds: new Set(
-      products
-        .flatMap((product) => product.allowedAddOns.map((restriction) => restriction.addOn))
-        .filter((addOn) => addOn.active)
-        .map((addOn) => addOn.id),
-    ),
-  });
-  if (plan.lines.length === 0) {
-    throw new DomainRuleError("Nothing to repeat — every line is gone from the active catalog");
-  }
-
-  const draft = await saveDraft({
-    seasonId: season.id,
-    customerId: order.customerId,
-    lines: plan.lines,
-    recipients: plan.recipients,
-    allowBookWrites: false,
-  });
-  return { draftRef: draft.draftRef!, skipped: plan.skipped };
+  // P10: one-click repeat now resolves replacement chains (R-057/R-058).
+  // Lines whose chain dead-ends are reported as skips; everything else lands
+  // in the new draft at current catalog prices.
+  const plan = await buildRepeatPlan(orderId);
+  const { draft } = await createDraftFromRepeat(autoConfirmPlan(plan));
+  const skipped: RepeatSkip[] = plan.lines
+    .filter((line) => line.status === "unmapped")
+    .map((line) => ({ productName: line.sourceName, reason: "discontinued with no replacement mapped" }));
+  return { draftRef: draft.draftRef!, skipped };
 }

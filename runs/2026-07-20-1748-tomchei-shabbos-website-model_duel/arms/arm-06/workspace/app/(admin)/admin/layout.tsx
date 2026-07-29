@@ -19,7 +19,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const items: SidebarItem[] = [{ href: "/admin", label: "Dashboard" }];
   if (hasPermission(ctx.staff, "payments.manage")) {
-    items.push({ href: "/admin/orders", label: "Orders" }, { href: "/admin/pos", label: "POS" });
+    items.push(
+      { href: "/admin/orders", label: "Orders" },
+      { href: "/admin/pos", label: "POS" },
+      { href: "/admin/repeat-bulk", label: "Bulk repeat" },
+    );
   }
   if (hasPermission(ctx.staff, "customers.manage")) {
     items.push({ href: "/admin/customers", label: "Customers" });
@@ -39,6 +43,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
   if (hasPermission(ctx.staff, "catalog.manage")) {
     items.push(
+      { href: "/admin/seasons", label: "Seasons" },
       { href: "/admin/products", label: "Products" },
       { href: "/admin/addons", label: "Add-ons" },
       { href: "/admin/media", label: "Media" },

@@ -34,6 +34,9 @@ export interface DraftRecipientInput {
   saveToBook?: boolean;
   /** Book label when saveToBook is set. */
   label?: string | null;
+  /** P10 (G-012): greeting carried from the repeated order / address book.
+   *  Checkout may still override it per recipient. */
+  greeting?: string | null;
 }
 
 export type DraftWithContents = Order & { lines: OrderLine[]; recipients: DraftRecipient[] };
@@ -100,6 +103,7 @@ async function writeRecipients(
         postalCode: recipient.postalCode,
         country: recipient.country ?? "US",
         addressId,
+        greeting: recipient.greeting ?? null,
       },
     });
     ids.set(recipient.clientId, row.id);
@@ -130,6 +134,8 @@ export async function saveDraft(input: {
   recipients: DraftRecipientInput[];
   guestToken?: string;
   allowBookWrites: boolean;
+  /** P10 (R-041/R-058): set when this draft is a repeat of an earlier order. */
+  repeatedFromOrderId?: string;
 }): Promise<DraftWithContents> {
   const recipients = input.lines.length === 0 ? [] : input.recipients;
   assertRecipientReferences(input.lines, recipients);
@@ -157,6 +163,7 @@ export async function saveDraft(input: {
           customerId: input.customerId,
           draftRef,
           ...(input.guestToken ? { guestTokenHash: await hashGuestToken(input.guestToken) } : {}),
+          ...(input.repeatedFromOrderId ? { repeatedFromOrderId: input.repeatedFromOrderId } : {}),
         },
       });
     }

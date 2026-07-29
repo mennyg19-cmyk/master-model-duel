@@ -52,14 +52,23 @@ export default async function OrdersPage() {
                   · {order._count.lines} {order._count.lines === 1 ? "item" : "items"} · {formatCents(order.totalCents)}
                 </span>
               </div>
-              <span
-                className={
-                  order.status === "DRAFT"
-                    ? "rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800"
-                    : "rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800"
-                }
-              >
-                {order.status === "DRAFT" ? "Draft" : "Placed"}
+              <span className="flex items-center gap-3">
+                <Link
+                  href={`/account/orders/${order.id}/repeat`}
+                  className="text-sm font-medium text-brand-700 hover:underline"
+                  data-repeat-link
+                >
+                  Repeat
+                </Link>
+                <span
+                  className={
+                    order.status === "DRAFT"
+                      ? "rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800"
+                      : "rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800"
+                  }
+                >
+                  {order.status === "DRAFT" ? "Draft" : "Placed"}
+                </span>
               </span>
             </li>
           ))}

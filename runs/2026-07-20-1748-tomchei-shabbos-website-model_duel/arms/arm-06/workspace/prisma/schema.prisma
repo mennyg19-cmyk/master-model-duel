@@ -399,6 +399,13 @@ model Order {
   // P9 (R-080): last payment-reminder send; the cron re-reminds on the
   // configured interval instead of spamming every run.
   lastPaymentReminderAt DateTime?
+  // P10 (R-041/R-057/R-058): which order this draft repeats (null on fresh
+  // carts). Bulk-history reruns skip orders that already have a
+  // non-discarded repeat draft in the open season; SetNull keeps the draft
+  // when the source order is purged.
+  repeatedFrom       Order?  @relation("RepeatLineage", fields: [repeatedFromOrderId], references: [id])
+  repeatedFromOrderId String?
+  repeats            Order[] @relation("RepeatLineage")
   lines          OrderLine[]
   recipients     DraftRecipient[]
   payments       Payment[]

@@ -60,7 +60,15 @@ export type AuditAction =
   | "reroute"
   | "delivered"
   | "pickup_ready"
-  | "pickup_expired";
+  | "pickup_expired"
+  // P10 season lifecycle + repeat flows.
+  | "season_create"
+  | "season_open"
+  | "season_close"
+  | "season_schedule"
+  | "repeat_create"
+  | "repeat_bulk_history"
+  | "legacy_import";
 
 // Minimal shape of AuthContext this module needs (avoids importing lib/auth,
 // which pulls in next/headers).

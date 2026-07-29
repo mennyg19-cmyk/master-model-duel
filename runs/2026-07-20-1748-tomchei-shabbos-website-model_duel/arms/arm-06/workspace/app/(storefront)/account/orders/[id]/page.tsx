@@ -25,10 +25,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     },
   });
   if (!order || order.customerId !== ctx.customer.id || order.status === "DISCARDED") notFound();
-  // Every order this page renders came from the draft flow; a missing ref
-  // means the row is not something this page can link back into.
+  // P10: imported prior-year orders (legacy import hook) and seeded fixtures
+  // have no draftRef — they still render here (and can repeat); the
+  // continue/pay/cancel actions stay draft-only.
   const draftRef = order.draftRef;
-  if (!draftRef) notFound();
 
   const productLines = order.lines.filter((line) => line.productId !== null);
 
@@ -45,7 +45,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             {formatCents(order.totalCents)}
           </p>
         </div>
-        {order.status === "DRAFT" && (
+        {order.status === "DRAFT" && draftRef && (
           <div className="flex flex-wrap gap-2">
             <Link
               href={`/order?draft=${draftRef}`}
@@ -63,6 +63,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             </Link>
             <CancelDraftButton draftRef={draftRef} />
           </div>
+        )}
+        {order.status === "FINALIZED" && (
+          <Link
+            href={`/account/orders/${order.id}/repeat`}
+            className="rounded-md bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+            data-repeat-order
+          >
+            Repeat this order
+          </Link>
         )}
       </div>
 

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatCents, formatDelta } from "@/lib/money";
+import { replacementChainPreview } from "@/lib/repeat/chain";
 import { ProductImage } from "@/components/product-image";
 import { Card, CardTitle } from "@/components/ui/card";
 import { ProductForm } from "@/app/(admin)/admin/products/product-form";
@@ -57,6 +58,18 @@ export default async function EditProductPage({ params }: Props) {
       priceDeltaCents: value.priceDeltaCents,
     })),
   }));
+
+  // P10 (UR-007): show where this product's replacement chain lands in the
+  // open season (what a repeat would resolve to), so a dead end is visible
+  // while mapping. Off-season (nothing open) falls back to the newest season.
+  const targetSeason =
+    (await prisma.season.findFirst({ where: { status: "OPEN" } })) ??
+    (await prisma.season.findFirst({ orderBy: { createdAt: "desc" } }));
+  const chainTargetSeasonName = targetSeason?.name ?? null;
+  const chainPreview =
+    targetSeason && product.seasonId !== targetSeason.id
+      ? await replacementChainPreview(product.id, targetSeason.id)
+      : null;
 
   // Replacement links point forward only (P10's repeat-order chain walk):
   // the editor offers products from strictly newer seasons.
@@ -126,6 +139,10 @@ export default async function EditProductPage({ params }: Props) {
                 {product.replaces.length === 0
                   ? "— nothing yet"
                   : product.replaces.map((replaced) => replaced.name).join(", ")}
+              </dd>
+              <dt className="mt-3 font-medium text-stone-700">Chain into {chainTargetSeasonName ?? "the open season"}</dt>
+              <dd className="mt-1 text-stone-600" data-chain-preview>
+                {chainPreview ?? "— resolves here (this product is in the open season)"}
               </dd>
             </dl>
             <p className="mt-3 text-xs text-stone-500">
