@@ -22,6 +22,6 @@
 | 5 | **complete** **13.0/15** |
 | 6 | **complete** **15.0/15** (detect 8/8 · vague fix 7/7) |
 
-Cost ledger: post-2026-07-29 rows still need usage CSV backfill before final Cost fill (`verify -RequireUsage`).
+Cost ledger: backfilled 2026-07-30 from `usage-events-2026-07-30.csv` (+30 rows). `verify -RequireUsage` → **ok=true**. arm-06 Builder **$168.97** · Full **$226.10** · Solo TCO **$154.24** (kimi export On-Demand **$242.57** / 82 events).
 
 See [SCOREBOARD.md](./SCOREBOARD.md)
